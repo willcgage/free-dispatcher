@@ -6,7 +6,7 @@ services:
     depends_on:
       - db
     environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/dispatcher_db
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dispatcher_db
   db:
     image: postgres:15
     restart: always

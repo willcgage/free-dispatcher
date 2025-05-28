@@ -3,3 +3,4 @@ uvicorn[standard]
 sqlalchemy
 asyncpg
 psycopg2-binary
+python-multipart

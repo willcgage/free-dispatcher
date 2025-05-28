@@ -6,9 +6,12 @@ from typing import List
 import shutil
 import os
 from starlette.responses import JSONResponse, FileResponse
+import pkg_resources
+import logging
+from sqlalchemy import func, select
 
-from backend import models, schemas
-from backend.database import engine, SessionLocal
+import models, schemas
+from database import engine, SessionLocal
 
 app = FastAPI()
 
@@ -293,3 +296,39 @@ async def export_db():
         return FileResponse(DB_PATH, filename="dispatcher_db_export", media_type="application/octet-stream")
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
+@app.get("/status")
+async def status(db: AsyncSession = Depends(get_db)):
+    # Get backend version
+    try:
+        version = pkg_resources.get_distribution("fastapi").version
+    except Exception:
+        version = "unknown"
+    # Get counts for each table
+    async def get_count(model):
+        result = await db.execute(select(func.count(model.id)))
+        return result.scalar()
+    dispatcher_count = await get_count(models.Dispatcher)
+    district_count = await get_count(models.District)
+    module_count = await get_count(models.Module)
+    train_count = await get_count(models.Train)
+    counts = {
+        "dispatchers": dispatcher_count,
+        "districts": district_count,
+        "modules": module_count,
+        "trains": train_count,
+    }
+    # Get recent logs (if using logging to file)
+    logs = []
+    try:
+        with open("backend.log") as f:
+            logs = f.readlines()[-20:]
+    except Exception:
+        logs = ["No log file found."]
+    return {
+        "backend_version": version,
+        "service_counts": counts,
+        "logs": logs,
+        "message": "Train Dispatcher Backend is running!"
+    }

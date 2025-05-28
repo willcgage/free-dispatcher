@@ -40,3 +40,23 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Add a dashboard-specific style for better contrast */
+.dashboard-container {
+  background: #222 !important;
+  color: #fff !important;
+  border-radius: 8px;
+}
+
+.dashboard-container h2 {
+  color: #ffd700;
+}
+
+.dashboard-container ul li {
+  color: #fff;
+}
+
+.dashboard-container pre {
+  background: #111 !important;
+  color: #90ee90 !important;
+}

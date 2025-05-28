@@ -179,9 +179,51 @@ function ConfigurationPage({ onDbChange }) {
   );
 }
 
+function Dashboard() {
+  const [status, setStatus] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("http://localhost:8001/status")
+      .then((res) => res.json())
+      .then(setStatus)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
+  if (!status) return <div>Loading dashboard...</div>;
+
+  return (
+    <div className="dashboard-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
+      <h2>System Dashboard</h2>
+      <div><b>Backend Version:</b> {status.backend_version}</div>
+      <div style={{ margin: "12px 0" }}>
+        <b>Service Record Counts:</b>
+        <ul>
+          <li>Dispatchers: {status.service_counts.dispatchers}</li>
+          <li>Districts: {status.service_counts.districts}</li>
+          <li>Modules: {status.service_counts.modules}</li>
+          <li>Trains: {status.service_counts.trains}</li>
+        </ul>
+      </div>
+      <div>
+        <b>Recent Backend Logs:</b>
+        <pre style={{ maxHeight: 200, overflow: "auto", padding: 8 }}>
+          {status.logs && status.logs.length ? status.logs.join("") : "No logs."}
+        </pre>
+      </div>
+      <div style={{ marginTop: 12, color: "#bbb" }}>{status.message}</div>
+    </div>
+  );
+}
+
 function Menu({ current, setCurrent }) {
   return (
     <nav style={{ display: "flex", gap: 16, marginBottom: 24, borderBottom: "1px solid #ccc", paddingBottom: 8 }}>
+      <button onClick={() => setCurrent("dashboard")}
+        style={{ fontWeight: current === "dashboard" ? "bold" : "normal" }}>
+        Dashboard
+      </button>
       <button onClick={() => setCurrent("config")}
         style={{ fontWeight: current === "config" ? "bold" : "normal" }}>
         Configuration
@@ -196,7 +238,7 @@ function Menu({ current, setCurrent }) {
 
 export default function App() {
   const [dbRefresh, setDbRefresh] = useState(0);
-  const [page, setPage] = useState("main");
+  const [page, setPage] = useState("dashboard");
   const [dispatchers, setDispatchers] = useState([]);
   const [districts, setDistricts] = useState([]);
 
@@ -209,7 +251,9 @@ export default function App() {
     <div style={{ maxWidth: 900, margin: "auto" }}>
       <h1>Train Dispatcher Admin</h1>
       <Menu current={page} setCurrent={setPage} />
-      {page === "config" ? (
+      {page === "dashboard" ? (
+        <Dashboard />
+      ) : page === "config" ? (
         <ConfigurationPage onDbChange={() => setDbRefresh((v) => v + 1)} />
       ) : (
         <>
