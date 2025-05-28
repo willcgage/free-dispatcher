@@ -1,6 +1,6 @@
 # FastAPI backend for Train Dispatcher App
 
-FROM python:3.11.8-slim-bullseye
+FROM python:3.12-slim-bookworm
 
 # Ensure all system packages are up-to-date and security patches are applied
 RUN apt-get update && apt-get upgrade -y && apt-get dist-upgrade -y && apt-get clean
