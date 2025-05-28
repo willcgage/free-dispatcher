@@ -9,9 +9,21 @@ from starlette.responses import JSONResponse, FileResponse
 import pkg_resources
 import logging
 from sqlalchemy import func, select
+import socket
+from zeroconf import ServiceInfo, Zeroconf
 
 import models, schemas
 from database import engine, SessionLocal
+
+# Configure logging to file
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+    handlers=[
+        logging.FileHandler("backend.log"),
+        logging.StreamHandler()
+    ]
+)
 
 app = FastAPI()
 
@@ -332,3 +344,58 @@ async def status(db: AsyncSession = Depends(get_db)):
         "logs": logs,
         "message": "Train Dispatcher Backend is running!"
     }
+
+
+@app.get("/ip")
+def get_ip():
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        s.connect(('10.255.255.255', 1))
+        local_ip = s.getsockname()[0]
+    except Exception:
+        local_ip = '127.0.0.1'
+    finally:
+        s.close()
+    return {"ip": local_ip}
+
+
+@app.on_event("startup")
+def register_mdns_service():
+    try:
+        # Get the local IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0)
+        try:
+            # doesn't have to be reachable
+            s.connect(('10.255.255.255', 1))
+            local_ip = s.getsockname()[0]
+        except Exception:
+            local_ip = '127.0.0.1'
+        finally:
+            s.close()
+
+        info = ServiceInfo(
+            "_http._tcp.local.",
+            "TrainDispatcher._http._tcp.local.",
+            addresses=[socket.inet_aton(local_ip)],
+            port=8000,  # The internal container port
+            properties={},
+            server="train-dispatcher.local."
+        )
+        app.state.zeroconf = Zeroconf()
+        app.state.zeroconf.register_service(info)
+        logging.info(f"mDNS/ZeroConf service registered at {local_ip}:8000")
+    except Exception as e:
+        logging.error(f"Failed to register mDNS/ZeroConf service: {e}")
+
+
+@app.on_event("shutdown")
+def unregister_mdns_service():
+    try:
+        if hasattr(app.state, 'zeroconf'):
+            app.state.zeroconf.close()
+            logging.info("mDNS/ZeroConf service unregistered.")
+    except Exception as e:
+        logging.error(f"Failed to unregister mDNS/ZeroConf service: {e}")

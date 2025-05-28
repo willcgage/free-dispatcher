@@ -5,3 +5,4 @@ asyncpg
 psycopg2-binary
 python-multipart
 setuptools
+zeroconf

@@ -112,7 +112,15 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
 
 function ConfigurationPage({ onDbChange }) {
   const [message, setMessage] = useState("");
+  const [ip, setIp] = useState("");
   const fileInput = useRef();
+
+  useEffect(() => {
+    fetch("http://localhost:8001/ip")
+      .then((res) => res.json())
+      .then((data) => setIp(data.ip))
+      .catch(() => setIp("Unavailable"));
+  }, []);
 
   const handleImport = async (e) => {
     e.preventDefault();
@@ -168,6 +176,7 @@ function ConfigurationPage({ onDbChange }) {
   return (
     <div className="config-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
       <h2>Database Configuration</h2>
+      <div style={{ marginBottom: 8 }}><b>Backend IP Address:</b> {ip}</div>
       <form onSubmit={handleImport} style={{ display: "inline-block", marginRight: 16 }}>
         <input type="file" ref={fileInput} accept=".sql,.db,.sqlite,.backup" />
         <button type="submit">Import Database File</button>
