@@ -60,3 +60,28 @@
   background: #111 !important;
   color: #90ee90 !important;
 }
+
+/* Add a config-page-specific style for better contrast */
+.config-container {
+  background: #222 !important;
+  color: #fff !important;
+  border-radius: 8px;
+}
+
+.config-container h2 {
+  color: #40e0d0;
+}
+
+.config-container button {
+  background: #333;
+  color: #fff;
+  border: 1px solid #40e0d0;
+}
+
+.config-container input[type="file"] {
+  color: #fff;
+}
+
+.config-container form {
+  color: #fff;
+}

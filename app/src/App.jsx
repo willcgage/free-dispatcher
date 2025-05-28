@@ -166,7 +166,7 @@ function ConfigurationPage({ onDbChange }) {
   };
 
   return (
-    <div style={{ margin: 16, padding: 16, border: "1px solid #aaa", background: "#f9f9f9" }}>
+    <div className="config-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
       <h2>Database Configuration</h2>
       <form onSubmit={handleImport} style={{ display: "inline-block", marginRight: 16 }}>
         <input type="file" ref={fileInput} accept=".sql,.db,.sqlite,.backup" />
@@ -242,10 +242,18 @@ export default function App() {
   const [dispatchers, setDispatchers] = useState([]);
   const [districts, setDistricts] = useState([]);
 
+  // Fetch dispatchers and districts whenever dbRefresh changes
   useEffect(() => {
     getDispatchers().then(setDispatchers);
     getDistricts().then(setDistricts);
   }, [dbRefresh]);
+
+  // Also fetch dispatchers when switching to the main page (for dropdown refresh)
+  useEffect(() => {
+    if (page === "main") {
+      getDispatchers().then(setDispatchers);
+    }
+  }, [page]);
 
   return (
     <div style={{ maxWidth: 900, margin: "auto" }}>
@@ -260,9 +268,15 @@ export default function App() {
           <EntityManager
             name="Dispatchers"
             getAll={getDispatchers}
-            create={createDispatcher}
+            create={async (data) => {
+              await createDispatcher(data);
+              setDbRefresh((v) => v + 1); // Refresh after creating dispatcher
+            }}
             update={updateDispatcher}
-            remove={deleteDispatcher}
+            remove={async (id) => {
+              await deleteDispatcher(id);
+              setDbRefresh((v) => v + 1); // Refresh after deleting dispatcher
+            }}
             fields={[{ name: "name", label: "Name" }]}
             key={"dispatchers-" + dbRefresh}
           />
