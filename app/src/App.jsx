@@ -1,3 +1,7 @@
+// App.jsx - Main frontend for Train Dispatcher Admin UI
+// Provides CRUD management for Dispatchers, Districts, Trains, and Modules
+// Uses a generic EntityManager component for each entity type
+
 import React, { useEffect, useState, useRef } from "react";
 import {
   getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher,
@@ -6,6 +10,16 @@ import {
   getModules, createModule, updateModule, deleteModule
 } from "./api";
 
+/**
+ * EntityManager - Generic CRUD UI for a given entity type.
+ * Props:
+ *   name: string - Entity name (e.g. "Dispatchers")
+ *   getAll, create, update, remove: API functions for CRUD
+ *   fields: Array<{ name, label, ... }> - Field definitions for form/table
+ *   selectOptions: { [fieldName]: Array<{id, name}> } - Dropdown options
+ *   onRefresh: callback to trigger parent refresh
+ *   extraData: optional extra props
+ */
 function EntityManager({ name, getAll, create, update, remove, fields, selectOptions = {}, onRefresh, extraData = {} }) {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({});
@@ -213,6 +227,11 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   );
 }
 
+/**
+ * ConfigurationPage - UI for DB import/export/create and backend IP display.
+ * Props:
+ *   onDbChange: callback to trigger parent refresh after DB change
+ */
 function ConfigurationPage({ onDbChange }) {
   const [message, setMessage] = useState("");
   const [ip, setIp] = useState("");
@@ -291,6 +310,13 @@ function ConfigurationPage({ onDbChange }) {
   );
 }
 
+/**
+ * Admin - System admin dashboard and troubleshooting tools.
+ * Props:
+ *   page: current admin subpage
+ *   setPage: setter for admin subpage
+ *   onDbChange: callback for DB changes
+ */
 function Admin({ page, setPage, onDbChange }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
@@ -538,6 +564,12 @@ function Admin({ page, setPage, onDbChange }) {
   );
 }
 
+/**
+ * Menu - Simple navigation bar for switching between Admin and Main pages.
+ * Props:
+ *   current: current page
+ *   setCurrent: setter for page
+ */
 function Menu({ current, setCurrent }) {
   return (
     <nav style={{ display: "flex", gap: 16, marginBottom: 24, borderBottom: "1px solid #ccc", paddingBottom: 8 }}>
@@ -553,6 +585,10 @@ function Menu({ current, setCurrent }) {
   );
 }
 
+/**
+ * App - Main application component.
+ * Handles state for all entities and page navigation.
+ */
 export default function App() {
   const [dbRefresh, setDbRefresh] = useState(0);
   const [page, setPage] = useState("admin");
