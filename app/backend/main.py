@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -11,6 +11,8 @@ import logging
 from sqlalchemy import func, select
 import socket
 from zeroconf import ServiceInfo, Zeroconf
+import threading
+import time
 
 import models, schemas
 from database import engine, SessionLocal
@@ -186,50 +188,6 @@ async def delete_district(district_id: int, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
-# CRUD for Modules
-@app.post("/modules/", response_model=schemas.ModuleRead)
-async def create_module(module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
-    db_module = models.Module(name=module.name, district_id=module.district_id)
-    db.add(db_module)
-    await db.commit()
-    await db.refresh(db_module)
-    return db_module
-
-@app.get("/modules/", response_model=List[schemas.ModuleRead])
-async def read_modules(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Module).offset(skip).limit(limit))
-    return result.scalars().all()
-
-@app.get("/modules/{module_id}", response_model=schemas.ModuleRead)
-async def read_module(module_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
-    module = result.scalar_one_or_none()
-    if module is None:
-        raise HTTPException(status_code=404, detail="Module not found")
-    return module
-
-@app.put("/modules/{module_id}", response_model=schemas.ModuleRead)
-async def update_module(module_id: int, module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
-    db_module = result.scalar_one_or_none()
-    if db_module is None:
-        raise HTTPException(status_code=404, detail="Module not found")
-    db_module.name = module.name  # type: ignore
-    db_module.district_id = module.district_id  # type: ignore
-    await db.commit()
-    await db.refresh(db_module)
-    return db_module
-
-@app.delete("/modules/{module_id}")
-async def delete_module(module_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
-    db_module = result.scalar_one_or_none()
-    if db_module is None:
-        raise HTTPException(status_code=404, detail="Module not found")
-    await db.delete(db_module)
-    await db.commit()
-    return {"ok": True}
-
 # CRUD for Trains
 @app.post("/trains/", response_model=schemas.TrainRead)
 async def create_train(train: schemas.TrainCreate, db: AsyncSession = Depends(get_db)):
@@ -275,6 +233,50 @@ async def delete_train(train_id: int, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
+# CRUD for Modules
+@app.post("/modules/", response_model=schemas.ModuleRead)
+async def create_module(module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
+    db_module = models.Module(name=module.name)
+    db.add(db_module)
+    await db.commit()
+    await db.refresh(db_module)
+    return db_module
+
+@app.get("/modules/", response_model=List[schemas.ModuleRead])
+async def read_modules(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Module).offset(skip).limit(limit))
+    return result.scalars().all()
+
+@app.get("/modules/{module_id}", response_model=schemas.ModuleRead)
+async def read_module(module_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
+    module = result.scalar_one_or_none()
+    if module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+    return module
+
+@app.put("/modules/{module_id}", response_model=schemas.ModuleRead)
+async def update_module(module_id: int, module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
+    db_module = result.scalar_one_or_none()
+    if db_module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+    db_module.name = module.name  # type: ignore
+    await db.commit()
+    await db.refresh(db_module)
+    return db_module
+
+@app.delete("/modules/{module_id}")
+async def delete_module(module_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
+    db_module = result.scalar_one_or_none()
+    if db_module is None:
+        raise HTTPException(status_code=404, detail="Module not found")
+    await db.delete(db_module)
+    await db.commit()
+    return {"ok": True}
+
+
 DB_PATH = os.getenv("DB_PATH", "/var/lib/postgresql/data/dispatcher_db")
 
 
@@ -310,6 +312,44 @@ async def export_db():
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
+@app.post("/admin/cleanup-orphans/")
+async def cleanup_orphans(db: AsyncSession = Depends(get_db)):
+    # Delete districts with no valid dispatcher
+    await db.execute(
+        models.District.__table__.delete().where(~models.District.dispatcher_id.in_(
+            select(models.Dispatcher.id)
+        ))
+    )
+    await db.commit()
+    return {"ok": True, "message": "Orphan districts cleaned up."}
+
+
+@app.get("/admin/orphan-records/")
+async def get_orphan_records(db: AsyncSession = Depends(get_db)):
+    # Find orphan districts (no valid dispatcher or dispatcher_id is NULL)
+    orphan_districts = (await db.execute(
+        select(models.District).where(
+            (models.District.dispatcher_id == None) |
+            (~models.District.dispatcher_id.in_(select(models.Dispatcher.id)))
+        )
+    )).scalars().all()
+    return {
+        "orphan_districts": [
+            {"id": d.id, "name": d.name, "dispatcher_id": d.dispatcher_id} for d in orphan_districts
+        ],
+        "orphan_modules": []  # No modules table
+    }
+
+
+@app.post("/admin/delete-orphans/")
+async def delete_orphans(payload: dict, db: AsyncSession = Depends(get_db)):
+    district_ids = payload.get("district_ids", [])
+    if district_ids:
+        await db.execute(models.District.__table__.delete().where(models.District.id.in_(district_ids)))
+    await db.commit()
+    return {"ok": True, "message": "Selected orphan districts deleted."}
+
+
 @app.get("/status")
 async def status(db: AsyncSession = Depends(get_db)):
     # Get backend version
@@ -323,13 +363,13 @@ async def status(db: AsyncSession = Depends(get_db)):
         return result.scalar()
     dispatcher_count = await get_count(models.Dispatcher)
     district_count = await get_count(models.District)
-    module_count = await get_count(models.Module)
     train_count = await get_count(models.Train)
+    module_count = await get_count(models.Module)
     counts = {
         "dispatchers": dispatcher_count,
         "districts": district_count,
-        "modules": module_count,
         "trains": train_count,
+        "modules": module_count,
     }
     # Get recent logs (if using logging to file)
     logs = []
@@ -399,3 +439,64 @@ def unregister_mdns_service():
             logging.info("mDNS/ZeroConf service unregistered.")
     except Exception as e:
         logging.error(f"Failed to unregister mDNS/ZeroConf service: {e}")
+
+
+# Orphan record checker state
+orphan_check_interval = 60  # seconds, default
+orphan_check_thread = None
+orphan_check_stop = threading.Event()
+
+# Store last orphan check results
+last_orphan_check = {"orphan_districts": [], "last_run": None}
+
+def orphan_check_worker():
+    global last_orphan_check
+    while not orphan_check_stop.is_set():
+        try:
+            with SessionLocal() as session:
+                # Find orphan districts
+                orphan_districts = session.execute(
+                    select(models.District).where(
+                        (models.District.dispatcher_id == None) |
+                        (~models.District.dispatcher_id.in_(select(models.Dispatcher.id)))
+                    )
+                ).scalars().all()
+                last_orphan_check = {
+                    "orphan_districts": [
+                        {"id": d.id, "name": d.name, "dispatcher_id": d.dispatcher_id} for d in orphan_districts
+                    ],
+                    "last_run": time.time(),
+                }
+        except Exception as e:
+            last_orphan_check = {"error": str(e), "last_run": time.time()}
+        orphan_check_stop.wait(orphan_check_interval)
+
+@app.on_event("startup")
+def start_orphan_check_thread():
+    global orphan_check_thread
+    orphan_check_stop.clear()
+    orphan_check_thread = threading.Thread(target=orphan_check_worker, daemon=True)
+    orphan_check_thread.start()
+
+@app.on_event("shutdown")
+def stop_orphan_check_thread():
+    orphan_check_stop.set()
+    if orphan_check_thread:
+        orphan_check_thread.join()
+
+@app.get("/admin/orphan-check-interval/")
+def get_orphan_check_interval():
+    return {"interval": orphan_check_interval}
+
+@app.post("/admin/orphan-check-interval/")
+def set_orphan_check_interval(payload: dict):
+    global orphan_check_interval
+    interval = payload.get("interval")
+    if not isinstance(interval, int) or interval < 10:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "Interval must be an integer >= 10 seconds."})
+    orphan_check_interval = interval
+    return {"ok": True, "interval": orphan_check_interval}
+
+@app.get("/admin/last-orphan-check/")
+def get_last_orphan_check():
+    return last_orphan_check

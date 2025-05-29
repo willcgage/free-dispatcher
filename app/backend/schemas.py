@@ -1,6 +1,7 @@
 import models
 from pydantic import BaseModel
 from typing import Optional
+import enum
 
 class DispatcherBase(BaseModel):
     name: str
@@ -25,17 +26,13 @@ class DistrictRead(DistrictBase):
     class Config:
         orm_mode = True
 
-class ModuleBase(BaseModel):
-    name: str
-    district_id: int
-
-class ModuleCreate(ModuleBase):
-    pass
-
-class ModuleRead(ModuleBase):
-    id: int
-    class Config:
-        orm_mode = True
+class ModuleCategory(str, enum.Enum):
+    THROUGH = "Through"
+    SIDING = "Siding"
+    YARD = "Yard"
+    INDUSTRY = "Industry"
+    CROSSING_JUNCTION = "Crossing/Junction"
+    OTHER = "Other"
 
 class TrainBase(BaseModel):
     name: str
@@ -45,6 +42,17 @@ class TrainCreate(TrainBase):
     pass
 
 class TrainRead(TrainBase):
+    id: int
+    class Config:
+        orm_mode = True
+
+class ModuleBase(BaseModel):
+    name: str
+
+class ModuleCreate(ModuleBase):
+    pass
+
+class ModuleRead(ModuleBase):
     id: int
     class Config:
         orm_mode = True

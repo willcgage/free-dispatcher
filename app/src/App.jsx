@@ -2,32 +2,67 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher,
   getDistricts, createDistrict, updateDistrict, deleteDistrict,
-  getModules, createModule, updateModule, deleteModule,
-  getTrains, createTrain, updateTrain, deleteTrain
+  getTrains, createTrain, updateTrain, deleteTrain,
+  getModules, createModule, updateModule, deleteModule
 } from "./api";
 
-function EntityManager({ name, getAll, create, update, remove, fields, selectOptions = {} }) {
+function EntityManager({ name, getAll, create, update, remove, fields, selectOptions = {}, onRefresh, extraData = {} }) {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
+  const [dynamicOptions, setDynamicOptions] = useState({});
+  const [showEditPopup, setShowEditPopup] = useState(false); // For popup
+  const [popupForm, setPopupForm] = useState({});
 
+  // Fetch items and, if needed, dynamic select options
   const fetchItems = async () => {
     try {
       setItems(await getAll());
+      // If this is the Modules manager, refresh districts for the dropdown
+      if (name === "Modules" && selectOptions.district_id !== undefined) {
+        const districts = await getDistricts();
+        setDynamicOptions((opts) => ({ ...opts, district_id: districts }));
+      }
     } catch (e) {
       setError(e.message);
     }
   };
 
-  useEffect(() => { fetchItems(); }, []);
+  useEffect(() => { fetchItems(); }, [onRefresh]);
+
+  // When the form is opened for create/edit, refresh districts for Modules
+  useEffect(() => {
+    if ((name === "Modules") && (editingId !== null || Object.keys(form).length > 0)) {
+      getDistricts().then((districts) => setDynamicOptions((opts) => ({ ...opts, district_id: districts })));
+    }
+  }, [editingId, form, name]);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    let value = e.target.value;
+    // Ensure district_id is a number
+    if (e.target.name === "district_id") value = value ? Number(value) : "";
+    setForm({ ...form, [e.target.name]: value });
+  };
+
+  // For popup edit
+  const handlePopupChange = (e) => {
+    let value = e.target.value;
+    // Ensure district_id is a number
+    if (e.target.name === "district_id") value = value ? Number(value) : "";
+    // Ensure number_of_endplates is a number
+    if (e.target.name === "number_of_endplates") value = value ? Number(value) : "";
+    setPopupForm({ ...popupForm, [e.target.name]: value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+  
+    // Validation for Districts
+    if (name === "Districts" && (!form.dispatcher_id || form.dispatcher_id === "")) {
+      window.alert("You must select a Dispatcher for this District.");
+      return;
+    }
     try {
       if (editingId) {
         await update(editingId, form);
@@ -37,39 +72,66 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
       setForm({});
       setEditingId(null);
       fetchItems();
+      if (onRefresh) onRefresh();
     } catch (e) {
       setError(e.message);
     }
   };
 
   const handleEdit = (item) => {
-    setForm(item);
-    setEditingId(item.id);
+    if (name === "Modules") {
+      setPopupForm(item);
+      setShowEditPopup(true);
+    } else {
+      setForm(item);
+      setEditingId(item.id);
+    }
+  };
+
+  const handlePopupSave = async () => {
+    try {
+      await update(popupForm.id, popupForm);
+      setShowEditPopup(false);
+      setPopupForm({});
+      fetchItems();
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   const handleDelete = async (id) => {
     if (window.confirm("Delete this record?")) {
       await remove(id);
       fetchItems();
+      if (onRefresh) onRefresh();
     }
   };
+
+  const mergedSelectOptions = { ...selectOptions, ...dynamicOptions };
+
+  // For Modules, only show name and district_id in table, edit others in popup
+  const visibleFields = name === "Modules"
+    ? fields.filter(f => f.name === "name" || f.name === "district_id")
+    : fields;
 
   return (
     <div style={{ border: "1px solid #ccc", margin: 16, padding: 16 }}>
       <h2>{name}</h2>
       {error && <div style={{ color: "red" }}>{error}</div>}
       <form onSubmit={handleSubmit} style={{ marginBottom: 8 }}>
-        {fields.map((f) => (
-          selectOptions[f.name] ? (
+        {visibleFields.map((f) => (
+          mergedSelectOptions[f.name] ? (
             <select
               key={f.name}
               name={f.name}
               value={form[f.name] || ""}
               onChange={handleChange}
               style={{ marginRight: 8 }}
+              required={f.name === "district_id" || f.required}
             >
               <option value="">Select {f.label}</option>
-              {selectOptions[f.name].map((opt) => (
+              {mergedSelectOptions[f.name].map((opt) => (
                 <option key={opt.id} value={opt.id}>{opt.name}</option>
               ))}
             </select>
@@ -81,6 +143,9 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
               value={form[f.name] || ""}
               onChange={handleChange}
               style={{ marginRight: 8 }}
+              type={f.type || "text"}
+              min={f.min || undefined}
+              required={f.name === "district_id" || f.required}
             />
           )
         ))}
@@ -90,14 +155,14 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
       <table>
         <thead>
           <tr>
-            {fields.map((f) => <th key={f.name}>{f.label}</th>)}
+            {visibleFields.map((f) => <th key={f.name}>{f.label}</th>)}
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={item.id}>
-              {fields.map((f) => <td key={f.name}>{item[f.name]}</td>)}
+            <tr key={name === "Dispatchers" ? `${item.id}-${item.name}` : item.id}>
+              {visibleFields.map((f) => <td key={f.name}>{name === "Districts" && f.name === "dispatcher_id" && selectOptions.dispatcher_id ? (selectOptions.dispatcher_id.find(d => d.id === item.dispatcher_id)?.name || item.dispatcher_id) : item[f.name]}</td>)}
               <td>
                 <button onClick={() => handleEdit(item)}>Edit</button>
                 <button onClick={() => handleDelete(item.id)}>Delete</button>
@@ -106,6 +171,44 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
           ))}
         </tbody>
       </table>
+      {/* Popup for editing Module details */}
+      {name === "Modules" && showEditPopup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', color: '#222', padding: 24, borderRadius: 8, minWidth: 320, position: 'relative' }}>
+            <h3>Edit Module</h3>
+            <div style={{ marginBottom: 8 }}>
+              <label>Name: <input name="name" value={popupForm.name || ""} onChange={handlePopupChange} /></label>
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <label>District:
+                <select name="district_id" value={popupForm.district_id || ""} onChange={handlePopupChange}>
+                  <option value="">Select District</option>
+                  {(mergedSelectOptions.district_id || []).map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <label>Number of Endplates: <input name="number_of_endplates" type="number" min={1} value={popupForm.number_of_endplates || 1} onChange={handlePopupChange} /></label>
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <label>Category:
+                <select name="category" value={popupForm.category || ""} onChange={handlePopupChange}>
+                  <option value="">Select Category</option>
+                  {(["Through", "Siding", "Yard", "Industry", "Crossing/Junction", "Other"]).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <button onClick={handlePopupSave}>Save</button>
+              <button style={{ marginLeft: 12 }} onClick={() => { setShowEditPopup(false); setPopupForm({}); }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -188,9 +291,23 @@ function ConfigurationPage({ onDbChange }) {
   );
 }
 
-function Dashboard() {
+function Admin({ page, setPage, onDbChange }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
+  const [showOrphans, setShowOrphans] = useState(false);
+  const [orphansLoaded, setOrphansLoaded] = useState(false);
+  const [orphanLoading, setOrphanLoading] = useState(false);
+  const [orphanDistricts, setOrphanDistricts] = useState([]);
+  const [orphanModules, setOrphanModules] = useState([]);
+  const [selectedDistricts, setSelectedDistricts] = useState([]);
+  const [selectedModules, setSelectedModules] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+  // Orphan check interval state
+  const [orphanInterval, setOrphanInterval] = useState(60);
+  const [intervalInput, setIntervalInput] = useState(60);
+  const [intervalLoading, setIntervalLoading] = useState(false);
+  const [lastOrphanCheck, setLastOrphanCheck] = useState(null);
+  const [lastCheckLoading, setLastCheckLoading] = useState(false);
 
   useEffect(() => {
     fetch("http://localhost:8001/status")
@@ -199,29 +316,224 @@ function Dashboard() {
       .catch((e) => setError(e.message));
   }, []);
 
+  useEffect(() => {
+    fetch("http://localhost:8001/admin/orphan-check-interval/")
+      .then(res => res.json())
+      .then(data => {
+        setOrphanInterval(data.interval);
+        setIntervalInput(data.interval);
+      });
+    fetch("http://localhost:8001/admin/last-orphan-check/")
+      .then(res => res.json())
+      .then(setLastOrphanCheck);
+  }, []);
+
+  const handleIntervalChange = async (e) => {
+    e.preventDefault();
+    setIntervalLoading(true);
+    try {
+      const res = await fetch("http://localhost:8001/admin/orphan-check-interval/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval: Number(intervalInput) })
+      });
+      const data = await res.json();
+      if (data.ok) setOrphanInterval(data.interval);
+      else alert(data.error || "Failed to set interval");
+    } finally {
+      setIntervalLoading(false);
+    }
+  };
+
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
-  if (!status) return <div>Loading dashboard...</div>;
+  if (!status) return <div>Loading admin panel...</div>;
 
   return (
     <div className="dashboard-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
-      <h2>System Dashboard</h2>
-      <div><b>Backend Version:</b> {status.backend_version}</div>
-      <div style={{ margin: "12px 0" }}>
-        <b>Service Record Counts:</b>
-        <ul>
-          <li>Dispatchers: {status.service_counts.dispatchers}</li>
-          <li>Districts: {status.service_counts.districts}</li>
-          <li>Modules: {status.service_counts.modules}</li>
-          <li>Trains: {status.service_counts.trains}</li>
-        </ul>
+      <h2>System Admin</h2>
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setPage("admin-overview")}
+          style={{ fontWeight: page === "admin-overview" ? "bold" : "normal", marginRight: 12 }}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => setPage("admin-config")}
+          style={{ fontWeight: page === "admin-config" ? "bold" : "normal" }}
+        >
+          Configuration
+        </button>
       </div>
-      <div>
-        <b>Recent Backend Logs:</b>
-        <pre style={{ maxHeight: 200, overflow: "auto", padding: 8 }}>
-          {status.logs && status.logs.length ? status.logs.join("") : "No logs."}
-        </pre>
-      </div>
-      <div style={{ marginTop: 12, color: "#bbb" }}>{status.message}</div>
+      {page === "admin-overview" && (
+        <>
+          <div><b>Backend Version:</b> {status.backend_version}</div>
+          <div style={{ margin: "12px 0" }}>
+            <b>Service Record Counts:</b>
+            <ul>
+              <li>Dispatchers: {status.service_counts.dispatchers}</li>
+              <li>Districts: {status.service_counts.districts}</li>
+              <li>Modules: {status.service_counts.modules}</li>
+              <li>Trains: {status.service_counts.trains}</li>
+            </ul>
+          </div>
+          <div>
+            <b>Recent Backend Logs:</b>
+            <pre style={{ maxHeight: 200, overflow: "auto", padding: 8 }}>
+              {status.logs && status.logs.length ? status.logs.join("") : "No logs."}
+            </pre>
+          </div>
+          <div style={{ marginTop: 12, color: "#bbb" }}>{status.message}</div>
+          <div style={{ marginTop: 32, padding: 16, background: '#f5f5f5', borderRadius: 8, color: '#222', border: '1px solid #bbb' }}>
+            <h3 style={{ color: '#333' }}>Database Troubleshooting</h3>
+            <form onSubmit={handleIntervalChange} style={{ marginBottom: 16 }}>
+              <label>
+                Orphan Check Interval (seconds):
+                <input
+                  type="number"
+                  min={10}
+                  value={intervalInput}
+                  onChange={e => setIntervalInput(e.target.value)}
+                  style={{ marginLeft: 8, width: 80 }}
+                />
+              </label>
+              <button type="submit" disabled={intervalLoading} style={{ marginLeft: 8 }}>
+                {intervalLoading ? "Saving..." : "Set Interval"}
+              </button>
+              <span style={{ marginLeft: 12, color: '#555' }}>
+                Current: {orphanInterval}s
+              </span>
+            </form>
+            <div style={{ marginBottom: 12 }}>
+              <b>Last Orphan Check:</b> {lastOrphanCheck && lastOrphanCheck.last_run ? new Date(lastOrphanCheck.last_run * 1000).toLocaleString() : 'Never'}
+              <br />
+              <b>Orphan Districts:</b> {lastOrphanCheck && lastOrphanCheck.orphan_districts ? lastOrphanCheck.orphan_districts.length : 0}
+              <br />
+              <b>Orphan Modules:</b> {lastOrphanCheck && lastOrphanCheck.orphan_modules ? lastOrphanCheck.orphan_modules.length : 0}
+            </div>
+            <p>If you suspect orphan records (e.g., districts without a valid dispatcher, modules without a valid district), you can review and clean them up here.</p>
+            <button
+              style={{ background: '#333', color: '#fff', border: '1px solid #40e0d0', marginBottom: 12 }}
+              onClick={async () => {
+                setShowOrphans((v) => !v);
+                if (!orphansLoaded) {
+                  setOrphanLoading(true);
+                  try {
+                    const res = await fetch('http://localhost:8001/admin/orphan-records/');
+                    const data = await res.json();
+                    setOrphanDistricts(data.orphan_districts || []);
+                    setOrphanModules(data.orphan_modules || []);
+                    setOrphansLoaded(true);
+                  } catch (e) {
+                    alert('Failed to load orphan records: ' + e.message);
+                  } finally {
+                    setOrphanLoading(false);
+                  }
+                }
+              }}
+            >{showOrphans ? 'Hide' : 'Show'} Orphan Records</button>
+            {showOrphans && (
+              <div>
+                {orphanLoading ? (
+                  <div>Loading orphan records...</div>
+                ) : (
+                  <>
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      setDeleting(true);
+                      try {
+                        const res = await fetch('http://localhost:8001/admin/delete-orphans/', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            district_ids: selectedDistricts,
+                            module_ids: selectedModules,
+                          }),
+                        });
+                        const data = await res.json();
+                        alert(data.message || (data.ok ? 'Cleanup successful' : 'Cleanup failed'));
+                        setOrphansLoaded(false);
+                        setShowOrphans(false);
+                        setSelectedDistricts([]);
+                        setSelectedModules([]);
+                        window.location.reload();
+                      } catch (e) {
+                        alert('Cleanup failed: ' + e.message);
+                      } finally {
+                        setDeleting(false);
+                      }
+                    }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <b>Orphan Districts:</b>
+                        {orphanDistricts.length === 0 ? (
+                          <span style={{ marginLeft: 8 }}>None</span>
+                        ) : (
+                          <ul>
+                            {orphanDistricts.map(d => (
+                              <li key={d.id}>
+                                <label>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDistricts.includes(d.id)}
+                                    onChange={e => {
+                                      setSelectedDistricts(sel =>
+                                        e.target.checked
+                                          ? [...sel, d.id]
+                                          : sel.filter(id => id !== d.id)
+                                      );
+                                    }}
+                                  />
+                                  {` ${d.name} (ID: ${d.id}, Dispatcher ID: ${d.dispatcher_id})`}
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        <b>Orphan Modules:</b>
+                        {orphanModules.length === 0 ? (
+                          <span style={{ marginLeft: 8 }}>None</span>
+                        ) : (
+                          <ul>
+                            {orphanModules.map(m => (
+                              <li key={m.id}>
+                                <label>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedModules.includes(m.id)}
+                                    onChange={e => {
+                                      setSelectedModules(sel =>
+                                        e.target.checked
+                                          ? [...sel, m.id]
+                                          : sel.filter(id => id !== m.id)
+                                      );
+                                    }}
+                                  />
+                                  {` ${m.name} (ID: ${m.id}, District ID: ${m.district_id})`}
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <button type="submit" disabled={deleting || (selectedDistricts.length === 0 && selectedModules.length === 0)}>
+                        {deleting ? 'Deleting...' : 'Delete Selected Orphans'}
+                      </button>
+                    </form>
+                  </>
+                )}
+              </div>
+            )}
+            <p style={{ color: '#555', marginTop: 8 }}>
+              This will remove only the selected orphan districts and modules.
+            </p>
+          </div>
+        </>
+      )}
+      {page === "admin-config" && (
+        <ConfigurationPage onDbChange={onDbChange} />
+      )}
     </div>
   );
 }
@@ -229,13 +541,9 @@ function Dashboard() {
 function Menu({ current, setCurrent }) {
   return (
     <nav style={{ display: "flex", gap: 16, marginBottom: 24, borderBottom: "1px solid #ccc", paddingBottom: 8 }}>
-      <button onClick={() => setCurrent("dashboard")}
-        style={{ fontWeight: current === "dashboard" ? "bold" : "normal" }}>
-        Dashboard
-      </button>
-      <button onClick={() => setCurrent("config")}
-        style={{ fontWeight: current === "config" ? "bold" : "normal" }}>
-        Configuration
+      <button onClick={() => setCurrent("admin")}
+        style={{ fontWeight: current === "admin" ? "bold" : "normal" }}>
+        Admin
       </button>
       <button onClick={() => setCurrent("main")}
         style={{ fontWeight: current === "main" ? "bold" : "normal" }}>
@@ -247,14 +555,23 @@ function Menu({ current, setCurrent }) {
 
 export default function App() {
   const [dbRefresh, setDbRefresh] = useState(0);
-  const [page, setPage] = useState("dashboard");
+  const [page, setPage] = useState("admin");
+  const [adminPage, setAdminPage] = useState("admin-overview");
   const [dispatchers, setDispatchers] = useState([]);
   const [districts, setDistricts] = useState([]);
+  const [modules, setModules] = useState([]);
+  const [districtsRefresh, setDistrictsRefresh] = useState(0);
+  const [modulesRefresh, setModulesRefresh] = useState(0); // NEW
 
   // Fetch dispatchers and districts whenever dbRefresh changes
   useEffect(() => {
     getDispatchers().then(setDispatchers);
     getDistricts().then(setDistricts);
+  }, [dbRefresh]);
+
+  // Fetch modules when dbRefresh changes
+  useEffect(() => {
+    getModules().then(setModules);
   }, [dbRefresh]);
 
   // Also fetch dispatchers when switching to the main page (for dropdown refresh)
@@ -264,14 +581,26 @@ export default function App() {
     }
   }, [page]);
 
+  // When a district is created, updated, or deleted, refresh districts and trigger modules refresh
+  const handleDistrictsRefresh = () => {
+    setDistrictsRefresh((v) => v + 1);
+    getDistricts().then(setDistricts);
+    setModulesRefresh((v) => v + 1); // Also refresh modules
+  };
+
+  // When a dispatcher is updated, refresh dispatchers and districts (and thus modules)
+  const handleDispatchersRefresh = () => {
+    setDbRefresh((v) => v + 1);
+    setDistrictsRefresh((v) => v + 1);
+    setModulesRefresh((v) => v + 1);
+  };
+
   return (
     <div style={{ maxWidth: 900, margin: "auto" }}>
       <h1>Train Dispatcher Admin</h1>
       <Menu current={page} setCurrent={setPage} />
-      {page === "dashboard" ? (
-        <Dashboard />
-      ) : page === "config" ? (
-        <ConfigurationPage onDbChange={() => setDbRefresh((v) => v + 1)} />
+      {page === "admin" ? (
+        <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} />
       ) : (
         <>
           <EntityManager
@@ -279,12 +608,15 @@ export default function App() {
             getAll={getDispatchers}
             create={async (data) => {
               await createDispatcher(data);
-              setDbRefresh((v) => v + 1); // Refresh after creating dispatcher
+              handleDispatchersRefresh();
             }}
-            update={updateDispatcher}
+            update={async (id, data) => {
+              await updateDispatcher(id, data);
+              handleDispatchersRefresh();
+            }}
             remove={async (id) => {
               await deleteDispatcher(id);
-              setDbRefresh((v) => v + 1); // Refresh after deleting dispatcher
+              handleDispatchersRefresh();
             }}
             fields={[{ name: "name", label: "Name" }]}
             key={"dispatchers-" + dbRefresh}
@@ -292,28 +624,25 @@ export default function App() {
           <EntityManager
             name="Districts"
             getAll={getDistricts}
-            create={createDistrict}
-            update={updateDistrict}
-            remove={deleteDistrict}
+            create={async (data) => {
+              await createDistrict(data);
+              handleDistrictsRefresh();
+            }}
+            update={async (id, data) => {
+              await updateDistrict(id, data);
+              handleDistrictsRefresh();
+            }}
+            remove={async (id) => {
+              await deleteDistrict(id);
+              handleDistrictsRefresh();
+            }}
             fields={[
               { name: "name", label: "Name" },
               { name: "dispatcher_id", label: "Dispatcher" },
             ]}
             selectOptions={{ dispatcher_id: dispatchers }}
-            key={"districts-" + dbRefresh}
-          />
-          <EntityManager
-            name="Modules"
-            getAll={getModules}
-            create={createModule}
-            update={updateModule}
-            remove={deleteModule}
-            fields={[
-              { name: "name", label: "Name" },
-              { name: "district_id", label: "District" },
-            ]}
-            selectOptions={{ district_id: districts }}
-            key={"modules-" + dbRefresh}
+            key={"districts-" + dbRefresh + "-" + districtsRefresh}
+            onRefresh={handleDistrictsRefresh}
           />
           <EntityManager
             name="Trains"
@@ -326,6 +655,17 @@ export default function App() {
               { name: "status", label: "Status" },
             ]}
             key={"trains-" + dbRefresh}
+          />
+          <EntityManager
+            name="Modules"
+            getAll={getModules}
+            create={createModule}
+            update={updateModule}
+            remove={deleteModule}
+            fields={[
+              { name: "name", label: "Name" },
+            ]}
+            key={"modules-" + dbRefresh}
           />
         </>
       )}
