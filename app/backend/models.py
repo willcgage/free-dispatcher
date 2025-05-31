@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -29,3 +29,15 @@ class Module(Base):
     district_id = Column(Integer, ForeignKey("districts.id"), nullable=False, default=1)
     number_of_endplates = Column(Integer, nullable=False, default=1)
     district = relationship("District")
+
+class ModuleEndplate(Base):
+    __tablename__ = "module_endplates"
+    id = Column(Integer, primary_key=True, index=True)
+    module_id = Column(Integer, ForeignKey("modules.id"), nullable=False)
+    endplate_number = Column(Integer, nullable=False)
+    connected_module_id = Column(Integer, ForeignKey("modules.id"), nullable=True)
+    module = relationship("Module", foreign_keys=[module_id])
+    connected_module = relationship("Module", foreign_keys=[connected_module_id])
+    __table_args__ = (
+        UniqueConstraint('module_id', 'endplate_number', name='uix_module_endplate'),
+    )

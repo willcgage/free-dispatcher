@@ -7,7 +7,9 @@ import {
   getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher,
   getDistricts, createDistrict, updateDistrict, deleteDistrict,
   getTrains, createTrain, updateTrain, deleteTrain,
-  getModules, createModule, updateModule, deleteModule
+  getModules, createModule, updateModule, deleteModule,
+  // Add these:
+  getModuleEndplates, createModuleEndplate, updateModuleEndplate, deleteModuleEndplate
 } from "./api";
 
 /**
@@ -31,6 +33,26 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   // Popup state for creation
   const [showCreatePopup, setShowCreatePopup] = useState(false);
   const [createForm, setCreateForm] = useState({});
+
+  // Define refreshAllOptions at the top of EntityManager so it is always in scope
+  const refreshAllOptions = async () => {
+    if (name === "Modules" || name === "Module Endplates") {
+      if (typeof getModules === "function") {
+        const modulesList = await getModules();
+        setDynamicOptions((opts) => ({ ...opts, module_id: modulesList, connected_module_id: modulesList }));
+      }
+      if (typeof getDistricts === "function") {
+        const districtsList = await getDistricts();
+        setDynamicOptions((opts) => ({ ...opts, district_id: districtsList }));
+      }
+    }
+    if (name === "Districts") {
+      if (typeof getDispatchers === "function") {
+        const dispatchersList = await getDispatchers();
+        setDynamicOptions((opts) => ({ ...opts, dispatcher_id: dispatchersList }));
+      }
+    }
+  };
 
   // Fetch items and, if needed, dynamic select options
   const fetchItems = async () => {
@@ -109,6 +131,8 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
       setShowEditPopup(false);
       setPopupForm({});
       fetchItems();
+      // After create, update, or delete, always refresh dropdown options for all popups
+      await refreshAllOptions();
       if (onRefresh) onRefresh();
     } catch (e) {
       setError(e.message);
@@ -119,6 +143,8 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
     if (window.confirm("Delete this record?")) {
       await remove(id);
       fetchItems();
+      // After create, update, or delete, always refresh dropdown options for all popups
+      await refreshAllOptions();
       if (onRefresh) onRefresh();
     }
   };
@@ -162,6 +188,8 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
       setShowCreatePopup(false);
       setCreateForm({});
       fetchItems();
+      // After create, update, or delete, always refresh dropdown options for all popups
+      await refreshAllOptions();
       if (onRefresh) onRefresh();
     } catch (e) {
       setError(e.message);
@@ -184,24 +212,46 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
           <div style={{ background: '#fff', color: '#222', padding: 24, borderRadius: 8, minWidth: 320, position: 'relative' }}>
             <h3>Create {name.slice(0, -1)}</h3>
             <form onSubmit={handleCreateSubmit}>
-              {fields.map((f) => (
-                mergedSelectOptions[f.name] ? (
-                  <div key={f.name} style={{ marginBottom: 8 }}>
-                    <label>{f.label}: 
-                      <select
-                        name={f.name}
-                        value={createForm[f.name] || ""}
-                        onChange={handleCreateChange}
-                        required={f.required}
-                      >
-                        <option value="">Select {f.label}</option>
-                        {mergedSelectOptions[f.name].map((opt) => (
-                          <option key={opt.id} value={opt.id}>{opt.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                ) : (
+              {fields.map((f) => {
+                if (name === "Module Endplates" && f.name === "endplate_number") {
+                  return (
+                    <div key={f.name} style={{ marginBottom: 8 }}>
+                      <label>{f.label}: 
+                        <select
+                          name={f.name}
+                          value={createForm[f.name] || ""}
+                          onChange={handleCreateChange}
+                          required={f.required}
+                        >
+                          <option value="">Select {f.label}</option>
+                          {filteredEndplateNumbers().map(n => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  );
+                }
+                if (mergedSelectOptions[f.name]) {
+                  return (
+                    <div key={f.name} style={{ marginBottom: 8 }}>
+                      <label>{f.label}: 
+                        <select
+                          name={f.name}
+                          value={createForm[f.name] || ""}
+                          onChange={handleCreateChange}
+                          required={f.required}
+                        >
+                          <option value="">Select {f.label}</option>
+                          {mergedSelectOptions[f.name].map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  );
+                }
+                return (
                   <div key={f.name} style={{ marginBottom: 8 }}>
                     <label>{f.label}: 
                       <input
@@ -215,8 +265,8 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                       />
                     </label>
                   </div>
-                )
-              ))}
+                );
+              })}
               <div style={{ marginTop: 16 }}>
                 <button type="submit">Create</button>
                 <button type="button" style={{ marginLeft: 12 }} onClick={() => { setShowCreatePopup(false); setCreateForm({}); }}>Cancel</button>
@@ -225,61 +275,52 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
           </div>
         </div>
       )}
-      <table>
-        <thead>
-          <tr>
-            {fields.map((f) => <th key={f.name}>{f.label}</th>)}
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={name === "Dispatchers" ? `${item.id}-${item.name}` : item.id}>
-              {fields.map((f) => {
-                // For Modules, show district name instead of ID
-                if (name === "Modules" && f.name === "district_id" && mergedSelectOptions.district_id) {
-                  const district = mergedSelectOptions.district_id.find(d => d.id === item.district_id);
-                  return <td key={f.name}>{district ? district.name : item.district_id}</td>;
-                }
-                // For Districts, show dispatcher name instead of ID
-                if (name === "Districts" && f.name === "dispatcher_id" && extraData && extraData.dispatchers) {
-                  const dispatcher = extraData.dispatchers.find(d => d.id === item.dispatcher_id);
-                  return <td key={f.name}>{dispatcher ? dispatcher.name : item.dispatcher_id}</td>;
-                }
-                return <td key={f.name}>{item[f.name]}</td>;
-              })}
-              <td>
-                <button onClick={() => handleEdit(item)}>Edit</button>
-                <button onClick={() => handleDelete(item.id)}>Delete</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {/* Popup for editing record (all entities) */}
+      {/* Edit Popup (all entities) */}
       {showEditPopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', color: '#222', padding: 24, borderRadius: 8, minWidth: 320, position: 'relative' }}>
             <h3>Edit {name.slice(0, -1)}</h3>
             <form onSubmit={async (e) => { e.preventDefault(); await handlePopupSave(); }}>
-              {fields.map((f) => (
-                mergedSelectOptions[f.name] ? (
-                  <div key={f.name} style={{ marginBottom: 8 }}>
-                    <label>{f.label}: 
-                      <select
-                        name={f.name}
-                        value={popupForm[f.name] || ""}
-                        onChange={handlePopupChange}
-                        required={f.required}
-                      >
-                        <option value="">Select {f.label}</option>
-                        {mergedSelectOptions[f.name].map((opt) => (
-                          <option key={opt.id} value={opt.id}>{opt.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                ) : (
+              {fields.map((f) => {
+                if (name === "Module Endplates" && f.name === "endplate_number") {
+                  return (
+                    <div key={f.name} style={{ marginBottom: 8 }}>
+                      <label>{f.label}: 
+                        <select
+                          name={f.name}
+                          value={popupForm[f.name] || ""}
+                          onChange={handlePopupChange}
+                          required={f.required}
+                        >
+                          <option value="">Select {f.label}</option>
+                          {filteredEndplateNumbers().map(n => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  );
+                }
+                if (mergedSelectOptions[f.name]) {
+                  return (
+                    <div key={f.name} style={{ marginBottom: 8 }}>
+                      <label>{f.label}: 
+                        <select
+                          name={f.name}
+                          value={popupForm[f.name] || ""}
+                          onChange={handlePopupChange}
+                          required={f.required}
+                        >
+                          <option value="">Select {f.label}</option>
+                          {mergedSelectOptions[f.name].map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  );
+                }
+                return (
                   <div key={f.name} style={{ marginBottom: 8 }}>
                     <label>{f.label}: 
                       <input
@@ -293,8 +334,8 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                       />
                     </label>
                   </div>
-                )
-              ))}
+                );
+              })}
               <div style={{ marginTop: 16 }}>
                 <button type="submit">Save</button>
                 <button type="button" style={{ marginLeft: 12 }} onClick={() => { setShowEditPopup(false); setPopupForm({}); }}>Cancel</button>
@@ -791,6 +832,21 @@ export default function App() {
             ]}
             selectOptions={{ district_id: districts }}
             key={"modules-" + dbRefresh}
+          />
+          <EntityManager
+            name="Module Endplates"
+            getAll={getModuleEndplates}
+            create={createModuleEndplate}
+            update={updateModuleEndplate}
+            remove={deleteModuleEndplate}
+            fields={[
+              { name: "id", label: "ID" },
+              { name: "module_id", label: "Module" },
+              { name: "endplate_number", label: "Endplate Number", type: "number", min: 1, required: true },
+              { name: "connected_module_id", label: "Connected Module" },
+            ]}
+            selectOptions={{ module_id: modules, connected_module_id: modules }}
+            key={"module-endplates-" + dbRefresh}
           />
         </>
       )}

@@ -58,3 +58,16 @@ class ModuleRead(ModuleBase):
     id: int
     class Config:
         orm_mode = True
+
+class ModuleEndplateBase(BaseModel):
+    module_id: int
+    endplate_number: int
+    connected_module_id: Optional[int] = None
+
+class ModuleEndplateCreate(ModuleEndplateBase):
+    pass
+
+class ModuleEndplateRead(ModuleEndplateBase):
+    id: int
+    class Config:
+        orm_mode = True

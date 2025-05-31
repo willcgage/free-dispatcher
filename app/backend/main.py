@@ -283,6 +283,56 @@ async def delete_module(module_id: int, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
+# CRUD for ModuleEndplates
+@app.post("/module_endplates/", response_model=schemas.ModuleEndplateRead)
+async def create_module_endplate(endplate: schemas.ModuleEndplateCreate, db: AsyncSession = Depends(get_db)):
+    db_endplate = models.ModuleEndplate(
+        module_id=endplate.module_id,
+        endplate_number=endplate.endplate_number,
+        connected_module_id=endplate.connected_module_id
+    )
+    db.add(db_endplate)
+    await db.commit()
+    await db.refresh(db_endplate)
+    return db_endplate
+
+@app.get("/module_endplates/", response_model=List[schemas.ModuleEndplateRead])
+async def read_module_endplates(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.ModuleEndplate).offset(skip).limit(limit))
+    return result.scalars().all()
+
+@app.get("/module_endplates/{endplate_id}", response_model=schemas.ModuleEndplateRead)
+async def read_module_endplate(endplate_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.ModuleEndplate).where(models.ModuleEndplate.id == endplate_id))
+    endplate = result.scalar_one_or_none()
+    if endplate is None:
+        raise HTTPException(status_code=404, detail="ModuleEndplate not found")
+    return endplate
+
+@app.put("/module_endplates/{endplate_id}", response_model=schemas.ModuleEndplateRead)
+async def update_module_endplate(endplate_id: int, endplate: schemas.ModuleEndplateCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.ModuleEndplate).where(models.ModuleEndplate.id == endplate_id))
+    db_endplate = result.scalar_one_or_none()
+    if db_endplate is None:
+        raise HTTPException(status_code=404, detail="ModuleEndplate not found")
+    db_endplate.module_id = endplate.module_id
+    db_endplate.endplate_number = endplate.endplate_number
+    db_endplate.connected_module_id = endplate.connected_module_id
+    await db.commit()
+    await db.refresh(db_endplate)
+    return db_endplate
+
+@app.delete("/module_endplates/{endplate_id}")
+async def delete_module_endplate(endplate_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.ModuleEndplate).where(models.ModuleEndplate.id == endplate_id))
+    db_endplate = result.scalar_one_or_none()
+    if db_endplate is None:
+        raise HTTPException(status_code=404, detail="ModuleEndplate not found")
+    await db.delete(db_endplate)
+    await db.commit()
+    return {"ok": True}
+
+
 DB_PATH = os.getenv("DB_PATH", "/var/lib/postgresql/data/dispatcher_db")
 
 
@@ -371,11 +421,14 @@ async def status(db: AsyncSession = Depends(get_db)):
     district_count = await get_count(models.District)
     train_count = await get_count(models.Train)
     module_count = await get_count(models.Module)
+    # Get counts for ModuleEndplates (newly added)
+    endplate_count = await get_count(models.ModuleEndplate)
     counts = {
         "dispatchers": dispatcher_count,
         "districts": district_count,
         "trains": train_count,
         "modules": module_count,
+        "module_endplates": endplate_count,  # Include endplate count
     }
     # Get recent logs (if using logging to file)
     logs = []
