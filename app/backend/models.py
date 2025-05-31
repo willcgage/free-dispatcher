@@ -26,3 +26,6 @@ class Module(Base):
     __tablename__ = "modules"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
+    district_id = Column(Integer, ForeignKey("districts.id"), nullable=False, default=1)
+    number_of_endplates = Column(Integer, nullable=False, default=1)
+    district = relationship("District")

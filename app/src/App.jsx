@@ -69,8 +69,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   // For popup edit
   const handlePopupChange = (e) => {
     let value = e.target.value;
-    // Convert district_id to integer for Modules
-    if (e.target.name === "district_id") {
+    if (["district_id", "dispatcher_id", "id", "number_of_endplates"].includes(e.target.name)) {
       value = value === "" ? "" : Number(value);
     }
     setPopupForm({ ...popupForm, [e.target.name]: value });
@@ -100,13 +99,8 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   };
 
   const handleEdit = (item) => {
-    if (name === "Modules") {
-      setPopupForm(item);
-      setShowEditPopup(true);
-    } else {
-      setForm(item);
-      setEditingId(item.id);
-    }
+    setPopupForm(item);
+    setShowEditPopup(true);
   };
 
   const handlePopupSave = async () => {
@@ -141,6 +135,8 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
     const nextIdField = fields.find(f => f.name === "id");
     let initial = {};
     if (nextIdField) initial.id = getNextId();
+    // Set default for number_of_endplates
+    if (fields.find(f => f.name === "number_of_endplates")) initial.number_of_endplates = 1;
     setCreateForm(initial);
     setShowCreatePopup(true);
   };
@@ -148,7 +144,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   // Handle create form changes
   const handleCreateChange = (e) => {
     let value = e.target.value;
-    if (e.target.name === "district_id" || e.target.name === "dispatcher_id" || e.target.name === "id") {
+    if (["district_id", "dispatcher_id", "id", "number_of_endplates"].includes(e.target.name)) {
       value = value === "" ? "" : Number(value);
     }
     setCreateForm({ ...createForm, [e.target.name]: value });
@@ -245,6 +241,11 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                   const district = mergedSelectOptions.district_id.find(d => d.id === item.district_id);
                   return <td key={f.name}>{district ? district.name : item.district_id}</td>;
                 }
+                // For Districts, show dispatcher name instead of ID
+                if (name === "Districts" && f.name === "dispatcher_id" && extraData && extraData.dispatchers) {
+                  const dispatcher = extraData.dispatchers.find(d => d.id === item.dispatcher_id);
+                  return <td key={f.name}>{dispatcher ? dispatcher.name : item.dispatcher_id}</td>;
+                }
                 return <td key={f.name}>{item[f.name]}</td>;
               })}
               <td>
@@ -255,33 +256,50 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
           ))}
         </tbody>
       </table>
-      {/* Popup for editing Module details */}
-      {name === "Modules" && showEditPopup && (
+      {/* Popup for editing record (all entities) */}
+      {showEditPopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', color: '#222', padding: 24, borderRadius: 8, minWidth: 320, position: 'relative' }}>
-            <h3>Edit Module</h3>
-            {/* Show Name field */}
-            <div style={{ marginBottom: 8 }}>
-              <label>Name: <input name="name" value={popupForm.name || ""} onChange={handlePopupChange} /></label>
-            </div>
-            {/* Show District dropdown if available */}
-            {mergedSelectOptions.district_id && (
-              <div style={{ marginBottom: 8 }}>
-                <label>District:
-                  <select name="district_id" value={popupForm.district_id || ""} onChange={handlePopupChange}>
-                    <option value="">Select District</option>
-                    {mergedSelectOptions.district_id.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.name}</option>
-                    ))}
-                  </select>
-                </label>
+            <h3>Edit {name.slice(0, -1)}</h3>
+            <form onSubmit={async (e) => { e.preventDefault(); await handlePopupSave(); }}>
+              {fields.map((f) => (
+                mergedSelectOptions[f.name] ? (
+                  <div key={f.name} style={{ marginBottom: 8 }}>
+                    <label>{f.label}: 
+                      <select
+                        name={f.name}
+                        value={popupForm[f.name] || ""}
+                        onChange={handlePopupChange}
+                        required={f.required}
+                      >
+                        <option value="">Select {f.label}</option>
+                        {mergedSelectOptions[f.name].map((opt) => (
+                          <option key={opt.id} value={opt.id}>{opt.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : (
+                  <div key={f.name} style={{ marginBottom: 8 }}>
+                    <label>{f.label}: 
+                      <input
+                        name={f.name}
+                        value={popupForm[f.name] || ""}
+                        onChange={handlePopupChange}
+                        type={f.type || "text"}
+                        min={f.min || undefined}
+                        required={f.required}
+                        readOnly={f.name === "id"}
+                      />
+                    </label>
+                  </div>
+                )
+              ))}
+              <div style={{ marginTop: 16 }}>
+                <button type="submit">Save</button>
+                <button type="button" style={{ marginLeft: 12 }} onClick={() => { setShowEditPopup(false); setPopupForm({}); }}>Cancel</button>
               </div>
-            )}
-            {/* Add more fields here if needed */}
-            <div style={{ marginTop: 16 }}>
-              <button onClick={handlePopupSave}>Save</button>
-              <button style={{ marginLeft: 12 }} onClick={() => { setShowEditPopup(false); setPopupForm({}); }}>Cancel</button>
-            </div>
+            </form>
           </div>
         </div>
       )}
@@ -716,7 +734,10 @@ export default function App() {
               await deleteDispatcher(id);
               handleDispatchersRefresh();
             }}
-            fields={[{ name: "name", label: "Name" }]}
+            fields={[
+              { name: "id", label: "ID" },
+              { name: "name", label: "Name" },
+            ]}
             key={"dispatchers-" + dbRefresh}
           />
           <EntityManager
@@ -735,12 +756,14 @@ export default function App() {
               handleDistrictsRefresh();
             }}
             fields={[
+              { name: "id", label: "ID" },
               { name: "name", label: "Name" },
               { name: "dispatcher_id", label: "Dispatcher" },
             ]}
             selectOptions={{ dispatcher_id: dispatchers }}
             key={"districts-" + dbRefresh + "-" + districtsRefresh}
             onRefresh={handleDistrictsRefresh}
+            extraData={{ dispatchers }}
           />
           <EntityManager
             name="Trains"
@@ -764,6 +787,7 @@ export default function App() {
               { name: "id", label: "ID" },
               { name: "name", label: "Name" },
               { name: "district_id", label: "District" },
+              { name: "number_of_endplates", label: "Number of Endplates", type: "number", min: 1, required: true, default: 1 },
             ]}
             selectOptions={{ district_id: districts }}
             key={"modules-" + dbRefresh}

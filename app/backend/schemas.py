@@ -48,6 +48,8 @@ class TrainRead(TrainBase):
 
 class ModuleBase(BaseModel):
     name: str
+    district_id: int
+    number_of_endplates: int = 1
 
 class ModuleCreate(ModuleBase):
     pass

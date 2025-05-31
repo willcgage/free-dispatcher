@@ -236,7 +236,11 @@ async def delete_train(train_id: int, db: AsyncSession = Depends(get_db)):
 # CRUD for Modules
 @app.post("/modules/", response_model=schemas.ModuleRead)
 async def create_module(module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
-    db_module = models.Module(name=module.name)
+    db_module = models.Module(
+        name=module.name,
+        district_id=module.district_id,
+        number_of_endplates=module.number_of_endplates or 1
+    )
     db.add(db_module)
     await db.commit()
     await db.refresh(db_module)
@@ -262,6 +266,8 @@ async def update_module(module_id: int, module: schemas.ModuleCreate, db: AsyncS
     if db_module is None:
         raise HTTPException(status_code=404, detail="Module not found")
     db_module.name = module.name  # type: ignore
+    db_module.district_id = module.district_id  # type: ignore
+    db_module.number_of_endplates = module.number_of_endplates or 1  # type: ignore
     await db.commit()
     await db.refresh(db_module)
     return db_module
