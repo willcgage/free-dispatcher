@@ -28,13 +28,16 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   const [dynamicOptions, setDynamicOptions] = useState({});
   const [showEditPopup, setShowEditPopup] = useState(false); // For popup
   const [popupForm, setPopupForm] = useState({});
+  // Popup state for creation
+  const [showCreatePopup, setShowCreatePopup] = useState(false);
+  const [createForm, setCreateForm] = useState({});
 
   // Fetch items and, if needed, dynamic select options
   const fetchItems = async () => {
     try {
       setItems(await getAll());
       // If this is the Modules manager, refresh districts for the dropdown
-      if (name === "Modules" && selectOptions.district_id !== undefined) {
+      if (name === "Modules") {
         const districts = await getDistricts();
         setDynamicOptions((opts) => ({ ...opts, district_id: districts }));
       }
@@ -43,29 +46,33 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
     }
   };
 
-  useEffect(() => { fetchItems(); }, [onRefresh]);
+  useEffect(() => { fetchItems(); }, [onRefresh, items.length]);
 
   // When the form is opened for create/edit, refresh districts for Modules
   useEffect(() => {
-    if ((name === "Modules") && (editingId !== null || Object.keys(form).length > 0)) {
+    if (name === "Modules" && (showEditPopup || Object.keys(form).length > 0)) {
       getDistricts().then((districts) => setDynamicOptions((opts) => ({ ...opts, district_id: districts })));
     }
-  }, [editingId, form, name]);
+  }, [showEditPopup, form, name]);
+
+  // Remove district refresh for Modules
 
   const handleChange = (e) => {
     let value = e.target.value;
-    // Ensure district_id is a number
-    if (e.target.name === "district_id") value = value ? Number(value) : "";
+    // Convert district_id to integer for Modules
+    if (e.target.name === "district_id") {
+      value = value === "" ? "" : Number(value);
+    }
     setForm({ ...form, [e.target.name]: value });
   };
 
   // For popup edit
   const handlePopupChange = (e) => {
     let value = e.target.value;
-    // Ensure district_id is a number
-    if (e.target.name === "district_id") value = value ? Number(value) : "";
-    // Ensure number_of_endplates is a number
-    if (e.target.name === "number_of_endplates") value = value ? Number(value) : "";
+    // Convert district_id to integer for Modules
+    if (e.target.name === "district_id") {
+      value = value === "" ? "" : Number(value);
+    }
     setPopupForm({ ...popupForm, [e.target.name]: value });
   };
 
@@ -122,61 +129,124 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
     }
   };
 
+  // Helper to get next ID
+  const getNextId = () => {
+    if (!items.length) return 1;
+    const maxId = Math.max(...items.map(i => Number(i.id) || 0));
+    return maxId + 1;
+  };
+
+  // Popup for creation
+  const handleOpenCreate = () => {
+    const nextIdField = fields.find(f => f.name === "id");
+    let initial = {};
+    if (nextIdField) initial.id = getNextId();
+    setCreateForm(initial);
+    setShowCreatePopup(true);
+  };
+
+  // Handle create form changes
+  const handleCreateChange = (e) => {
+    let value = e.target.value;
+    if (e.target.name === "district_id" || e.target.name === "dispatcher_id" || e.target.name === "id") {
+      value = value === "" ? "" : Number(value);
+    }
+    setCreateForm({ ...createForm, [e.target.name]: value });
+  };
+
+  // Handle create submit
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault();
+    // Ensure district_id is a number or undefined
+    const payload = { ...createForm };
+    if (payload.district_id === "") delete payload.district_id;
+    if (typeof payload.district_id === "string") payload.district_id = Number(payload.district_id);
+    try {
+      await create(payload);
+      setShowCreatePopup(false);
+      setCreateForm({});
+      fetchItems();
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const mergedSelectOptions = { ...selectOptions, ...dynamicOptions };
 
-  // For Modules, only show name and district_id in table, edit others in popup
-  const visibleFields = name === "Modules"
-    ? fields.filter(f => f.name === "name" || f.name === "district_id")
-    : fields;
+  // Show all fields for all tables in the main page table and form
+  const visibleFields = fields;
 
   return (
     <div style={{ border: "1px solid #ccc", margin: 16, padding: 16 }}>
       <h2>{name}</h2>
       {error && <div style={{ color: "red" }}>{error}</div>}
-      <form onSubmit={handleSubmit} style={{ marginBottom: 8 }}>
-        {visibleFields.map((f) => (
-          mergedSelectOptions[f.name] ? (
-            <select
-              key={f.name}
-              name={f.name}
-              value={form[f.name] || ""}
-              onChange={handleChange}
-              style={{ marginRight: 8 }}
-              required={f.name === "district_id" || f.required}
-            >
-              <option value="">Select {f.label}</option>
-              {mergedSelectOptions[f.name].map((opt) => (
-                <option key={opt.id} value={opt.id}>{opt.name}</option>
+      <button onClick={handleOpenCreate} style={{ marginBottom: 8 }}>Create New {name.slice(0, -1)}</button>
+      {/* Creation Popup */}
+      {showCreatePopup && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', color: '#222', padding: 24, borderRadius: 8, minWidth: 320, position: 'relative' }}>
+            <h3>Create {name.slice(0, -1)}</h3>
+            <form onSubmit={handleCreateSubmit}>
+              {fields.map((f) => (
+                mergedSelectOptions[f.name] ? (
+                  <div key={f.name} style={{ marginBottom: 8 }}>
+                    <label>{f.label}: 
+                      <select
+                        name={f.name}
+                        value={createForm[f.name] || ""}
+                        onChange={handleCreateChange}
+                        required={f.required}
+                      >
+                        <option value="">Select {f.label}</option>
+                        {mergedSelectOptions[f.name].map((opt) => (
+                          <option key={opt.id} value={opt.id}>{opt.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : (
+                  <div key={f.name} style={{ marginBottom: 8 }}>
+                    <label>{f.label}: 
+                      <input
+                        name={f.name}
+                        value={createForm[f.name] || ""}
+                        onChange={handleCreateChange}
+                        type={f.type || "text"}
+                        min={f.min || undefined}
+                        required={f.required}
+                        readOnly={f.name === "id"}
+                      />
+                    </label>
+                  </div>
+                )
               ))}
-            </select>
-          ) : (
-            <input
-              key={f.name}
-              name={f.name}
-              placeholder={f.label}
-              value={form[f.name] || ""}
-              onChange={handleChange}
-              style={{ marginRight: 8 }}
-              type={f.type || "text"}
-              min={f.min || undefined}
-              required={f.name === "district_id" || f.required}
-            />
-          )
-        ))}
-        <button type="submit">{editingId ? "Update" : "Create"}</button>
-        {editingId && <button type="button" onClick={() => { setForm({}); setEditingId(null); }}>Cancel</button>}
-      </form>
+              <div style={{ marginTop: 16 }}>
+                <button type="submit">Create</button>
+                <button type="button" style={{ marginLeft: 12 }} onClick={() => { setShowCreatePopup(false); setCreateForm({}); }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <table>
         <thead>
           <tr>
-            {visibleFields.map((f) => <th key={f.name}>{f.label}</th>)}
+            {fields.map((f) => <th key={f.name}>{f.label}</th>)}
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
             <tr key={name === "Dispatchers" ? `${item.id}-${item.name}` : item.id}>
-              {visibleFields.map((f) => <td key={f.name}>{name === "Districts" && f.name === "dispatcher_id" && selectOptions.dispatcher_id ? (selectOptions.dispatcher_id.find(d => d.id === item.dispatcher_id)?.name || item.dispatcher_id) : item[f.name]}</td>)}
+              {fields.map((f) => {
+                // For Modules, show district name instead of ID
+                if (name === "Modules" && f.name === "district_id" && mergedSelectOptions.district_id) {
+                  const district = mergedSelectOptions.district_id.find(d => d.id === item.district_id);
+                  return <td key={f.name}>{district ? district.name : item.district_id}</td>;
+                }
+                return <td key={f.name}>{item[f.name]}</td>;
+              })}
               <td>
                 <button onClick={() => handleEdit(item)}>Edit</button>
                 <button onClick={() => handleDelete(item.id)}>Delete</button>
@@ -190,32 +260,24 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: '#fff', color: '#222', padding: 24, borderRadius: 8, minWidth: 320, position: 'relative' }}>
             <h3>Edit Module</h3>
+            {/* Show Name field */}
             <div style={{ marginBottom: 8 }}>
               <label>Name: <input name="name" value={popupForm.name || ""} onChange={handlePopupChange} /></label>
             </div>
-            <div style={{ marginBottom: 8 }}>
-              <label>District:
-                <select name="district_id" value={popupForm.district_id || ""} onChange={handlePopupChange}>
-                  <option value="">Select District</option>
-                  {(mergedSelectOptions.district_id || []).map(opt => (
-                    <option key={opt.id} value={opt.id}>{opt.name}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div style={{ marginBottom: 8 }}>
-              <label>Number of Endplates: <input name="number_of_endplates" type="number" min={1} value={popupForm.number_of_endplates || 1} onChange={handlePopupChange} /></label>
-            </div>
-            <div style={{ marginBottom: 8 }}>
-              <label>Category:
-                <select name="category" value={popupForm.category || ""} onChange={handlePopupChange}>
-                  <option value="">Select Category</option>
-                  {(["Through", "Siding", "Yard", "Industry", "Crossing/Junction", "Other"]).map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            {/* Show District dropdown if available */}
+            {mergedSelectOptions.district_id && (
+              <div style={{ marginBottom: 8 }}>
+                <label>District:
+                  <select name="district_id" value={popupForm.district_id || ""} onChange={handlePopupChange}>
+                    <option value="">Select District</option>
+                    {mergedSelectOptions.district_id.map(opt => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+            {/* Add more fields here if needed */}
             <div style={{ marginTop: 16 }}>
               <button onClick={handlePopupSave}>Save</button>
               <button style={{ marginLeft: 12 }} onClick={() => { setShowEditPopup(false); setPopupForm({}); }}>Cancel</button>
@@ -699,8 +761,11 @@ export default function App() {
             update={updateModule}
             remove={deleteModule}
             fields={[
+              { name: "id", label: "ID" },
               { name: "name", label: "Name" },
+              { name: "district_id", label: "District" },
             ]}
+            selectOptions={{ district_id: districts }}
             key={"modules-" + dbRefresh}
           />
         </>
