@@ -22,7 +22,7 @@ import {
  *   onRefresh: callback to trigger parent refresh
  *   extraData: optional extra props
  */
-function EntityManager({ name, getAll, create, update, remove, fields, selectOptions = {}, onRefresh, extraData = {} }) {
+function EntityManager({ name, getAll, create, update, remove, fields, selectOptions = {}, onRefresh, extraData = {}, refreshKey }) {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({});
   const [editingId, setEditingId] = useState(null);
@@ -68,7 +68,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
     }
   };
 
-  useEffect(() => { fetchItems(); }, [onRefresh, items.length]);
+  useEffect(() => { fetchItems(); }, [refreshKey, onRefresh, items.length]);
 
   // When the form is opened for create/edit, refresh districts for Modules
   useEffect(() => {
@@ -206,6 +206,34 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
       <h2>{name}</h2>
       {error && <div style={{ color: "red" }}>{error}</div>}
       <button onClick={handleOpenCreate} style={{ marginBottom: 8 }}>Create New {name.slice(0, -1)}</button>
+      {/* Table of items */}
+      {items.length > 0 ? (
+        <table style={{ width: '100%', marginBottom: 16, background: '#222', color: '#fff', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              {fields.map(f => (
+                <th key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{f.label}</th>
+              ))}
+              <th style={{ border: '1px solid #444', padding: 4 }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(item => (
+              <tr key={item.id || item.name}>
+                {fields.map(f => (
+                  <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{item[f.name]}</td>
+                ))}
+                <td style={{ border: '1px solid #444', padding: 4 }}>
+                  <button onClick={() => handleEdit(item)} style={{ marginRight: 8 }}>Edit</button>
+                  <button onClick={() => handleDelete(item.id)}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div style={{ marginBottom: 16, color: '#bbb' }}>No records found.</div>
+      )}
       {/* Creation Popup */}
       {showCreatePopup && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
@@ -780,6 +808,7 @@ export default function App() {
               { name: "name", label: "Name" },
             ]}
             key={"dispatchers-" + dbRefresh}
+            refreshKey={dbRefresh}
           />
           <EntityManager
             name="Districts"
@@ -805,6 +834,7 @@ export default function App() {
             key={"districts-" + dbRefresh + "-" + districtsRefresh}
             onRefresh={handleDistrictsRefresh}
             extraData={{ dispatchers }}
+            refreshKey={dbRefresh + '-' + districtsRefresh}
           />
           <EntityManager
             name="Trains"
@@ -817,6 +847,7 @@ export default function App() {
               { name: "status", label: "Status" },
             ]}
             key={"trains-" + dbRefresh}
+            refreshKey={dbRefresh}
           />
           <EntityManager
             name="Modules"
@@ -832,6 +863,7 @@ export default function App() {
             ]}
             selectOptions={{ district_id: districts }}
             key={"modules-" + dbRefresh}
+            refreshKey={dbRefresh + '-' + modulesRefresh}
           />
           <EntityManager
             name="Module Endplates"
@@ -847,6 +879,7 @@ export default function App() {
             ]}
             selectOptions={{ module_id: modules, connected_module_id: modules }}
             key={"module-endplates-" + dbRefresh}
+            refreshKey={dbRefresh}
           />
         </>
       )}
