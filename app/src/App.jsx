@@ -860,6 +860,8 @@ export default function App() {
               { name: "name", label: "Name" },
               { name: "district_id", label: "District" },
               { name: "number_of_endplates", label: "Number of Endplates", type: "number", min: 1, required: true, default: 1 },
+              { name: "owner", label: "Owner" },
+              { name: "owner_email", label: "Owner Email Address" },
             ]}
             selectOptions={{ district_id: districts }}
             key={"modules-" + dbRefresh}

@@ -50,6 +50,8 @@ class ModuleBase(BaseModel):
     name: str
     district_id: int
     number_of_endplates: int = 1
+    owner: Optional[str] = None  # New field
+    owner_email: Optional[str] = None  # New field
 
 class ModuleCreate(ModuleBase):
     pass

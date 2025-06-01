@@ -14,5 +14,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
 	rm -rf /var/lib/apt/lists/*
 
 COPY . .
+COPY alembic.ini alembic /app/
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

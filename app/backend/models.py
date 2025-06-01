@@ -28,6 +28,8 @@ class Module(Base):
     name = Column(String, nullable=False)
     district_id = Column(Integer, ForeignKey("districts.id"), nullable=False, default=1)
     number_of_endplates = Column(Integer, nullable=False, default=1)
+    owner = Column(String, nullable=True)  # New field
+    owner_email = Column(String, nullable=True)  # New field
     district = relationship("District")
 
 class ModuleEndplate(Base):

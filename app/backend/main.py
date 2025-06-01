@@ -239,7 +239,9 @@ async def create_module(module: schemas.ModuleCreate, db: AsyncSession = Depends
     db_module = models.Module(
         name=module.name,
         district_id=module.district_id,
-        number_of_endplates=module.number_of_endplates or 1
+        number_of_endplates=module.number_of_endplates or 1,
+        owner=module.owner,
+        owner_email=module.owner_email
     )
     db.add(db_module)
     await db.commit()
@@ -268,6 +270,8 @@ async def update_module(module_id: int, module: schemas.ModuleCreate, db: AsyncS
     db_module.name = module.name  # type: ignore
     db_module.district_id = module.district_id  # type: ignore
     db_module.number_of_endplates = module.number_of_endplates or 1  # type: ignore
+    db_module.owner = module.owner  # type: ignore
+    db_module.owner_email = module.owner_email  # type: ignore
     await db.commit()
     await db.refresh(db_module)
     return db_module
@@ -315,9 +319,9 @@ async def update_module_endplate(endplate_id: int, endplate: schemas.ModuleEndpl
     db_endplate = result.scalar_one_or_none()
     if db_endplate is None:
         raise HTTPException(status_code=404, detail="ModuleEndplate not found")
-    db_endplate.module_id = endplate.module_id
-    db_endplate.endplate_number = endplate.endplate_number
-    db_endplate.connected_module_id = endplate.connected_module_id
+    setattr(db_endplate, "module_id", endplate.module_id)
+    setattr(db_endplate, "endplate_number", endplate.endplate_number)
+    setattr(db_endplate, "connected_module_id", endplate.connected_module_id)
     await db.commit()
     await db.refresh(db_endplate)
     return db_endplate

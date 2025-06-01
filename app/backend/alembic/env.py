@@ -2,6 +2,13 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
+import sys
+import os
+
+# Add the backend directory to the system path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from backend.models import Base  # Import Base for target_metadata
 
 
 # Alembic config and logging setup
@@ -9,7 +16,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+target_metadata = Base.metadata  # Set target_metadata for autogenerate
 
 
 def run_migrations_offline() -> None:
