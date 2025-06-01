@@ -5,6 +5,10 @@ from alembic import context
 import sys
 import os
 
+# Ensure Alembic always runs inside Docker
+if os.environ.get("RUNNING_IN_DOCKER") != "1":
+    raise RuntimeError("Alembic migrations must be run inside the Docker container. Set RUNNING_IN_DOCKER=1 in your Dockerfile or docker-compose.")
+
 # Add the backend directory to the system path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 

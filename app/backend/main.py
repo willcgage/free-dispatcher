@@ -236,12 +236,14 @@ async def delete_train(train_id: int, db: AsyncSession = Depends(get_db)):
 # CRUD for Modules
 @app.post("/modules/", response_model=schemas.ModuleRead)
 async def create_module(module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
+    print(f"[DEBUG] create_module: is_yard={module.is_yard} type={type(module.is_yard)}")
     db_module = models.Module(
         name=module.name,
         district_id=module.district_id,
         number_of_endplates=module.number_of_endplates or 1,
         owner=module.owner,
-        owner_email=module.owner_email
+        owner_email=module.owner_email,
+        is_yard=module.is_yard  # Ensure is_yard is set on create
     )
     db.add(db_module)
     await db.commit()
@@ -263,6 +265,7 @@ async def read_module(module_id: int, db: AsyncSession = Depends(get_db)):
 
 @app.put("/modules/{module_id}", response_model=schemas.ModuleRead)
 async def update_module(module_id: int, module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
+    print(f"[DEBUG] update_module: module_id={module_id}, is_yard={module.is_yard} type={type(module.is_yard)}")
     result = await db.execute(select(models.Module).where(models.Module.id == module_id))
     db_module = result.scalar_one_or_none()
     if db_module is None:
@@ -272,6 +275,7 @@ async def update_module(module_id: int, module: schemas.ModuleCreate, db: AsyncS
     db_module.number_of_endplates = module.number_of_endplates or 1  # type: ignore
     db_module.owner = module.owner  # type: ignore
     db_module.owner_email = module.owner_email  # type: ignore
+    db_module.is_yard = module.is_yard  # type: ignore
     await db.commit()
     await db.refresh(db_module)
     return db_module

@@ -13,6 +13,17 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+[data-theme="light"] {
+  color-scheme: light;
+  color: #213547;
+  background-color: #ffffff;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  color: #fff;
+  background-color: #242424;
+}
+
 a {
   font-weight: 500;
   color: #646cff;
@@ -54,8 +65,130 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+[data-theme="light"] button {
+  background-color: #f9f9f9;
+  color: #213547;
+  border: 1px solid #ccc;
+}
+[data-theme="dark"] button {
+  background-color: #333;
+  color: #fff;
+  border: 1px solid #444;
+}
+
+[data-theme="light"] table,
+:root:not([data-theme]) table {
+  background: #fff !important;
+  color: #222 !important;
+}
+[data-theme="light"] th, [data-theme="light"] td,
+:root:not([data-theme]) th, :root:not([data-theme]) td {
+  border: 1px solid #ccc !important;
+  color: #222 !important;
+  background: #fff !important;
+}
+[data-theme="dark"] table {
+  background: #222 !important;
+  color: #fff !important;
+}
+[data-theme="dark"] th, [data-theme="dark"] td {
+  border: 1px solid #444 !important;
+  color: #fff !important;
+  background: #222 !important;
+}
+[data-theme="light"] .dashboard-container,
+:root:not([data-theme]) .dashboard-container {
+  background: #fff !important;
+  color: #222 !important;
+  border: 1px solid #aaa !important;
+}
+[data-theme="dark"] .dashboard-container {
+  background: #222 !important;
+  color: #fff !important;
+  border: 1px solid #444 !important;
+}
+[data-theme="light"] .dashboard-container h3,
+:root:not([data-theme]) .dashboard-container h3 {
+  color: #333 !important;
+}
+[data-theme="dark"] .dashboard-container h3 {
+  color: #fff !important;
+}
+[data-theme="light"] .dashboard-container pre,
+:root:not([data-theme]) .dashboard-container pre {
+  background: #f5f5f5 !important;
+  color: #222 !important;
+}
+[data-theme="dark"] .dashboard-container pre {
+  background: #333 !important;
+  color: #fff !important;
+}
+[data-theme="light"] .dashboard-container button,
+:root:not([data-theme]) .dashboard-container button {
+  background: #f9f9f9 !important;
+  color: #213547 !important;
+  border: 1px solid #ccc !important;
+}
+[data-theme="dark"] .dashboard-container button {
+  background: #333 !important;
+  color: #fff !important;
+  border: 1px solid #444 !important;
+}
+[data-theme="light"] .config-container,
+:root:not([data-theme]) .config-container {
+  background: #fff !important;
+  color: #222 !important;
+  border: 1px solid #aaa !important;
+}
+[data-theme="dark"] .config-container {
+  background: #222 !important;
+  color: #fff !important;
+  border: 1px solid #444 !important;
+}
+[data-theme="light"] .config-container h2,
+:root:not([data-theme]) .config-container h2 {
+  color: #333 !important;
+}
+[data-theme="dark"] .config-container h2 {
+  color: #fff !important;
+}
+[data-theme="light"] .config-container button,
+:root:not([data-theme]) .config-container button {
+  background: #f9f9f9 !important;
+  color: #213547 !important;
+  border: 1px solid #ccc !important;
+}
+[data-theme="dark"] .config-container button {
+  background: #333 !important;
+  color: #fff !important;
+  border: 1px solid #444 !important;
+}
+[data-theme="light"] .config-container input[type="file"],
+:root:not([data-theme]) .config-container input[type="file"] {
+  background: #fff !important;
+  color: #222 !important;
+  border: 1px solid #ccc !important;
+}
+[data-theme="dark"] .config-container input[type="file"] {
+  background: #222 !important;
+  color: #fff !important;
+  border: 1px solid #444 !important;
+}
+
+/* Theme-aware styling for Database Troubleshooting section */
+[data-theme="dark"] .db-troubleshooting {
+  background: #23272e !important;
+  color: #f1f1f1 !important;
+  border: 1px solid #444 !important;
+}
+[data-theme="light"] .db-troubleshooting {
+  background: #f5f5f5 !important;
+  color: #222 !important;
+  border: 1px solid #bbb !important;
+}
+
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme]) {
     color: #213547;
     background-color: #ffffff;
   }

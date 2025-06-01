@@ -121,11 +121,13 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   };
 
   const handleEdit = (item) => {
-    setPopupForm(item);
+    setPopupForm({ ...item, is_yard: !!item.is_yard }); // Ensure boolean for checkbox
     setShowEditPopup(true);
   };
 
   const handlePopupSave = async () => {
+    // Debug: show outgoing payload
+    alert("Saving Module with payload: " + JSON.stringify(popupForm));
     try {
       await update(popupForm.id, popupForm);
       setShowEditPopup(false);
@@ -246,6 +248,10 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                     const district = (selectOptions.district_id || dynamicOptions.district_id || []).find(d => d.id === item.district_id);
                     return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{district ? district.name : item.district_id}</td>;
                   }
+                  // Show True/False for is_yard in Modules table
+                  if (name === "Modules" && f.name === "is_yard") {
+                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{item.is_yard ? "True" : "False"}</td>;
+                  }
                   // Show module name for Module Endplates table
                   if (name === "Module Endplates" && f.name === "module_id") {
                     const module = (selectOptions.module_id || dynamicOptions.module_id || []).find(m => m.id === item.module_id);
@@ -321,6 +327,20 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                     </div>
                   );
                 }
+                if (f.type === "checkbox") {
+                  return (
+                    <div key={f.name} style={{ marginBottom: 8 }}>
+                      <label>{f.label}: 
+                        <input
+                          name={f.name}
+                          type="checkbox"
+                          checked={!!createForm[f.name]}
+                          onChange={e => setCreateForm({ ...createForm, [f.name]: e.target.checked })}
+                        />
+                      </label>
+                    </div>
+                  );
+                }
                 return (
                   <div key={f.name} style={{ marginBottom: 8 }}>
                     <label>{f.label}: 
@@ -386,6 +406,20 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                             <option key={opt.id} value={opt.id}>{opt.name}</option>
                           ))}
                         </select>
+                      </label>
+                    </div>
+                  );
+                }
+                if (f.type === "checkbox") {
+                  return (
+                    <div key={f.name} style={{ marginBottom: 8 }}>
+                      <label>{f.label}: 
+                        <input
+                          name={f.name}
+                          type="checkbox"
+                          checked={!!popupForm[f.name]}
+                          onChange={e => setPopupForm({ ...popupForm, [f.name]: e.target.checked })}
+                        />
                       </label>
                     </div>
                   );
@@ -599,7 +633,7 @@ function Admin({ page, setPage, onDbChange }) {
             </pre>
           </div>
           <div style={{ marginTop: 12, color: "#bbb" }}>{status.message}</div>
-          <div style={{ marginTop: 32, padding: 16, background: '#f5f5f5', borderRadius: 8, color: '#222', border: '1px solid #bbb' }}>
+          <div className="db-troubleshooting" style={{ marginTop: 32, padding: 16, borderRadius: 8 }}>
             <h3 style={{ color: '#333' }}>Database Troubleshooting</h3>
             <form onSubmit={handleIntervalChange} style={{ marginBottom: 16 }}>
               <label>
@@ -806,6 +840,36 @@ function Menu({ current, setCurrent }) {
 }
 
 /**
+ * ThemeSwitcher - Component to select light, dark, or system theme.
+ */
+function ThemeSwitcher() {
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('theme') || 'system';
+  });
+
+  useEffect(() => {
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.removeItem('theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+    }
+  }, [theme]);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{ fontWeight: 500, marginRight: 8 }}>Theme:</label>
+      <select value={theme} onChange={e => setTheme(e.target.value)}>
+        <option value="system">System</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+  );
+}
+
+/**
  * App - Main application component.
  * Handles state for all entities and page navigation.
  */
@@ -854,6 +918,7 @@ export default function App() {
   return (
     <div style={{ maxWidth: 900, margin: "auto" }}>
       <h1>Train Dispatcher Admin</h1>
+      <ThemeSwitcher />
       <Menu current={page} setCurrent={setPage} />
       {page === "admin" ? (
         <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} />
@@ -933,6 +998,7 @@ export default function App() {
               { name: "number_of_endplates", label: "Number of Endplates", type: "number", min: 1, required: true, default: 1 },
               { name: "owner", label: "Owner" },
               { name: "owner_email", label: "Owner Email Address" },
+              { name: "is_yard", label: "Yard?", type: "checkbox" }, // New field
             ]}
             selectOptions={{ district_id: districts }}
             key={"modules-" + dbRefresh}

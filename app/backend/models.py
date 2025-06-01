@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -30,6 +30,7 @@ class Module(Base):
     number_of_endplates = Column(Integer, nullable=False, default=1)
     owner = Column(String, nullable=True)  # New field
     owner_email = Column(String, nullable=True)  # New field
+    is_yard = Column(Boolean, nullable=False, default=False)  # New field for Yard
     district = relationship("District")
 
 class ModuleEndplate(Base):

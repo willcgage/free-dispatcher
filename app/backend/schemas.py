@@ -52,6 +52,7 @@ class ModuleBase(BaseModel):
     number_of_endplates: int = 1
     owner: Optional[str] = None  # New field
     owner_email: Optional[str] = None  # New field
+    is_yard: bool = False  # New field for Yard
 
 class ModuleCreate(ModuleBase):
     pass
