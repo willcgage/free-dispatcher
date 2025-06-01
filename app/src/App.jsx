@@ -201,6 +201,26 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   // Show all fields for all tables in the main page table and form
   const visibleFields = fields;
 
+  // Helper for Module Endplates: returns available endplate numbers for the selected module
+  function filteredEndplateNumbers() {
+    // Only applies to Module Endplates
+    if (name !== "Module Endplates") return [];
+    // Determine which form is open and get the selected module_id
+    const selectedModuleId = showCreatePopup
+      ? createForm.module_id
+      : showEditPopup
+        ? popupForm.module_id
+        : null;
+    if (!selectedModuleId) return [];
+    // Get the list of modules from selectOptions or dynamicOptions
+    const modulesList = (selectOptions.module_id || dynamicOptions.module_id || []);
+    // Find the selected module object
+    const moduleObj = modulesList.find(m => String(m.id) === String(selectedModuleId));
+    // Use the module's number_of_endplates, or default to 8
+    const count = moduleObj && moduleObj.number_of_endplates ? moduleObj.number_of_endplates : 8;
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }
+
   return (
     <div style={{ border: "1px solid #ccc", margin: 16, padding: 16 }}>
       <h2>{name}</h2>
@@ -220,9 +240,26 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
           <tbody>
             {items.map(item => (
               <tr key={item.id || item.name}>
-                {fields.map(f => (
-                  <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{item[f.name]}</td>
-                ))}
+                {fields.map(f => {
+                  // Show district name for Modules table
+                  if (name === "Modules" && f.name === "district_id") {
+                    const district = (selectOptions.district_id || dynamicOptions.district_id || []).find(d => d.id === item.district_id);
+                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{district ? district.name : item.district_id}</td>;
+                  }
+                  // Show module name for Module Endplates table
+                  if (name === "Module Endplates" && f.name === "module_id") {
+                    const module = (selectOptions.module_id || dynamicOptions.module_id || []).find(m => m.id === item.module_id);
+                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{module ? module.name : item.module_id}</td>;
+                  }
+                  // Show connected module name for Module Endplates table
+                  if (name === "Module Endplates" && f.name === "connected_module_id") {
+                    const module = (selectOptions.connected_module_id || dynamicOptions.connected_module_id || []).find(m => m.id === item.connected_module_id);
+                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{module ? module.name : item.connected_module_id}</td>;
+                  }
+                  return (
+                    <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{item[f.name]}</td>
+                  );
+                })}
                 <td style={{ border: '1px solid #444', padding: 4 }}>
                   <button onClick={() => handleEdit(item)} style={{ marginRight: 8 }}>Edit</button>
                   <button onClick={() => handleDelete(item.id)}>Delete</button>
@@ -453,16 +490,12 @@ function ConfigurationPage({ onDbChange }) {
         <button type="submit">Import Database File</button>
       </form>
       <button onClick={handleCreate}>Create New Database</button>
-      <button onClick={handleExport} style={{ marginLeft: 16 }}>Export Database</button>
-      {message && <div style={{ marginTop: 8 }}>{message}</div>}
+      <button onClick={handleExport} style={{ marginLeft: 12 }}>Export Database</button>
+      <div style={{ marginTop: 12, color: "#333" }}>{message}</div>
     </div>
   );
 }
-
 /**
- * Admin - System admin dashboard and troubleshooting tools.
- * Props:
- *   page: current admin subpage
  *   setPage: setter for admin subpage
  *   onDbChange: callback for DB changes
  */
@@ -476,6 +509,7 @@ function Admin({ page, setPage, onDbChange }) {
   const [orphanModules, setOrphanModules] = useState([]);
   const [selectedDistricts, setSelectedDistricts] = useState([]);
   const [selectedModules, setSelectedModules] = useState([]);
+  const [selectedEndplates, setSelectedEndplates] = useState([]);
   const [deleting, setDeleting] = useState(false);
   // Orphan check interval state
   const [orphanInterval, setOrphanInterval] = useState(60);
@@ -550,6 +584,7 @@ function Admin({ page, setPage, onDbChange }) {
               <li>Districts: {status.service_counts.districts}</li>
               <li>Modules: {status.service_counts.modules}</li>
               <li>Trains: {status.service_counts.trains}</li>
+              <li>Module Endplates: {status.service_counts.module_endplates}</li>
             </ul>
           </div>
           <div>
@@ -585,6 +620,8 @@ function Admin({ page, setPage, onDbChange }) {
               <b>Orphan Districts:</b> {lastOrphanCheck && lastOrphanCheck.orphan_districts ? lastOrphanCheck.orphan_districts.length : 0}
               <br />
               <b>Orphan Modules:</b> {lastOrphanCheck && lastOrphanCheck.orphan_modules ? lastOrphanCheck.orphan_modules.length : 0}
+              <br />
+              <b>Orphan Module Endplates:</b> {lastOrphanCheck && lastOrphanCheck.orphan_endplates ? lastOrphanCheck.orphan_endplates.length : 0}
             </div>
             <p>If you suspect orphan records (e.g., districts without a valid dispatcher, modules without a valid district), you can review and clean them up here.</p>
             <button
@@ -623,6 +660,7 @@ function Admin({ page, setPage, onDbChange }) {
                           body: JSON.stringify({
                             district_ids: selectedDistricts,
                             module_ids: selectedModules,
+                            endplate_ids: selectedEndplates,
                           }),
                         });
                         const data = await res.json();
@@ -631,6 +669,7 @@ function Admin({ page, setPage, onDbChange }) {
                         setShowOrphans(false);
                         setSelectedDistricts([]);
                         setSelectedModules([]);
+                        setSelectedEndplates([]);
                         window.location.reload();
                       } catch (e) {
                         alert('Cleanup failed: ' + e.message);
@@ -686,6 +725,33 @@ function Admin({ page, setPage, onDbChange }) {
                                     }}
                                   />
                                   {` ${m.name} (ID: ${m.id}, District ID: ${m.district_id})`}
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div style={{ marginBottom: 8 }}>
+                        <b>Orphan Module Endplates:</b>
+                        {lastOrphanCheck && lastOrphanCheck.orphan_endplates && lastOrphanCheck.orphan_endplates.length === 0 ? (
+                          <span style={{ marginLeft: 8 }}>None</span>
+                        ) : (
+                          <ul>
+                            {lastOrphanCheck && lastOrphanCheck.orphan_endplates && lastOrphanCheck.orphan_endplates.map(e => (
+                              <li key={e.id}>
+                                <label>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedEndplates.includes(e.id)}
+                                    onChange={ev => {
+                                      setSelectedEndplates(sel =>
+                                        ev.target.checked
+                                          ? [...sel, e.id]
+                                          : sel.filter(id => id !== e.id)
+                                      );
+                                    }}
+                                  />
+                                  {` Endplate ID: ${e.id}, Module ID: ${e.module_id}, Endplate #: ${e.endplate_number}`}
                                 </label>
                               </li>
                             ))}

@@ -393,21 +393,46 @@ async def get_orphan_records(db: AsyncSession = Depends(get_db)):
             (~models.District.dispatcher_id.in_(select(models.Dispatcher.id)))
         )
     )).scalars().all()
+    # Find orphan modules (no valid district or district_id is NULL)
+    orphan_modules = (await db.execute(
+        select(models.Module).where(
+            (models.Module.district_id == None) |
+            (~models.Module.district_id.in_(select(models.District.id)))
+        )
+    )).scalars().all()
+    # Find orphan module endplates (no valid module or module_id is NULL)
+    orphan_endplates = (await db.execute(
+        select(models.ModuleEndplate).where(
+            (models.ModuleEndplate.module_id == None) |
+            (~models.ModuleEndplate.module_id.in_(select(models.Module.id)))
+        )
+    )).scalars().all()
     return {
         "orphan_districts": [
             {"id": d.id, "name": d.name, "dispatcher_id": d.dispatcher_id} for d in orphan_districts
         ],
-        "orphan_modules": []  # No modules table
+        "orphan_modules": [
+            {"id": m.id, "name": m.name, "district_id": m.district_id} for m in orphan_modules
+        ],
+        "orphan_endplates": [
+            {"id": e.id, "module_id": e.module_id, "endplate_number": e.endplate_number} for e in orphan_endplates
+        ]
     }
 
 
 @app.post("/admin/delete-orphans/")
 async def delete_orphans(payload: dict, db: AsyncSession = Depends(get_db)):
     district_ids = payload.get("district_ids", [])
+    module_ids = payload.get("module_ids", [])
+    endplate_ids = payload.get("endplate_ids", [])
     if district_ids:
         await db.execute(models.District.__table__.delete().where(models.District.id.in_(district_ids)))
+    if module_ids:
+        await db.execute(models.Module.__table__.delete().where(models.Module.id.in_(module_ids)))
+    if endplate_ids:
+        await db.execute(models.ModuleEndplate.__table__.delete().where(models.ModuleEndplate.id.in_(endplate_ids)))
     await db.commit()
-    return {"ok": True, "message": "Selected orphan districts deleted."}
+    return {"ok": True, "message": "Selected orphan records deleted."}
 
 
 @app.get("/status")
