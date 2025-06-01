@@ -256,6 +256,11 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                     const module = (selectOptions.connected_module_id || dynamicOptions.connected_module_id || []).find(m => m.id === item.connected_module_id);
                     return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{module ? module.name : item.connected_module_id}</td>;
                   }
+                  // Show dispatcher name for Districts table
+                  if (name === "Districts" && f.name === "dispatcher_id") {
+                    const dispatcher = (selectOptions.dispatcher_id || dynamicOptions.dispatcher_id || []).find(d => d.id === item.dispatcher_id);
+                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{dispatcher ? dispatcher.name : item.dispatcher_id}</td>;
+                  }
                   return (
                     <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{item[f.name]}</td>
                   );
