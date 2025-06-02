@@ -457,16 +457,38 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
  * Props:
  *   onDbChange: callback to trigger parent refresh after DB change
  */
-function ConfigurationPage({ onDbChange }) {
+function ConfigurationPage({ onDbChange, onBackToAdmin }) {
   const [message, setMessage] = useState("");
   const [ip, setIp] = useState("");
+  const [dbStatus, setDbStatus] = useState(null);
+  const [dbStatusLoading, setDbStatusLoading] = useState(true);
+  const [orphanInterval, setOrphanInterval] = useState(60);
+  const [intervalInput, setIntervalInput] = useState(60);
+  const [lastOrphanCheck, setLastOrphanCheck] = useState(null);
+  const [lastCheckLoading, setLastCheckLoading] = useState(false);
   const fileInput = useRef();
 
   useEffect(() => {
-    fetch("http://localhost:8001/ip")
+    fetchWithBackendUrl('/ip')
       .then((res) => res.json())
-      .then((data) => setIp(data.ip))
+      .then((data) => setIp(Array.isArray(data.ip) ? data.ip[0] : data.ip))
       .catch(() => setIp("Unavailable"));
+    // Fetch service record counts and orphan info
+    fetchWithBackendUrl('/database/status')
+      .then(res => res.json())
+      .then(setDbStatus)
+      .finally(() => setDbStatusLoading(false));
+    // Fetch orphan check interval and last check
+    fetchWithBackendUrl('/admin/orphan-check-interval/')
+      .then(res => res.json())
+      .then(data => {
+        setOrphanInterval(data.interval);
+        setIntervalInput(data.interval);
+      });
+    fetchWithBackendUrl('/admin/last-orphan-check/')
+      .then(res => res.json())
+      .then(setLastOrphanCheck)
+      .finally(() => setLastCheckLoading(false));
   }, []);
 
   const handleImport = async (e) => {
@@ -477,7 +499,7 @@ function ConfigurationPage({ onDbChange }) {
     formData.append("file", file);
     setMessage("Uploading...");
     try {
-      const res = await fetch("http://localhost:8001/admin/import-db/", {
+      const res = await fetchWithBackendUrl('/admin/import-db/', {
         method: "POST",
         body: formData,
       });
@@ -492,7 +514,7 @@ function ConfigurationPage({ onDbChange }) {
   const handleCreate = async () => {
     setMessage("Creating new database...");
     try {
-      const res = await fetch("http://localhost:8001/admin/create-db/", { method: "POST" });
+      const res = await fetchWithBackendUrl('/admin/create-db/', { method: "POST" });
       const data = await res.json();
       setMessage(data.message || (data.ok ? "Database created" : "Failed to create"));
       if (data.ok) onDbChange();
@@ -504,7 +526,7 @@ function ConfigurationPage({ onDbChange }) {
   const handleExport = async () => {
     setMessage("Exporting...");
     try {
-      const res = await fetch("http://localhost:8001/admin/export-db/");
+      const res = await fetchWithBackendUrl('/admin/export-db/');
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -520,10 +542,41 @@ function ConfigurationPage({ onDbChange }) {
     }
   };
 
+  const handleIntervalChange = async (e) => {
+    e.preventDefault();
+    setMessage('');
+    try {
+      const res = await fetchWithBackendUrl('/admin/orphan-check-interval/', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval: Number(intervalInput) })
+      });
+      const data = await res.json();
+      if (data.ok) setOrphanInterval(data.interval);
+      else setMessage(data.error || "Failed to set interval");
+    } catch (e) {
+      setMessage("Failed to set interval: " + e.message);
+    }
+  };
+
   return (
     <div className="config-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
       <h2>Database Configuration</h2>
-      <div style={{ marginBottom: 8 }}><b>Backend IP Address:</b> {ip}</div>
+      <button onClick={onBackToAdmin} style={{ marginBottom: 16, fontWeight: 'bold' }}>Back to Admin</button>
+      {/* Service Record Counts */}
+      <div style={{ margin: "12px 0" }}>
+        <b>Service Record Counts:</b>
+        {dbStatusLoading ? <span>Loading...</span> : dbStatus && dbStatus.service_counts ? (
+          <ul>
+            <li>Dispatchers: {dbStatus.service_counts.dispatchers}</li>
+            <li>Districts: {dbStatus.service_counts.districts}</li>
+            <li>Trains: {dbStatus.service_counts.trains}</li>
+            <li>Modules: {dbStatus.service_counts.modules}</li>
+            <li>Module Endplates: {dbStatus.service_counts.module_endplates}</li>
+          </ul>
+        ) : <span>Unavailable</span>}
+      </div>
+      {/* Database Import/Export/Reset */}
       <form onSubmit={handleImport} style={{ display: "inline-block", marginRight: 16 }}>
         <input type="file" ref={fileInput} accept=".sql,.db,.sqlite,.backup" />
         <button type="submit">Import Database File</button>
@@ -531,6 +584,38 @@ function ConfigurationPage({ onDbChange }) {
       <button onClick={handleCreate}>Create New Database</button>
       <button onClick={handleExport} style={{ marginLeft: 12 }}>Export Database</button>
       <div style={{ marginTop: 12, color: "#333" }}>{message}</div>
+      {/* Database Troubleshooting */}
+      <div className="db-troubleshooting" style={{ marginTop: 32, padding: 16, borderRadius: 8, border: '1px solid #ccc' }}>
+        <h3 style={{ color: '#333' }}>Database Troubleshooting</h3>
+        <form onSubmit={handleIntervalChange} style={{ marginBottom: 16 }}>
+          <label>
+            Orphan Check Interval (seconds):
+            <input
+              type="number"
+              min={10}
+              value={intervalInput}
+              onChange={e => setIntervalInput(e.target.value)}
+              style={{ marginLeft: 8, width: 80 }}
+            />
+          </label>
+          <button type="submit" style={{ marginLeft: 8 }}>
+            Set Interval
+          </button>
+          <span style={{ marginLeft: 12, color: '#555' }}>
+            Current: {orphanInterval}s
+          </span>
+        </form>
+        <div style={{ marginBottom: 12 }}>
+          <b>Last Orphan Check:</b> {lastOrphanCheck && lastOrphanCheck.last_run ? new Date(lastOrphanCheck.last_run * 1000).toLocaleString() : 'Never'}
+          <br />
+          <b>Orphan Districts:</b> {lastOrphanCheck && lastOrphanCheck.orphan_districts ? lastOrphanCheck.orphan_districts.length : 0}
+          <br />
+          <b>Orphan Modules:</b> {lastOrphanCheck && lastOrphanCheck.orphan_modules ? lastOrphanCheck.orphan_modules.length : 0}
+          <br />
+          <b>Orphan Module Endplates:</b> {lastOrphanCheck && lastOrphanCheck.orphan_endplates ? lastOrphanCheck.orphan_endplates.length : 0}
+        </div>
+        <p>If you suspect orphan records (e.g., districts without a valid dispatcher, modules without a valid district), you can review and clean them up in the Admin panel.</p>
+      </div>
     </div>
   );
 }
@@ -541,281 +626,41 @@ function ConfigurationPage({ onDbChange }) {
 function Admin({ page, setPage, onDbChange }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
-  const [showOrphans, setShowOrphans] = useState(false);
-  const [orphansLoaded, setOrphansLoaded] = useState(false);
-  const [orphanLoading, setOrphanLoading] = useState(false);
-  const [orphanDistricts, setOrphanDistricts] = useState([]);
-  const [orphanModules, setOrphanModules] = useState([]);
-  const [selectedDistricts, setSelectedDistricts] = useState([]);
-  const [selectedModules, setSelectedModules] = useState([]);
-  const [selectedEndplates, setSelectedEndplates] = useState([]);
-  const [deleting, setDeleting] = useState(false);
-  // Orphan check interval state
-  const [orphanInterval, setOrphanInterval] = useState(60);
-  const [intervalInput, setIntervalInput] = useState(60);
-  const [intervalLoading, setIntervalLoading] = useState(false);
-  const [lastOrphanCheck, setLastOrphanCheck] = useState(null);
-  const [lastCheckLoading, setLastCheckLoading] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:8001/status")
+    fetchWithBackendUrl('/status')
       .then((res) => res.json())
       .then(setStatus)
       .catch((e) => setError(e.message));
   }, []);
 
-  useEffect(() => {
-    fetch("http://localhost:8001/admin/orphan-check-interval/")
-      .then(res => res.json())
-      .then(data => {
-        setOrphanInterval(data.interval);
-        setIntervalInput(data.interval);
-      });
-    fetch("http://localhost:8001/admin/last-orphan-check/")
-      .then(res => res.json())
-      .then(setLastOrphanCheck);
-  }, []);
-
-  const handleIntervalChange = async (e) => {
-    e.preventDefault();
-    setIntervalLoading(true);
-    try {
-      const res = await fetch("http://localhost:8001/admin/orphan-check-interval/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interval: Number(intervalInput) })
-      });
-      const data = await res.json();
-      if (data.ok) setOrphanInterval(data.interval);
-      else alert(data.error || "Failed to set interval");
-    } finally {
-      setIntervalLoading(false);
-    }
-  };
-
-  if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
-  if (!status) return <div>Loading admin panel...</div>;
-
   return (
     <div className="dashboard-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
       <h2>System Admin</h2>
       <div style={{ marginBottom: 16 }}>
-        <button
-          onClick={() => setPage("admin-overview")}
-          style={{ fontWeight: page === "admin-overview" ? "bold" : "normal", marginRight: 12 }}
-        >
-          Overview
-        </button>
-        <button
-          onClick={() => setPage("admin-config")}
-          style={{ fontWeight: page === "admin-config" ? "bold" : "normal" }}
-        >
-          Configuration
-        </button>
+        <b>Backend Version:</b> {status && status.backend_version}
       </div>
-      {page === "admin-overview" && (
-        <>
-          <div><b>Backend Version:</b> {status.backend_version}</div>
-          <div style={{ margin: "12px 0" }}>
-            <b>Service Record Counts:</b>
-            <ul>
-              <li>Dispatchers: {status.service_counts.dispatchers}</li>
-              <li>Districts: {status.service_counts.districts}</li>
-              <li>Modules: {status.service_counts.modules}</li>
-              <li>Trains: {status.service_counts.trains}</li>
-              <li>Module Endplates: {status.service_counts.module_endplates}</li>
-            </ul>
-          </div>
-          <div>
-            <b>Recent Backend Logs:</b>
-            <pre style={{ maxHeight: 200, overflow: "auto", padding: 8 }}>
-              {status.logs && status.logs.length ? status.logs.join("") : "No logs."}
-            </pre>
-          </div>
-          <div style={{ marginTop: 12, color: "#bbb" }}>{status.message}</div>
-          <div className="db-troubleshooting" style={{ marginTop: 32, padding: 16, borderRadius: 8 }}>
-            <h3 style={{ color: '#333' }}>Database Troubleshooting</h3>
-            <form onSubmit={handleIntervalChange} style={{ marginBottom: 16 }}>
-              <label>
-                Orphan Check Interval (seconds):
-                <input
-                  type="number"
-                  min={10}
-                  value={intervalInput}
-                  onChange={e => setIntervalInput(e.target.value)}
-                  style={{ marginLeft: 8, width: 80 }}
-                />
-              </label>
-              <button type="submit" disabled={intervalLoading} style={{ marginLeft: 8 }}>
-                {intervalLoading ? "Saving..." : "Set Interval"}
-              </button>
-              <span style={{ marginLeft: 12, color: '#555' }}>
-                Current: {orphanInterval}s
-              </span>
-            </form>
-            <div style={{ marginBottom: 12 }}>
-              <b>Last Orphan Check:</b> {lastOrphanCheck && lastOrphanCheck.last_run ? new Date(lastOrphanCheck.last_run * 1000).toLocaleString() : 'Never'}
-              <br />
-              <b>Orphan Districts:</b> {lastOrphanCheck && lastOrphanCheck.orphan_districts ? lastOrphanCheck.orphan_districts.length : 0}
-              <br />
-              <b>Orphan Modules:</b> {lastOrphanCheck && lastOrphanCheck.orphan_modules ? lastOrphanCheck.orphan_modules.length : 0}
-              <br />
-              <b>Orphan Module Endplates:</b> {lastOrphanCheck && lastOrphanCheck.orphan_endplates ? lastOrphanCheck.orphan_endplates.length : 0}
-            </div>
-            <p>If you suspect orphan records (e.g., districts without a valid dispatcher, modules without a valid district), you can review and clean them up here.</p>
-            <button
-              style={{ background: '#333', color: '#fff', border: '1px solid #40e0d0', marginBottom: 12 }}
-              onClick={async () => {
-                setShowOrphans((v) => !v);
-                if (!orphansLoaded) {
-                  setOrphanLoading(true);
-                  try {
-                    const res = await fetch('http://localhost:8001/admin/orphan-records/');
-                    const data = await res.json();
-                    setOrphanDistricts(data.orphan_districts || []);
-                    setOrphanModules(data.orphan_modules || []);
-                    setOrphansLoaded(true);
-                  } catch (e) {
-                    alert('Failed to load orphan records: ' + e.message);
-                  } finally {
-                    setOrphanLoading(false);
-                  }
-                }
-              }}
-            >{showOrphans ? 'Hide' : 'Show'} Orphan Records</button>
-            {showOrphans && (
-              <div>
-                {orphanLoading ? (
-                  <div>Loading orphan records...</div>
-                ) : (
-                  <>
-                    <form onSubmit={async (e) => {
-                      e.preventDefault();
-                      setDeleting(true);
-                      try {
-                        const res = await fetch('http://localhost:8001/admin/delete-orphans/', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            district_ids: selectedDistricts,
-                            module_ids: selectedModules,
-                            endplate_ids: selectedEndplates,
-                          }),
-                        });
-                        const data = await res.json();
-                        alert(data.message || (data.ok ? 'Cleanup successful' : 'Cleanup failed'));
-                        setOrphansLoaded(false);
-                        setShowOrphans(false);
-                        setSelectedDistricts([]);
-                        setSelectedModules([]);
-                        setSelectedEndplates([]);
-                        window.location.reload();
-                      } catch (e) {
-                        alert('Cleanup failed: ' + e.message);
-                      } finally {
-                        setDeleting(false);
-                      }
-                    }}>
-                      <div style={{ marginBottom: 8 }}>
-                        <b>Orphan Districts:</b>
-                        {orphanDistricts.length === 0 ? (
-                          <span style={{ marginLeft: 8 }}>None</span>
-                        ) : (
-                          <ul>
-                            {orphanDistricts.map(d => (
-                              <li key={d.id}>
-                                <label>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedDistricts.includes(d.id)}
-                                    onChange={e => {
-                                      setSelectedDistricts(sel =>
-                                        e.target.checked
-                                          ? [...sel, d.id]
-                                          : sel.filter(id => id !== d.id)
-                                      );
-                                    }}
-                                  />
-                                  {` ${d.name} (ID: ${d.id}, Dispatcher ID: ${d.dispatcher_id})`}
-                                </label>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      <div style={{ marginBottom: 8 }}>
-                        <b>Orphan Modules:</b>
-                        {orphanModules.length === 0 ? (
-                          <span style={{ marginLeft: 8 }}>None</span>
-                        ) : (
-                          <ul>
-                            {orphanModules.map(m => (
-                              <li key={m.id}>
-                                <label>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedModules.includes(m.id)}
-                                    onChange={e => {
-                                      setSelectedModules(sel =>
-                                        e.target.checked
-                                          ? [...sel, m.id]
-                                          : sel.filter(id => id !== m.id)
-                                      );
-                                    }}
-                                  />
-                                  {` ${m.name} (ID: ${m.id}, District ID: ${m.district_id})`}
-                                </label>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      <div style={{ marginBottom: 8 }}>
-                        <b>Orphan Module Endplates:</b>
-                        {lastOrphanCheck && lastOrphanCheck.orphan_endplates && lastOrphanCheck.orphan_endplates.length === 0 ? (
-                          <span style={{ marginLeft: 8 }}>None</span>
-                        ) : (
-                          <ul>
-                            {lastOrphanCheck && lastOrphanCheck.orphan_endplates && lastOrphanCheck.orphan_endplates.map(e => (
-                              <li key={e.id}>
-                                <label>
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedEndplates.includes(e.id)}
-                                    onChange={ev => {
-                                      setSelectedEndplates(sel =>
-                                        ev.target.checked
-                                          ? [...sel, e.id]
-                                          : sel.filter(id => id !== e.id)
-                                      );
-                                    }}
-                                  />
-                                  {` Endplate ID: ${e.id}, Module ID: ${e.module_id}, Endplate #: ${e.endplate_number}`}
-                                </label>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      <button type="submit" disabled={deleting || (selectedDistricts.length === 0 && selectedModules.length === 0)}>
-                        {deleting ? 'Deleting...' : 'Delete Selected Orphans'}
-                      </button>
-                    </form>
-                  </>
-                )}
-              </div>
-            )}
-            <p style={{ color: '#555', marginTop: 8 }}>
-              This will remove only the selected orphan districts and modules.
-            </p>
-          </div>
-        </>
-      )}
-      {page === "admin-config" && (
-        <ConfigurationPage onDbChange={onDbChange} />
-      )}
+      <div style={{ marginBottom: 8 }}>
+        <b>Frontend Version:</b> {status && status.frontend_version}
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <b>Backend IP Address:</b> {status && status.ip && status.ip.length ? status.ip[0] : "Unknown"}
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <b>Current Time:</b> {status && status.time}
+      </div>
+      <div style={{ marginTop: 12, color: "#bbb" }}>{status && status.message}</div>
+      <button onClick={() => setPage("admin-config")} style={{ marginTop: 24, padding: '8px 16px', fontWeight: 'bold' }}>
+        Go to Configuration
+      </button>
     </div>
   );
+}
+
+// Helper to await backend URL for fetch
+async function fetchWithBackendUrl(path, options) {
+  const url = await getBackendUrl();
+  return fetch(`${url}${path}`, options);
 }
 
 /**
@@ -869,6 +714,40 @@ function ThemeSwitcher() {
   );
 }
 
+// Utility to get backend URL based on environment
+let backendUrlCache = null;
+async function resolveBackendUrl() {
+  if (backendUrlCache) return backendUrlCache;
+  // Try to fetch /ip from the current host:8001
+  const { protocol } = window.location;
+  const candidateHost = window.location.hostname;
+  const candidateUrl = `${protocol}//${candidateHost}:8001`;
+  try {
+    const res = await fetch(`${candidateUrl}/ip`);
+    const data = await res.json();
+    // If backend returns a list of IPs, try each
+    const ips = Array.isArray(data.ip) ? data.ip : [data.ip];
+    for (const ip of ips) {
+      const testUrl = `${protocol}//${ip}:8001`;
+      try {
+        const statusRes = await fetch(`${testUrl}/status`);
+        if (statusRes.ok) {
+          backendUrlCache = testUrl;
+          return testUrl;
+        }
+      } catch (e) { /* try next */ }
+    }
+  } catch (e) { /* fallback below */ }
+  // Fallback: use current hostname
+  backendUrlCache = candidateUrl;
+  return candidateUrl;
+}
+
+function getBackendUrl() {
+  // Returns a promise that resolves to the backend URL
+  return resolveBackendUrl();
+}
+
 /**
  * App - Main application component.
  * Handles state for all entities and page navigation.
@@ -883,23 +762,14 @@ export default function App() {
   const [districtsRefresh, setDistrictsRefresh] = useState(0);
   const [modulesRefresh, setModulesRefresh] = useState(0); // NEW
 
-  // Fetch dispatchers and districts whenever dbRefresh changes
-  useEffect(() => {
-    getDispatchers().then(setDispatchers);
-    getDistricts().then(setDistricts);
-  }, [dbRefresh]);
-
-  // Fetch modules when dbRefresh changes
-  useEffect(() => {
-    getModules().then(setModules);
-  }, [dbRefresh]);
-
-  // Also fetch dispatchers when switching to the main page (for dropdown refresh)
+  // Only fetch data for main page, not on admin panel load
   useEffect(() => {
     if (page === "main") {
       getDispatchers().then(setDispatchers);
+      getDistricts().then(setDistricts);
+      getModules().then(setModules);
     }
-  }, [page]);
+  }, [page, dbRefresh]);
 
   // When a district is created, updated, or deleted, refresh districts and trigger modules refresh
   const handleDistrictsRefresh = () => {
@@ -921,7 +791,11 @@ export default function App() {
       <ThemeSwitcher />
       <Menu current={page} setCurrent={setPage} />
       {page === "admin" ? (
-        <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} />
+        adminPage === "admin-config" ? (
+          <ConfigurationPage onDbChange={() => setDbRefresh((v) => v + 1)} onBackToAdmin={() => setAdminPage("admin-overview")} />
+        ) : (
+          <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} />
+        )
       ) : (
         <>
           <EntityManager
@@ -998,7 +872,7 @@ export default function App() {
               { name: "number_of_endplates", label: "Number of Endplates", type: "number", min: 1, required: true, default: 1 },
               { name: "owner", label: "Owner" },
               { name: "owner_email", label: "Owner Email Address" },
-              { name: "is_yard", label: "Yard?", type: "checkbox" }, // New field
+              { name: "is_yard", label: "Yard?", type: "checkbox" },
             ]}
             selectOptions={{ district_id: districts }}
             key={"modules-" + dbRefresh}

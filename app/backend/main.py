@@ -17,6 +17,9 @@ import time
 import models, schemas
 from database import engine, SessionLocal
 
+# Add for timing
+import time
+
 # Configure logging to file
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +35,7 @@ app = FastAPI()
 # Allow CORS for local frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],  # Allow all origins for local development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -344,7 +347,8 @@ async def delete_module_endplate(endplate_id: int, db: AsyncSession = Depends(ge
 DB_PATH = os.getenv("DB_PATH", "/var/lib/postgresql/data/dispatcher_db")
 
 
-@app.post("/admin/import-db/")
+# Database import/export/reset endpoints are now under /database/
+@app.post("/database/import/")
 async def import_db(file: UploadFile = File(...)):
     # Save uploaded file to DB_PATH (overwrite existing DB)
     try:
@@ -355,7 +359,7 @@ async def import_db(file: UploadFile = File(...)):
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
-@app.post("/admin/create-db/")
+@app.post("/database/reset/")
 async def create_db():
     # Drop and recreate all tables
     try:
@@ -367,7 +371,7 @@ async def create_db():
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
-@app.get("/admin/export-db/")
+@app.get("/database/export/")
 async def export_db():
     # Return the database file for download
     try:
@@ -376,35 +380,38 @@ async def export_db():
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
-@app.post("/admin/cleanup-orphans/")
-async def cleanup_orphans(db: AsyncSession = Depends(get_db)):
-    # Delete districts with no valid dispatcher
-    await db.execute(
-        models.District.__table__.delete().where(~models.District.dispatcher_id.in_(
-            select(models.Dispatcher.id)
-        ))
-    )
-    await db.commit()
-    return {"ok": True, "message": "Orphan districts cleaned up."}
-
-
-@app.get("/admin/orphan-records/")
-async def get_orphan_records(db: AsyncSession = Depends(get_db)):
-    # Find orphan districts (no valid dispatcher or dispatcher_id is NULL)
+# New endpoint for database status and service record counts
+@app.get("/database/status")
+async def database_status(db: AsyncSession = Depends(get_db)):
+    # Get counts for each table
+    async def get_count(model):
+        result = await db.execute(select(func.count(model.id)))
+        return result.scalar()
+    dispatcher_count = await get_count(models.Dispatcher)
+    district_count = await get_count(models.District)
+    train_count = await get_count(models.Train)
+    module_count = await get_count(models.Module)
+    endplate_count = await get_count(models.ModuleEndplate)
+    counts = {
+        "dispatchers": dispatcher_count,
+        "districts": district_count,
+        "trains": train_count,
+        "modules": module_count,
+        "module_endplates": endplate_count,
+    }
+    # Orphan check info
     orphan_districts = (await db.execute(
         select(models.District).where(
             (models.District.dispatcher_id == None) |
             (~models.District.dispatcher_id.in_(select(models.Dispatcher.id)))
         )
     )).scalars().all()
-    # Find orphan modules (no valid district or district_id is NULL)
     orphan_modules = (await db.execute(
         select(models.Module).where(
             (models.Module.district_id == None) |
             (~models.Module.district_id.in_(select(models.District.id)))
         )
     )).scalars().all()
-    # Find orphan module endplates (no valid module or module_id is NULL)
     orphan_endplates = (await db.execute(
         select(models.ModuleEndplate).where(
             (models.ModuleEndplate.module_id == None) |
@@ -412,6 +419,7 @@ async def get_orphan_records(db: AsyncSession = Depends(get_db)):
         )
     )).scalars().all()
     return {
+        "service_counts": counts,
         "orphan_districts": [
             {"id": d.id, "name": d.name, "dispatcher_id": d.dispatcher_id} for d in orphan_districts
         ],
@@ -422,75 +430,6 @@ async def get_orphan_records(db: AsyncSession = Depends(get_db)):
             {"id": e.id, "module_id": e.module_id, "endplate_number": e.endplate_number} for e in orphan_endplates
         ]
     }
-
-
-@app.post("/admin/delete-orphans/")
-async def delete_orphans(payload: dict, db: AsyncSession = Depends(get_db)):
-    district_ids = payload.get("district_ids", [])
-    module_ids = payload.get("module_ids", [])
-    endplate_ids = payload.get("endplate_ids", [])
-    if district_ids:
-        await db.execute(models.District.__table__.delete().where(models.District.id.in_(district_ids)))
-    if module_ids:
-        await db.execute(models.Module.__table__.delete().where(models.Module.id.in_(module_ids)))
-    if endplate_ids:
-        await db.execute(models.ModuleEndplate.__table__.delete().where(models.ModuleEndplate.id.in_(endplate_ids)))
-    await db.commit()
-    return {"ok": True, "message": "Selected orphan records deleted."}
-
-
-@app.get("/status")
-async def status(db: AsyncSession = Depends(get_db)):
-    # Get backend version
-    try:
-        version = pkg_resources.get_distribution("fastapi").version
-    except Exception:
-        version = "unknown"
-    # Get counts for each table
-    async def get_count(model):
-        result = await db.execute(select(func.count(model.id)))
-        return result.scalar()
-    dispatcher_count = await get_count(models.Dispatcher)
-    district_count = await get_count(models.District)
-    train_count = await get_count(models.Train)
-    module_count = await get_count(models.Module)
-    # Get counts for ModuleEndplates (newly added)
-    endplate_count = await get_count(models.ModuleEndplate)
-    counts = {
-        "dispatchers": dispatcher_count,
-        "districts": district_count,
-        "trains": train_count,
-        "modules": module_count,
-        "module_endplates": endplate_count,  # Include endplate count
-    }
-    # Get recent logs (if using logging to file)
-    logs = []
-    try:
-        with open("backend.log") as f:
-            logs = f.readlines()[-20:]
-    except Exception:
-        logs = ["No log file found."]
-    return {
-        "backend_version": version,
-        "service_counts": counts,
-        "logs": logs,
-        "message": "Train Dispatcher Backend is running!"
-    }
-
-
-@app.get("/ip")
-def get_ip():
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(0)
-    try:
-        s.connect(('10.255.255.255', 1))
-        local_ip = s.getsockname()[0]
-    except Exception:
-        local_ip = '127.0.0.1'
-    finally:
-        s.close()
-    return {"ip": local_ip}
 
 
 @app.on_event("startup")
@@ -592,3 +531,39 @@ def set_orphan_check_interval(payload: dict):
 @app.get("/admin/last-orphan-check/")
 def get_last_orphan_check():
     return last_orphan_check
+
+@app.get("/status")
+def status():
+    # Only return backend version, frontend version (placeholder), IPs, and current time
+    try:
+        backend_version = pkg_resources.get_distribution("fastapi").version
+    except Exception:
+        backend_version = "unknown"
+    # Get IP address (fast, using socket)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0)
+        try:
+            s.connect(('10.255.255.255', 1))
+            ip = s.getsockname()[0]
+        except Exception:
+            ip = '127.0.0.1'
+        finally:
+            s.close()
+    except Exception:
+        ip = '127.0.0.1'
+    now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    frontend_version = "unknown"
+    return {
+        "backend_version": backend_version,
+        "frontend_version": frontend_version,
+        "ip": [ip],
+        "time": now,
+        "message": "Train Dispatcher Backend is running!"
+    }
+
+
+@app.get("/ip")
+def get_ip():
+    # Deprecated: Use /status for IP info. Kept for compatibility.
+    return status()
