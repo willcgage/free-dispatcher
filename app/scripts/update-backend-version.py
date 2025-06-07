@@ -2,16 +2,14 @@
 import requests
 import json
 import os
+import subprocess
 
 def main():
-    owner = 'YOUR_GITHUB_USERNAME_OR_ORG'
-    repo = 'YOUR_REPO_NAME'
-    api_url = f'https://api.github.com/repos/{owner}/{repo}/releases/latest'
-    r = requests.get(api_url)
-    if r.status_code != 200:
-        raise Exception(f'Failed to fetch release: {r.status_code}')
-    data = r.json()
-    version = data.get('tag_name') or data.get('name') or 'unknown'
+    # Option 1: Use the latest local git tag as backend version
+    try:
+        version = subprocess.check_output(['git', 'describe', '--tags', '--abbrev=0']).decode().strip()
+    except Exception as e:
+        version = 'unknown'
     versions_path = os.path.join(os.path.dirname(__file__), '../public/versions.json')
     if os.path.exists(versions_path):
         with open(versions_path) as f:
