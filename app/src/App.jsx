@@ -515,7 +515,7 @@ function ConfigurationPage({ onDbChange, onBackToAdmin }) {
  *   setPage: setter for admin subpage
  *   onDbChange: callback for DB changes
  */
-function Admin({ page, setPage, onDbChange }) {
+function Admin({ page, setPage, onDbChange, versions }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
   // Only fetch /status once on mount
@@ -532,10 +532,10 @@ function Admin({ page, setPage, onDbChange }) {
     <div className="dashboard-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
       <h2>System Admin</h2>
       <div style={{ marginBottom: 16 }}>
-        <b>Backend Version:</b> {status && status.backend_version}
+        <b>Frontend Version:</b> <span className="dashboard-value">{versions && versions.frontend_version ? versions.frontend_version : 'Unknown'}</span>
       </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>Frontend Version:</b> {status && status.frontend_version}
+      <div style={{ marginBottom: 16 }}>
+        <b>Backend Version:</b> <span className="dashboard-value">{versions && versions.backend_version ? versions.backend_version : 'Unknown'}</span>
       </div>
       <div style={{ marginBottom: 8 }}>
         <b>Backend IP Address:</b> {status && status.ip && status.ip.length ? status.ip[0] : "Unknown"}
@@ -808,7 +808,7 @@ export default function App() {
           adminPage === "admin-config" ? (
             <ConfigurationPage onDbChange={() => setDbRefresh((v) => v + 1)} onBackToAdmin={() => setAdminPage("admin-overview")} />
           ) : (
-            <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} />
+            <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} versions={versions} />
           )
         ) : (
           // Main page: show entity managers for selected layout (future: filter by selectedLayout)
