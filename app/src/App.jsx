@@ -7,9 +7,9 @@ import {
   getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher,
   getDistricts, createDistrict, updateDistrict, deleteDistrict,
   getTrains, createTrain, updateTrain, deleteTrain,
-  getModules, createModule, updateModule, deleteModule,
-  // Add these:
-  getModuleEndplates, createModuleEndplate, updateModuleEndplate, deleteModuleEndplate
+  getLayouts, createLayout, updateLayout, deleteLayout,
+  getLayoutDistricts, createLayoutDistrict, updateLayoutDistrict, deleteLayoutDistrict,
+  getLayoutDistrictModules, createLayoutDistrictModule, updateLayoutDistrictModule, deleteLayoutDistrictModule
 } from "./api";
 
 /**
@@ -36,7 +36,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
 
   // Define refreshAllOptions at the top of EntityManager so it is always in scope
   const refreshAllOptions = async () => {
-    if (name === "Modules" || name === "Module Endplates") {
+    if (name === "Modules") {
       if (typeof getModules === "function") {
         const modulesList = await getModules();
         setDynamicOptions((opts) => ({ ...opts, module_id: modulesList, connected_module_id: modulesList }));
@@ -203,26 +203,6 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   // Show all fields for all tables in the main page table and form
   const visibleFields = fields;
 
-  // Helper for Module Endplates: returns available endplate numbers for the selected module
-  function filteredEndplateNumbers() {
-    // Only applies to Module Endplates
-    if (name !== "Module Endplates") return [];
-    // Determine which form is open and get the selected module_id
-    const selectedModuleId = showCreatePopup
-      ? createForm.module_id
-      : showEditPopup
-        ? popupForm.module_id
-        : null;
-    if (!selectedModuleId) return [];
-    // Get the list of modules from selectOptions or dynamicOptions
-    const modulesList = (selectOptions.module_id || dynamicOptions.module_id || []);
-    // Find the selected module object
-    const moduleObj = modulesList.find(m => String(m.id) === String(selectedModuleId));
-    // Use the module's number_of_endplates, or default to 8
-    const count = moduleObj && moduleObj.number_of_endplates ? moduleObj.number_of_endplates : 8;
-    return Array.from({ length: count }, (_, i) => i + 1);
-  }
-
   return (
     <div style={{ border: "1px solid #ccc", margin: 16, padding: 16 }}>
       <h2>{name}</h2>
@@ -251,16 +231,6 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                   // Show True/False for is_yard in Modules table
                   if (name === "Modules" && f.name === "is_yard") {
                     return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{item.is_yard ? "True" : "False"}</td>;
-                  }
-                  // Show module name for Module Endplates table
-                  if (name === "Module Endplates" && f.name === "module_id") {
-                    const module = (selectOptions.module_id || dynamicOptions.module_id || []).find(m => m.id === item.module_id);
-                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{module ? module.name : item.module_id}</td>;
-                  }
-                  // Show connected module name for Module Endplates table
-                  if (name === "Module Endplates" && f.name === "connected_module_id") {
-                    const module = (selectOptions.connected_module_id || dynamicOptions.connected_module_id || []).find(m => m.id === item.connected_module_id);
-                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{module ? module.name : item.connected_module_id}</td>;
                   }
                   // Show dispatcher name for Districts table
                   if (name === "Districts" && f.name === "dispatcher_id") {
@@ -453,169 +423,91 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
 }
 
 /**
- * ConfigurationPage - UI for DB import/export/create and backend IP display.
+ * ConfigurationPage - Only CRUD for Layouts, LayoutDistricts, LayoutDistrictModules.
  * Props:
  *   onDbChange: callback to trigger parent refresh after DB change
  */
 function ConfigurationPage({ onDbChange, onBackToAdmin }) {
-  const [message, setMessage] = useState("");
-  const [ip, setIp] = useState("");
-  const [dbStatus, setDbStatus] = useState(null);
-  const [dbStatusLoading, setDbStatusLoading] = useState(true);
-  const [orphanInterval, setOrphanInterval] = useState(60);
-  const [intervalInput, setIntervalInput] = useState(60);
-  const [lastOrphanCheck, setLastOrphanCheck] = useState(null);
-  const [lastCheckLoading, setLastCheckLoading] = useState(false);
-  const fileInput = useRef();
+  const [dbRefresh, setDbRefresh] = useState(0);
+  const [layouts, setLayouts] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [layoutDistricts, setLayoutDistricts] = useState([]);
+  const [layoutDistrictModules, setLayoutDistrictModules] = useState([]);
 
   useEffect(() => {
-    fetchWithBackendUrl('/ip')
-      .then((res) => res.json())
-      .then((data) => setIp(Array.isArray(data.ip) ? data.ip[0] : data.ip))
-      .catch(() => setIp("Unavailable"));
-    // Fetch service record counts and orphan info
-    fetchWithBackendUrl('/database/status')
-      .then(res => res.json())
-      .then(setDbStatus)
-      .finally(() => setDbStatusLoading(false));
-    // Fetch orphan check interval and last check
-    fetchWithBackendUrl('/admin/orphan-check-interval/')
-      .then(res => res.json())
-      .then(data => {
-        setOrphanInterval(data.interval);
-        setIntervalInput(data.interval);
-      });
-    fetchWithBackendUrl('/admin/last-orphan-check/')
-      .then(res => res.json())
-      .then(setLastOrphanCheck)
-      .finally(() => setLastCheckLoading(false));
-  }, []);
-
-  const handleImport = async (e) => {
-    e.preventDefault();
-    const file = fileInput.current.files[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    setMessage("Uploading...");
-    try {
-      const res = await fetchWithBackendUrl('/admin/import-db/', {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      setMessage(data.message || (data.ok ? "Import successful" : "Import failed"));
-      if (data.ok) onDbChange();
-    } catch (e) {
-      setMessage("Import failed: " + e.message);
-    }
-  };
-
-  const handleCreate = async () => {
-    setMessage("Creating new database...");
-    try {
-      const res = await fetchWithBackendUrl('/admin/create-db/', { method: "POST" });
-      const data = await res.json();
-      setMessage(data.message || (data.ok ? "Database created" : "Failed to create"));
-      if (data.ok) onDbChange();
-    } catch (e) {
-      setMessage("Failed: " + e.message);
-    }
-  };
-
-  const handleExport = async () => {
-    setMessage("Exporting...");
-    try {
-      const res = await fetchWithBackendUrl('/admin/export-db/');
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "dispatcher_db_export";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setMessage("Export successful");
-    } catch (e) {
-      setMessage("Export failed: " + e.message);
-    }
-  };
-
-  const handleIntervalChange = async (e) => {
-    e.preventDefault();
-    setMessage('');
-    try {
-      const res = await fetchWithBackendUrl('/admin/orphan-check-interval/', {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interval: Number(intervalInput) })
-      });
-      const data = await res.json();
-      if (data.ok) setOrphanInterval(data.interval);
-      else setMessage(data.error || "Failed to set interval");
-    } catch (e) {
-      setMessage("Failed to set interval: " + e.message);
-    }
-  };
+    Promise.all([
+      getLayouts(),
+      getDistricts(),
+      getLayoutDistricts(),
+      getLayoutDistrictModules()
+    ]).then(([layouts, districts, layoutDistricts, layoutDistrictModules]) => {
+      setLayouts(layouts);
+      setDistricts(districts);
+      setLayoutDistricts(layoutDistricts);
+      setLayoutDistrictModules(layoutDistrictModules);
+    });
+  }, [dbRefresh]);
 
   return (
     <div className="config-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
-      <h2>Database Configuration</h2>
+      <h2>Database Tables (CRUD)</h2>
       <button onClick={onBackToAdmin} style={{ marginBottom: 16, fontWeight: 'bold' }}>Back to Admin</button>
-      {/* Service Record Counts */}
-      <div style={{ margin: "12px 0" }}>
-        <b>Service Record Counts:</b>
-        {dbStatusLoading ? <span>Loading...</span> : dbStatus && dbStatus.service_counts ? (
-          <ul>
-            <li>Dispatchers: {dbStatus.service_counts.dispatchers}</li>
-            <li>Districts: {dbStatus.service_counts.districts}</li>
-            <li>Trains: {dbStatus.service_counts.trains}</li>
-            <li>Modules: {dbStatus.service_counts.modules}</li>
-            <li>Module Endplates: {dbStatus.service_counts.module_endplates}</li>
-          </ul>
-        ) : <span>Unavailable</span>}
-      </div>
-      {/* Database Import/Export/Reset */}
-      <form onSubmit={handleImport} style={{ display: "inline-block", marginRight: 16 }}>
-        <input type="file" ref={fileInput} accept=".sql,.db,.sqlite,.backup" />
-        <button type="submit">Import Database File</button>
-      </form>
-      <button onClick={handleCreate}>Create New Database</button>
-      <button onClick={handleExport} style={{ marginLeft: 12 }}>Export Database</button>
-      <div style={{ marginTop: 12, color: "#333" }}>{message}</div>
-      {/* Database Troubleshooting */}
-      <div className="db-troubleshooting" style={{ marginTop: 32, padding: 16, borderRadius: 8, border: '1px solid #ccc' }}>
-        <h3 style={{ color: '#333' }}>Database Troubleshooting</h3>
-        <form onSubmit={handleIntervalChange} style={{ marginBottom: 16 }}>
-          <label>
-            Orphan Check Interval (seconds):
-            <input
-              type="number"
-              min={10}
-              value={intervalInput}
-              onChange={e => setIntervalInput(e.target.value)}
-              style={{ marginLeft: 8, width: 80 }}
-            />
-          </label>
-          <button type="submit" style={{ marginLeft: 8 }}>
-            Set Interval
-          </button>
-          <span style={{ marginLeft: 12, color: '#555' }}>
-            Current: {orphanInterval}s
-          </span>
-        </form>
-        <div style={{ marginBottom: 12 }}>
-          <b>Last Orphan Check:</b> {lastOrphanCheck && lastOrphanCheck.last_run ? new Date(lastOrphanCheck.last_run * 1000).toLocaleString() : 'Never'}
-          <br />
-          <b>Orphan Districts:</b> {lastOrphanCheck && lastOrphanCheck.orphan_districts ? lastOrphanCheck.orphan_districts.length : 0}
-          <br />
-          <b>Orphan Modules:</b> {lastOrphanCheck && lastOrphanCheck.orphan_modules ? lastOrphanCheck.orphan_modules.length : 0}
-          <br />
-          <b>Orphan Module Endplates:</b> {lastOrphanCheck && lastOrphanCheck.orphan_endplates ? lastOrphanCheck.orphan_endplates.length : 0}
-        </div>
-        <p>If you suspect orphan records (e.g., districts without a valid dispatcher, modules without a valid district), you can review and clean them up in the Admin panel.</p>
-      </div>
+      <EntityManager
+        name="Layouts"
+        getAll={getLayouts}
+        create={createLayout}
+        update={updateLayout}
+        remove={deleteLayout}
+        fields={[
+          { name: "id", label: "ID" },
+          { name: "key", label: "Key" },
+          { name: "name", label: "Name" },
+          { name: "start_date", label: "Start Date" },
+          { name: "end_date", label: "End Date" },
+          { name: "location_city", label: "City" },
+          { name: "location_state", label: "State" },
+        ]}
+        key={"layouts-" + dbRefresh}
+        refreshKey={dbRefresh}
+        onRefresh={() => setDbRefresh((v) => v + 1)}
+      />
+      <EntityManager
+        name="LayoutDistricts"
+        getAll={getLayoutDistricts}
+        create={createLayoutDistrict}
+        update={updateLayoutDistrict}
+        remove={deleteLayoutDistrict}
+        fields={[
+          { name: "id", label: "ID" },
+          { name: "layout_id", label: "Layout" },
+          { name: "district_id", label: "District" },
+        ]}
+        selectOptions={{ layout_id: layouts, district_id: districts }}
+        key={"layout-districts-" + dbRefresh}
+        refreshKey={dbRefresh}
+        onRefresh={() => setDbRefresh((v) => v + 1)}
+      />
+      <EntityManager
+        name="LayoutDistrictModules"
+        getAll={getLayoutDistrictModules}
+        create={createLayoutDistrictModule}
+        update={updateLayoutDistrictModule}
+        remove={deleteLayoutDistrictModule}
+        fields={[
+          { name: "id", label: "ID" },
+          { name: "layout_district_id", label: "LayoutDistrict" },
+          { name: "module_key", label: "Module Key" },
+          { name: "name", label: "Module Name" },
+          { name: "owner_name", label: "Owner Name" },
+          { name: "owner_email", label: "Owner Email" },
+          { name: "category", label: "Category" },
+          { name: "number_of_endplates", label: "# Endplates", type: "number", min: 1 },
+        ]}
+        selectOptions={{ layout_district_id: layoutDistricts }}
+        key={"layout-district-modules-" + dbRefresh}
+        refreshKey={dbRefresh}
+        onRefresh={() => setDbRefresh((v) => v + 1)}
+      />
     </div>
   );
 }
@@ -626,12 +518,14 @@ function ConfigurationPage({ onDbChange, onBackToAdmin }) {
 function Admin({ page, setPage, onDbChange }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
-
+  // Only fetch /status once on mount
   useEffect(() => {
+    let mounted = true;
     fetchWithBackendUrl('/status')
       .then((res) => res.json())
-      .then(setStatus)
-      .catch((e) => setError(e.message));
+      .then((data) => { if (mounted) setStatus(data); })
+      .catch((e) => { if (mounted) setError(e.message); });
+    return () => { mounted = false; };
   }, []);
 
   return (
@@ -703,12 +597,18 @@ function ThemeSwitcher() {
   }, [theme]);
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ fontWeight: 500, marginRight: 8 }}>Theme:</label>
-      <select value={theme} onChange={e => setTheme(e.target.value)}>
+    <div className="theme-switcher-topright" aria-label="Theme selection">
+      <label htmlFor="theme-select" style={{ fontWeight: 500, marginRight: 8 }}>Theme:</label>
+      <select
+        id="theme-select"
+        value={theme}
+        onChange={e => setTheme(e.target.value)}
+        aria-label="Select theme"
+      >
         <option value="system">System</option>
         <option value="light">Light</option>
         <option value="dark">Dark</option>
+        <option value="high-contrast">High Contrast</option>
       </select>
     </div>
   );
@@ -749,153 +649,226 @@ function getBackendUrl() {
 }
 
 /**
- * App - Main application component.
- * Handles state for all entities and page navigation.
+ * GlobalMenu - A menu button visible on all pages, opens a dropdown with navigation options.
  */
+function GlobalMenu({ onNavigate }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: 'fixed', top: 16, left: 16, zIndex: 2000 }}>
+      <button
+        aria-label="Open menu"
+        style={{ fontSize: 22, borderRadius: 6, padding: '6px 14px', background: 'var(--menu-bg, #222)', color: 'var(--menu-fg, #fff)', border: 'none', boxShadow: '0 2px 8px #0002', cursor: 'pointer' }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        ☰
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 40, left: 0, background: 'var(--menu-dropdown-bg, #fff)', color: 'var(--menu-dropdown-fg, #222)', border: '1px solid var(--menu-border, #aaa)', borderRadius: 8, minWidth: 180, boxShadow: '0 2px 12px #0003', padding: 8 }}>
+          <div style={{ padding: 8, cursor: 'pointer' }} onClick={() => { setOpen(false); onNavigate('dashboard'); }}>App Dashboard</div>
+          <div style={{ padding: 8, cursor: 'pointer' }} onClick={() => { setOpen(false); onNavigate('admin'); }}>Admin</div>
+          <div style={{ padding: 8, cursor: 'pointer' }} onClick={() => { setOpen(false); onNavigate('admin-config'); }}>Database/Config</div>
+          {/* Add more pages here as needed */}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * AppDashboard - Main landing page, shows version info and layout selection/creation.
+ */
+function AppDashboard({ layouts, onCreateLayout, onSelectLayout, versions }) {
+  return (
+    <div className="app-dashboard">
+      <h2 style={{ marginBottom: 16 }}>App Dashboard</h2>
+      <div className="app-dashboard-info">
+        <b>Frontend Version:</b> <span className="dashboard-value">{versions.frontend_version || 'Unknown'}</span><br />
+        <b>Backend Version:</b> <span className="dashboard-value">{versions.backend_version || 'Unknown'}</span>
+      </div>
+      {(!layouts || layouts.length === 0) ? (
+        <div style={{ marginTop: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 18, marginBottom: 16, color: 'var(--dashboard-warn, #b00)' }}>
+            <b>No Layout exists.</b>
+          </div>
+          <button
+            style={{ fontSize: 18, padding: '10px 28px', background: 'var(--dashboard-btn-create-bg, #1976d2)', color: 'var(--dashboard-btn-create-fg, #fff)', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+            onClick={onCreateLayout}
+          >
+            Create Layout!
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginTop: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 18, marginBottom: 16, color: 'var(--dashboard-info, #1976d2)' }}>
+            <b>Layout(s) detected.</b>
+          </div>
+          <button
+            style={{ fontSize: 18, padding: '10px 28px', background: 'var(--dashboard-btn-select-bg, #388e3c)', color: 'var(--dashboard-btn-select-fg, #fff)', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+            onClick={() => onSelectLayout(layouts[0])}
+          >
+            Select Layout
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [dbRefresh, setDbRefresh] = useState(0);
-  const [page, setPage] = useState("admin");
+  const [page, setPage] = useState("dashboard"); // default to dashboard
   const [adminPage, setAdminPage] = useState("admin-overview");
   const [dispatchers, setDispatchers] = useState([]);
   const [districts, setDistricts] = useState([]);
   const [modules, setModules] = useState([]);
+  const [layouts, setLayouts] = useState([]);
+  const [layoutDistricts, setLayoutDistricts] = useState([]);
+  const [layoutDistrictModules, setLayoutDistrictModules] = useState([]);
   const [districtsRefresh, setDistrictsRefresh] = useState(0);
-  const [modulesRefresh, setModulesRefresh] = useState(0); // NEW
+  const [modulesRefresh, setModulesRefresh] = useState(0);
+  const [versions, setVersions] = useState({});
+  const [selectedLayout, setSelectedLayout] = useState(null);
 
-  // Only fetch data for main page, not on admin panel load
+  // Fetch versions.json on mount
   useEffect(() => {
+    fetch('/versions.json')
+      .then(res => res.json())
+      .then(setVersions)
+      .catch(() => setVersions({}));
+  }, []);
+
+  // Only fetch data for dashboard/main page
+  useEffect(() => {
+    if (page === "dashboard") {
+      getLayouts().then(setLayouts);
+    }
     if (page === "main") {
-      getDispatchers().then(setDispatchers);
-      getDistricts().then(setDistricts);
-      getModules().then(setModules);
+      Promise.all([
+        getLayouts(),
+        getDispatchers(),
+        getDistricts(),
+        getModules(),
+        getLayoutDistricts(),
+        getLayoutDistrictModules()
+      ]).then(([
+        layouts,
+        dispatchers,
+        districts,
+        modules,
+        layoutDistricts,
+        layoutDistrictModules
+      ]) => {
+        setLayouts(layouts);
+        setDispatchers(dispatchers);
+        setDistricts(districts);
+        setModules(modules);
+        setLayoutDistricts(layoutDistricts);
+        setLayoutDistrictModules(layoutDistrictModules);
+      });
     }
   }, [page, dbRefresh]);
 
-  // When a district is created, updated, or deleted, refresh districts and trigger modules refresh
-  const handleDistrictsRefresh = () => {
-    setDistrictsRefresh((v) => v + 1);
-    getDistricts().then(setDistricts);
-    setModulesRefresh((v) => v + 1); // Also refresh modules
+  // Navigation handler for GlobalMenu
+  const handleNavigate = (target) => {
+    if (target === 'dashboard') setPage('dashboard');
+    else if (target === 'admin') setPage('admin');
+    else if (target === 'admin-config') { setPage('admin'); setAdminPage('admin-config'); }
+    // Add more as needed
   };
 
-  // When a dispatcher is updated, refresh dispatchers and districts (and thus modules)
-  const handleDispatchersRefresh = () => {
-    setDbRefresh((v) => v + 1);
-    setDistrictsRefresh((v) => v + 1);
-    setModulesRefresh((v) => v + 1);
+  // Handler for Create Layout button
+  const handleCreateLayout = () => {
+    setPage('admin');
+    setAdminPage('admin-config');
+    // Optionally, scroll to Layouts section if needed
+  };
+
+  // Handler for Select Layout button
+  const handleSelectLayout = (layout) => {
+    setSelectedLayout(layout);
+    setPage('main');
+    // In the future, could show a layout selection view
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: "auto" }}>
-      <h1>Train Dispatcher Admin</h1>
+    <>
+      <GlobalMenu onNavigate={handleNavigate} />
       <ThemeSwitcher />
-      <Menu current={page} setCurrent={setPage} />
-      {page === "admin" ? (
-        adminPage === "admin-config" ? (
-          <ConfigurationPage onDbChange={() => setDbRefresh((v) => v + 1)} onBackToAdmin={() => setAdminPage("admin-overview")} />
+      <div style={{ maxWidth: 900, margin: "auto" }}>
+        <h1>Train Dispatcher Admin</h1>
+        {/* Remove old ThemeSwitcher here, now top right */}
+        {page === "dashboard" ? (
+          <AppDashboard
+            layouts={layouts}
+            onCreateLayout={handleCreateLayout}
+            onSelectLayout={handleSelectLayout}
+            versions={versions}
+          />
+        ) : page === "admin" ? (
+          adminPage === "admin-config" ? (
+            <ConfigurationPage onDbChange={() => setDbRefresh((v) => v + 1)} onBackToAdmin={() => setAdminPage("admin-overview")} />
+          ) : (
+            <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} />
+          )
         ) : (
-          <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} />
-        )
-      ) : (
-        <>
-          <EntityManager
-            name="Dispatchers"
-            getAll={getDispatchers}
-            create={async (data) => {
-              await createDispatcher(data);
-              handleDispatchersRefresh();
-            }}
-            update={async (id, data) => {
-              await updateDispatcher(id, data);
-              handleDispatchersRefresh();
-            }}
-            remove={async (id) => {
-              await deleteDispatcher(id);
-              handleDispatchersRefresh();
-            }}
-            fields={[
-              { name: "id", label: "ID" },
-              { name: "name", label: "Name" },
-            ]}
-            key={"dispatchers-" + dbRefresh}
-            refreshKey={dbRefresh}
-          />
-          <EntityManager
-            name="Districts"
-            getAll={getDistricts}
-            create={async (data) => {
-              await createDistrict(data);
-              handleDistrictsRefresh();
-            }}
-            update={async (id, data) => {
-              await updateDistrict(id, data);
-              handleDistrictsRefresh();
-            }}
-            remove={async (id) => {
-              await deleteDistrict(id);
-              handleDistrictsRefresh();
-            }}
-            fields={[
-              { name: "id", label: "ID" },
-              { name: "name", label: "Name" },
-              { name: "dispatcher_id", label: "Dispatcher" },
-            ]}
-            selectOptions={{ dispatcher_id: dispatchers }}
-            key={"districts-" + dbRefresh + "-" + districtsRefresh}
-            onRefresh={handleDistrictsRefresh}
-            extraData={{ dispatchers }}
-            refreshKey={dbRefresh + '-' + districtsRefresh}
-          />
-          <EntityManager
-            name="Trains"
-            getAll={getTrains}
-            create={createTrain}
-            update={updateTrain}
-            remove={deleteTrain}
-            fields={[
-              { name: "name", label: "Name" },
-              { name: "status", label: "Status" },
-            ]}
-            key={"trains-" + dbRefresh}
-            refreshKey={dbRefresh}
-          />
-          <EntityManager
-            name="Modules"
-            getAll={getModules}
-            create={createModule}
-            update={updateModule}
-            remove={deleteModule}
-            fields={[
-              { name: "id", label: "ID" },
-              { name: "name", label: "Name" },
-              { name: "district_id", label: "District" },
-              { name: "number_of_endplates", label: "Number of Endplates", type: "number", min: 1, required: true, default: 1 },
-              { name: "owner", label: "Owner" },
-              { name: "owner_email", label: "Owner Email Address" },
-              { name: "is_yard", label: "Yard?", type: "checkbox" },
-            ]}
-            selectOptions={{ district_id: districts }}
-            key={"modules-" + dbRefresh}
-            refreshKey={dbRefresh + '-' + modulesRefresh}
-          />
-          <EntityManager
-            name="Module Endplates"
-            getAll={getModuleEndplates}
-            create={createModuleEndplate}
-            update={updateModuleEndplate}
-            remove={deleteModuleEndplate}
-            fields={[
-              { name: "id", label: "ID" },
-              { name: "module_id", label: "Module" },
-              { name: "endplate_number", label: "Endplate Number", type: "number", min: 1, required: true },
-              { name: "connected_module_id", label: "Connected Module" },
-            ]}
-            selectOptions={{ module_id: modules, connected_module_id: modules }}
-            key={"module-endplates-" + dbRefresh}
-            refreshKey={dbRefresh}
-          />
-        </>
-      )}
-    </div>
+          // Main page: show entity managers for selected layout (future: filter by selectedLayout)
+          <>
+            <EntityManager
+              name="Layouts"
+              getAll={getLayouts}
+              create={createLayout}
+              update={updateLayout}
+              remove={deleteLayout}
+              fields={[
+                { name: "id", label: "ID" },
+                { name: "key", label: "Key" },
+                { name: "name", label: "Name" },
+                { name: "start_date", label: "Start Date" },
+                { name: "end_date", label: "End Date" },
+                { name: "location_city", label: "City" },
+                { name: "location_state", label: "State" },
+              ]}
+              key={"layouts-" + dbRefresh}
+              refreshKey={dbRefresh}
+            />
+            <EntityManager
+              name="LayoutDistricts"
+              getAll={getLayoutDistricts}
+              create={createLayoutDistrict}
+              update={updateLayoutDistrict}
+              remove={deleteLayoutDistrict}
+              fields={[
+                { name: "id", label: "ID" },
+                { name: "layout_id", label: "Layout" },
+                { name: "district_id", label: "District" },
+              ]}
+              selectOptions={{ layout_id: layouts, district_id: districts }}
+              key={"layout-districts-" + dbRefresh}
+              refreshKey={dbRefresh}
+            />
+            <EntityManager
+              name="LayoutDistrictModules"
+              getAll={getLayoutDistrictModules}
+              create={createLayoutDistrictModule}
+              update={updateLayoutDistrictModule}
+              remove={deleteLayoutDistrictModule}
+              fields={[
+                { name: "id", label: "ID" },
+                { name: "layout_district_id", label: "LayoutDistrict" },
+                { name: "module_key", label: "Module Key" },
+                { name: "name", label: "Module Name" },
+                { name: "owner_name", label: "Owner Name" },
+                { name: "owner_email", label: "Owner Email" },
+                { name: "category", label: "Category" },
+                { name: "number_of_endplates", label: "# Endplates", type: "number", min: 1 },
+              ]}
+              selectOptions={{ layout_district_id: layoutDistricts }}
+              key={"layout-district-modules-" + dbRefresh}
+              refreshKey={dbRefresh}
+            />
+          </>
+        )}
+      </div>
+    </>
   );
 }

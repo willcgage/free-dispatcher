@@ -34,8 +34,20 @@ export const createTrain = (data) => apiFetch("/trains/", { method: "POST", body
 export const updateTrain = (id, data) => apiFetch(`/trains/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteTrain = (id) => apiFetch(`/trains/${id}`, { method: "DELETE" });
 
-// Module Endplates API
-export const getModuleEndplates = () => apiFetch("/module_endplates/");
-export const createModuleEndplate = (data) => apiFetch("/module_endplates/", { method: "POST", body: JSON.stringify(data) });
-export const updateModuleEndplate = (id, data) => apiFetch(`/module_endplates/${id}`, { method: "PUT", body: JSON.stringify(data) });
-export const deleteModuleEndplate = (id) => apiFetch(`/module_endplates/${id}`, { method: "DELETE" });
+// Layouts
+export const getLayouts = () => apiFetch("/layouts/");
+export const createLayout = (data) => apiFetch("/layouts/", { method: "POST", body: JSON.stringify(data) });
+export const updateLayout = (id, data) => apiFetch(`/layouts/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteLayout = (id) => apiFetch(`/layouts/${id}`, { method: "DELETE" });
+
+// LayoutDistricts
+export const getLayoutDistricts = () => apiFetch("/layout_districts/");
+export const createLayoutDistrict = (data) => apiFetch("/layout_districts/", { method: "POST", body: JSON.stringify(data) });
+export const updateLayoutDistrict = (id, data) => apiFetch(`/layout_districts/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteLayoutDistrict = (id) => apiFetch(`/layout_districts/${id}`, { method: "DELETE" });
+
+// LayoutDistrictModules
+export const getLayoutDistrictModules = () => apiFetch("/layout_district_modules/");
+export const createLayoutDistrictModule = (data) => apiFetch("/layout_district_modules/", { method: "POST", body: JSON.stringify(data) });
+export const updateLayoutDistrictModule = (id, data) => apiFetch(`/layout_district_modules/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteLayoutDistrictModule = (id) => apiFetch(`/layout_district_modules/${id}`, { method: "DELETE" });

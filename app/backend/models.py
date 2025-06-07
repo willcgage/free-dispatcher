@@ -22,25 +22,34 @@ class Train(Base):
     name = Column(String, nullable=False)
     status = Column(String, default="idle")
 
-class Module(Base):
-    __tablename__ = "modules"
+class Layout(Base):
+    __tablename__ = "layouts"
     id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=False)
-    district_id = Column(Integer, ForeignKey("districts.id"), nullable=False, default=1)
-    number_of_endplates = Column(Integer, nullable=False, default=1)
-    owner = Column(String, nullable=True)  # New field
-    owner_email = Column(String, nullable=True)  # New field
-    is_yard = Column(Boolean, nullable=False, default=False)  # New field for Yard
-    district = relationship("District")
+    start_date = Column(String, nullable=True)
+    end_date = Column(String, nullable=True)
+    location_city = Column(String, nullable=True)
+    location_state = Column(String, nullable=True)
+    districts = relationship("LayoutDistrict", back_populates="layout")
 
-class ModuleEndplate(Base):
-    __tablename__ = "module_endplates"
+class LayoutDistrict(Base):
+    __tablename__ = "layout_districts"
     id = Column(Integer, primary_key=True, index=True)
-    module_id = Column(Integer, ForeignKey("modules.id"), nullable=False)
-    endplate_number = Column(Integer, nullable=False)
-    connected_module_id = Column(Integer, ForeignKey("modules.id"), nullable=True)
-    module = relationship("Module", foreign_keys=[module_id])
-    connected_module = relationship("Module", foreign_keys=[connected_module_id])
-    __table_args__ = (
-        UniqueConstraint('module_id', 'endplate_number', name='uix_module_endplate'),
-    )
+    layout_id = Column(Integer, ForeignKey("layouts.id"), nullable=False)
+    district_id = Column(Integer, ForeignKey("districts.id"), nullable=False)
+    layout = relationship("Layout", back_populates="districts")
+    district = relationship("District")
+    modules = relationship("LayoutDistrictModule", back_populates="layout_district")
+
+class LayoutDistrictModule(Base):
+    __tablename__ = "layout_district_modules"
+    id = Column(Integer, primary_key=True, index=True)
+    layout_district_id = Column(Integer, ForeignKey("layout_districts.id"), nullable=False)
+    module_key = Column(String, nullable=False)  # Key from online registry
+    name = Column(String, nullable=False)
+    owner_name = Column(String, nullable=True)
+    owner_email = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    number_of_endplates = Column(Integer, nullable=True)
+    layout_district = relationship("LayoutDistrict", back_populates="modules")

@@ -41,6 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DB_PATH = os.getenv("DB_PATH", "/var/lib/postgresql/data/dispatcher_db")
 
 # Dependency to get DB session
 async def get_db():
@@ -236,117 +237,6 @@ async def delete_train(train_id: int, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
-# CRUD for Modules
-@app.post("/modules/", response_model=schemas.ModuleRead)
-async def create_module(module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
-    print(f"[DEBUG] create_module: is_yard={module.is_yard} type={type(module.is_yard)}")
-    db_module = models.Module(
-        name=module.name,
-        district_id=module.district_id,
-        number_of_endplates=module.number_of_endplates or 1,
-        owner=module.owner,
-        owner_email=module.owner_email,
-        is_yard=module.is_yard  # Ensure is_yard is set on create
-    )
-    db.add(db_module)
-    await db.commit()
-    await db.refresh(db_module)
-    return db_module
-
-@app.get("/modules/", response_model=List[schemas.ModuleRead])
-async def read_modules(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Module).offset(skip).limit(limit))
-    return result.scalars().all()
-
-@app.get("/modules/{module_id}", response_model=schemas.ModuleRead)
-async def read_module(module_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
-    module = result.scalar_one_or_none()
-    if module is None:
-        raise HTTPException(status_code=404, detail="Module not found")
-    return module
-
-@app.put("/modules/{module_id}", response_model=schemas.ModuleRead)
-async def update_module(module_id: int, module: schemas.ModuleCreate, db: AsyncSession = Depends(get_db)):
-    print(f"[DEBUG] update_module: module_id={module_id}, is_yard={module.is_yard} type={type(module.is_yard)}")
-    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
-    db_module = result.scalar_one_or_none()
-    if db_module is None:
-        raise HTTPException(status_code=404, detail="Module not found")
-    db_module.name = module.name  # type: ignore
-    db_module.district_id = module.district_id  # type: ignore
-    db_module.number_of_endplates = module.number_of_endplates or 1  # type: ignore
-    db_module.owner = module.owner  # type: ignore
-    db_module.owner_email = module.owner_email  # type: ignore
-    db_module.is_yard = module.is_yard  # type: ignore
-    await db.commit()
-    await db.refresh(db_module)
-    return db_module
-
-@app.delete("/modules/{module_id}")
-async def delete_module(module_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Module).where(models.Module.id == module_id))
-    db_module = result.scalar_one_or_none()
-    if db_module is None:
-        raise HTTPException(status_code=404, detail="Module not found")
-    await db.delete(db_module)
-    await db.commit()
-    return {"ok": True}
-
-
-# CRUD for ModuleEndplates
-@app.post("/module_endplates/", response_model=schemas.ModuleEndplateRead)
-async def create_module_endplate(endplate: schemas.ModuleEndplateCreate, db: AsyncSession = Depends(get_db)):
-    db_endplate = models.ModuleEndplate(
-        module_id=endplate.module_id,
-        endplate_number=endplate.endplate_number,
-        connected_module_id=endplate.connected_module_id
-    )
-    db.add(db_endplate)
-    await db.commit()
-    await db.refresh(db_endplate)
-    return db_endplate
-
-@app.get("/module_endplates/", response_model=List[schemas.ModuleEndplateRead])
-async def read_module_endplates(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.ModuleEndplate).offset(skip).limit(limit))
-    return result.scalars().all()
-
-@app.get("/module_endplates/{endplate_id}", response_model=schemas.ModuleEndplateRead)
-async def read_module_endplate(endplate_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.ModuleEndplate).where(models.ModuleEndplate.id == endplate_id))
-    endplate = result.scalar_one_or_none()
-    if endplate is None:
-        raise HTTPException(status_code=404, detail="ModuleEndplate not found")
-    return endplate
-
-@app.put("/module_endplates/{endplate_id}", response_model=schemas.ModuleEndplateRead)
-async def update_module_endplate(endplate_id: int, endplate: schemas.ModuleEndplateCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.ModuleEndplate).where(models.ModuleEndplate.id == endplate_id))
-    db_endplate = result.scalar_one_or_none()
-    if db_endplate is None:
-        raise HTTPException(status_code=404, detail="ModuleEndplate not found")
-    setattr(db_endplate, "module_id", endplate.module_id)
-    setattr(db_endplate, "endplate_number", endplate.endplate_number)
-    setattr(db_endplate, "connected_module_id", endplate.connected_module_id)
-    await db.commit()
-    await db.refresh(db_endplate)
-    return db_endplate
-
-@app.delete("/module_endplates/{endplate_id}")
-async def delete_module_endplate(endplate_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.ModuleEndplate).where(models.ModuleEndplate.id == endplate_id))
-    db_endplate = result.scalar_one_or_none()
-    if db_endplate is None:
-        raise HTTPException(status_code=404, detail="ModuleEndplate not found")
-    await db.delete(db_endplate)
-    await db.commit()
-    return {"ok": True}
-
-
-DB_PATH = os.getenv("DB_PATH", "/var/lib/postgresql/data/dispatcher_db")
-
-
 # Database import/export/reset endpoints are now under /database/
 @app.post("/database/import/")
 async def import_db(file: UploadFile = File(...)):
@@ -390,14 +280,10 @@ async def database_status(db: AsyncSession = Depends(get_db)):
     dispatcher_count = await get_count(models.Dispatcher)
     district_count = await get_count(models.District)
     train_count = await get_count(models.Train)
-    module_count = await get_count(models.Module)
-    endplate_count = await get_count(models.ModuleEndplate)
     counts = {
         "dispatchers": dispatcher_count,
         "districts": district_count,
         "trains": train_count,
-        "modules": module_count,
-        "module_endplates": endplate_count,
     }
     # Orphan check info
     orphan_districts = (await db.execute(
@@ -406,29 +292,11 @@ async def database_status(db: AsyncSession = Depends(get_db)):
             (~models.District.dispatcher_id.in_(select(models.Dispatcher.id)))
         )
     )).scalars().all()
-    orphan_modules = (await db.execute(
-        select(models.Module).where(
-            (models.Module.district_id == None) |
-            (~models.Module.district_id.in_(select(models.District.id)))
-        )
-    )).scalars().all()
-    orphan_endplates = (await db.execute(
-        select(models.ModuleEndplate).where(
-            (models.ModuleEndplate.module_id == None) |
-            (~models.ModuleEndplate.module_id.in_(select(models.Module.id)))
-        )
-    )).scalars().all()
     return {
         "service_counts": counts,
         "orphan_districts": [
             {"id": d.id, "name": d.name, "dispatcher_id": d.dispatcher_id} for d in orphan_districts
         ],
-        "orphan_modules": [
-            {"id": m.id, "name": m.name, "district_id": m.district_id} for m in orphan_modules
-        ],
-        "orphan_endplates": [
-            {"id": e.id, "module_id": e.module_id, "endplate_number": e.endplate_number} for e in orphan_endplates
-        ]
     }
 
 
@@ -567,3 +435,135 @@ def status():
 def get_ip():
     # Deprecated: Use /status for IP info. Kept for compatibility.
     return status()
+
+# CRUD for Layouts
+@app.post("/layouts/", response_model=schemas.LayoutRead)
+async def create_layout(layout: schemas.LayoutCreate, db: AsyncSession = Depends(get_db)):
+    db_layout = models.Layout(**layout.dict())
+    db.add(db_layout)
+    await db.commit()
+    await db.refresh(db_layout)
+    return db_layout
+
+@app.get("/layouts/", response_model=List[schemas.LayoutRead])
+async def read_layouts(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Layout).offset(skip).limit(limit))
+    return result.scalars().all()
+
+@app.get("/layouts/{layout_id}", response_model=schemas.LayoutRead)
+async def read_layout(layout_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Layout).where(models.Layout.id == layout_id))
+    layout = result.scalar_one_or_none()
+    if layout is None:
+        raise HTTPException(status_code=404, detail="Layout not found")
+    return layout
+
+@app.put("/layouts/{layout_id}", response_model=schemas.LayoutRead)
+async def update_layout(layout_id: int, layout: schemas.LayoutCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Layout).where(models.Layout.id == layout_id))
+    db_layout = result.scalar_one_or_none()
+    if db_layout is None:
+        raise HTTPException(status_code=404, detail="Layout not found")
+    for key, value in layout.dict().items():
+        setattr(db_layout, key, value)
+    await db.commit()
+    await db.refresh(db_layout)
+    return db_layout
+
+@app.delete("/layouts/{layout_id}")
+async def delete_layout(layout_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Layout).where(models.Layout.id == layout_id))
+    db_layout = result.scalar_one_or_none()
+    if db_layout is None:
+        raise HTTPException(status_code=404, detail="Layout not found")
+    await db.delete(db_layout)
+    await db.commit()
+    return {"ok": True}
+
+# CRUD for LayoutDistricts
+@app.post("/layout_districts/", response_model=schemas.LayoutDistrictRead)
+async def create_layout_district(ld: schemas.LayoutDistrictCreate, db: AsyncSession = Depends(get_db)):
+    db_ld = models.LayoutDistrict(**ld.dict())
+    db.add(db_ld)
+    await db.commit()
+    await db.refresh(db_ld)
+    return db_ld
+
+@app.get("/layout_districts/", response_model=List[schemas.LayoutDistrictRead])
+async def read_layout_districts(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrict).offset(skip).limit(limit))
+    return result.scalars().all()
+
+@app.get("/layout_districts/{ld_id}", response_model=schemas.LayoutDistrictRead)
+async def read_layout_district(ld_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrict).where(models.LayoutDistrict.id == ld_id))
+    ld = result.scalar_one_or_none()
+    if ld is None:
+        raise HTTPException(status_code=404, detail="LayoutDistrict not found")
+    return ld
+
+@app.put("/layout_districts/{ld_id}", response_model=schemas.LayoutDistrictRead)
+async def update_layout_district(ld_id: int, ld: schemas.LayoutDistrictCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrict).where(models.LayoutDistrict.id == ld_id))
+    db_ld = result.scalar_one_or_none()
+    if db_ld is None:
+        raise HTTPException(status_code=404, detail="LayoutDistrict not found")
+    for key, value in ld.dict().items():
+        setattr(db_ld, key, value)
+    await db.commit()
+    await db.refresh(db_ld)
+    return db_ld
+
+@app.delete("/layout_districts/{ld_id}")
+async def delete_layout_district(ld_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrict).where(models.LayoutDistrict.id == ld_id))
+    db_ld = result.scalar_one_or_none()
+    if db_ld is None:
+        raise HTTPException(status_code=404, detail="LayoutDistrict not found")
+    await db.delete(db_ld)
+    await db.commit()
+    return {"ok": True}
+
+# CRUD for LayoutDistrictModules
+@app.post("/layout_district_modules/", response_model=schemas.LayoutDistrictModuleRead)
+async def create_layout_district_module(ldm: schemas.LayoutDistrictModuleCreate, db: AsyncSession = Depends(get_db)):
+    db_ldm = models.LayoutDistrictModule(**ldm.dict())
+    db.add(db_ldm)
+    await db.commit()
+    await db.refresh(db_ldm)
+    return db_ldm
+
+@app.get("/layout_district_modules/", response_model=List[schemas.LayoutDistrictModuleRead])
+async def read_layout_district_modules(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrictModule).offset(skip).limit(limit))
+    return result.scalars().all()
+
+@app.get("/layout_district_modules/{ldm_id}", response_model=schemas.LayoutDistrictModuleRead)
+async def read_layout_district_module(ldm_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrictModule).where(models.LayoutDistrictModule.id == ldm_id))
+    ldm = result.scalar_one_or_none()
+    if ldm is None:
+        raise HTTPException(status_code=404, detail="LayoutDistrictModule not found")
+    return ldm
+
+@app.put("/layout_district_modules/{ldm_id}", response_model=schemas.LayoutDistrictModuleRead)
+async def update_layout_district_module(ldm_id: int, ldm: schemas.LayoutDistrictModuleCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrictModule).where(models.LayoutDistrictModule.id == ldm_id))
+    db_ldm = result.scalar_one_or_none()
+    if db_ldm is None:
+        raise HTTPException(status_code=404, detail="LayoutDistrictModule not found")
+    for key, value in ldm.dict().items():
+        setattr(db_ldm, key, value)
+    await db.commit()
+    await db.refresh(db_ldm)
+    return db_ldm
+
+@app.delete("/layout_district_modules/{ldm_id}")
+async def delete_layout_district_module(ldm_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.LayoutDistrictModule).where(models.LayoutDistrictModule.id == ldm_id))
+    db_ldm = result.scalar_one_or_none()
+    if db_ldm is None:
+        raise HTTPException(status_code=404, detail="LayoutDistrictModule not found")
+    await db.delete(db_ldm)
+    await db.commit()
+    return {"ok": True}

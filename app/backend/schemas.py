@@ -46,31 +46,47 @@ class TrainRead(TrainBase):
     class Config:
         orm_mode = True
 
-class ModuleBase(BaseModel):
+class LayoutBase(BaseModel):
+    key: str
     name: str
-    district_id: int
-    number_of_endplates: int = 1
-    owner: Optional[str] = None  # New field
-    owner_email: Optional[str] = None  # New field
-    is_yard: bool = False  # New field for Yard
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    location_city: Optional[str] = None
+    location_state: Optional[str] = None
 
-class ModuleCreate(ModuleBase):
+class LayoutCreate(LayoutBase):
     pass
 
-class ModuleRead(ModuleBase):
+class LayoutRead(LayoutBase):
     id: int
     class Config:
         orm_mode = True
 
-class ModuleEndplateBase(BaseModel):
-    module_id: int
-    endplate_number: int
-    connected_module_id: Optional[int] = None
+class LayoutDistrictBase(BaseModel):
+    layout_id: int
+    district_id: int
 
-class ModuleEndplateCreate(ModuleEndplateBase):
+class LayoutDistrictCreate(LayoutDistrictBase):
     pass
 
-class ModuleEndplateRead(ModuleEndplateBase):
+class LayoutDistrictRead(LayoutDistrictBase):
+    id: int
+    class Config:
+        orm_mode = True
+
+class LayoutDistrictModuleBase(BaseModel):
+    layout_district_id: int
+    module_key: str
+    name: str
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
+    category: Optional[str] = None
+    number_of_endplates: Optional[int] = None
+
+class LayoutDistrictModuleCreate(LayoutDistrictModuleBase):
+    pass
+
+class LayoutDistrictModuleRead(LayoutDistrictModuleBase):
     id: int
     class Config:
         orm_mode = True
