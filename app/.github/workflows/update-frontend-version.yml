@@ -1,0 +1,24 @@
+name: Update Frontend Version
+
+on:
+  push:
+    tags:
+      - 'v*'  # Only run on version tags, e.g. v1.2.3
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: node scripts/update-frontend-version.js
+      - name: Commit and push updated versions.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/versions.json
+          git commit -m "Update frontend_version in versions.json [CI skip]" || echo "No changes to commit"
+          git push
