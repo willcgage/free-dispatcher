@@ -97,13 +97,32 @@
   position: fixed;
   top: 18px;
   right: 32px;
-  z-index: 3000;
+  z-index: 3001; /* higher than menu */
   background: var(--dashboard-bg) !important;
   color: var(--dashboard-fg) !important;
   border: 1px solid var(--dashboard-border) !important;
   border-radius: 8px;
   padding: 6px 16px;
   box-shadow: 0 2px 8px #0002;
+}
+
+.menu-topleft {
+  position: fixed;
+  top: 18px;
+  left: 32px;
+  z-index: 3000;
+}
+
+@media (max-width: 600px) {
+  .theme-switcher-topright {
+    right: 8px;
+    top: 8px;
+    padding: 4px 8px;
+  }
+  .menu-topleft {
+    left: 8px;
+    top: 8px;
+  }
 }
 
 .dashboard-container, .config-container {

@@ -2,15 +2,8 @@
 // Provides CRUD management for Dispatchers, Districts, Trains, and Modules
 // Uses a generic EntityManager component for each entity type
 
-import React, { useEffect, useState, useRef } from "react";
-import {
-  getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher,
-  getDistricts, createDistrict, updateDistrict, deleteDistrict,
-  getTrains, createTrain, updateTrain, deleteTrain,
-  getLayouts, createLayout, updateLayout, deleteLayout,
-  getLayoutDistricts, createLayoutDistrict, updateLayoutDistrict, deleteLayoutDistrict,
-  getLayoutDistrictModules, createLayoutDistrictModule, updateLayoutDistrictModule, deleteLayoutDistrictModule
-} from "./api";
+import React, { useEffect, useState } from "react";
+import { getLayouts, createLayout, updateLayout, deleteLayout, getDistricts, createDistrict, updateDistrict, deleteDistrict, getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher } from "./api";
 
 /**
  * EntityManager - Generic CRUD UI for a given entity type.
@@ -278,7 +271,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                     </div>
                   );
                 }
-                if (mergedSelectOptions[f.name]) {
+                if (f.type === "select" && f.options) {
                   return (
                     <div key={f.name} style={{ marginBottom: 8 }}>
                       <label>{f.label}: 
@@ -289,7 +282,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                           required={f.required}
                         >
                           <option value="">Select {f.label}</option>
-                          {mergedSelectOptions[f.name].map((opt) => (
+                          {f.options.map((opt) => (
                             <option key={opt.id} value={opt.id}>{opt.name}</option>
                           ))}
                         </select>
@@ -361,7 +354,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                     </div>
                   );
                 }
-                if (mergedSelectOptions[f.name]) {
+                if (f.type === "select" && f.options) {
                   return (
                     <div key={f.name} style={{ marginBottom: 8 }}>
                       <label>{f.label}: 
@@ -372,7 +365,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                           required={f.required}
                         >
                           <option value="">Select {f.label}</option>
-                          {mergedSelectOptions[f.name].map((opt) => (
+                          {f.options.map((opt) => (
                             <option key={opt.id} value={opt.id}>{opt.name}</option>
                           ))}
                         </select>
@@ -430,22 +423,9 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
 function ConfigurationPage({ onDbChange, onBackToAdmin }) {
   const [dbRefresh, setDbRefresh] = useState(0);
   const [layouts, setLayouts] = useState([]);
-  const [districts, setDistricts] = useState([]);
-  const [layoutDistricts, setLayoutDistricts] = useState([]);
-  const [layoutDistrictModules, setLayoutDistrictModules] = useState([]);
 
   useEffect(() => {
-    Promise.all([
-      getLayouts(),
-      getDistricts(),
-      getLayoutDistricts(),
-      getLayoutDistrictModules()
-    ]).then(([layouts, districts, layoutDistricts, layoutDistrictModules]) => {
-      setLayouts(layouts);
-      setDistricts(districts);
-      setLayoutDistricts(layoutDistricts);
-      setLayoutDistrictModules(layoutDistrictModules);
-    });
+    getLayouts().then(setLayouts);
   }, [dbRefresh]);
 
   return (
@@ -460,51 +440,26 @@ function ConfigurationPage({ onDbChange, onBackToAdmin }) {
         remove={deleteLayout}
         fields={[
           { name: "id", label: "ID" },
-          { name: "key", label: "Key" },
           { name: "name", label: "Name" },
-          { name: "start_date", label: "Start Date" },
-          { name: "end_date", label: "End Date" },
+          { name: "start_date", label: "Start Date", type: "date" },
+          { name: "end_date", label: "End Date", type: "date" },
           { name: "location_city", label: "City" },
-          { name: "location_state", label: "State" },
+          { name: "location_state", label: "State", type: "select", options: [
+    { id: "AL", name: "Alabama" }, { id: "AK", name: "Alaska" }, { id: "AZ", name: "Arizona" }, { id: "AR", name: "Arkansas" },
+    { id: "CA", name: "California" }, { id: "CO", name: "Colorado" }, { id: "CT", name: "Connecticut" }, { id: "DE", name: "Delaware" },
+    { id: "FL", name: "Florida" }, { id: "GA", name: "Georgia" }, { id: "HI", name: "Hawaii" }, { id: "ID", name: "Idaho" },
+    { id: "IL", name: "Illinois" }, { id: "IN", name: "Indiana" }, { id: "IA", name: "Iowa" }, { id: "KS", name: "Kansas" },
+    { id: "KY", name: "Kentucky" }, { id: "LA", name: "Louisiana" }, { id: "ME", name: "Maine" }, { id: "MD", name: "Maryland" },
+    { id: "MA", name: "Massachusetts" }, { id: "MI", name: "Michigan" }, { id: "MN", name: "Minnesota" }, { id: "MS", name: "Mississippi" },
+    { id: "MO", name: "Missouri" }, { id: "MT", name: "Montana" }, { id: "NE", name: "Nebraska" }, { id: "NV", name: "Nevada" },
+    { id: "NH", name: "New Hampshire" }, { id: "NJ", name: "New Jersey" }, { id: "NM", name: "New Mexico" }, { id: "NY", name: "New York" },
+    { id: "NC", name: "North Carolina" }, { id: "ND", name: "North Dakota" }, { id: "OH", name: "Ohio" }, { id: "OK", name: "Oklahoma" },
+    { id: "OR", name: "Oregon" }, { id: "PA", name: "Pennsylvania" }, { id: "RI", name: "Rhode Island" }, { id: "SC", name: "South Carolina" },
+    { id: "SD", name: "South Dakota" }, { id: "TN", name: "Tennessee" }, { id: "TX", name: "Texas" }, { id: "UT", name: "Utah" },
+    { id: "VT", name: "Vermont" }, { id: "VA", name: "Virginia" }, { id: "WA", name: "Washington" }, { id: "WV", name: "West Virginia" },
+    { id: "WI", name: "Wisconsin" }, { id: "WY", name: "Wyoming" }
+  ] },
         ]}
-        key={"layouts-" + dbRefresh}
-        refreshKey={dbRefresh}
-        onRefresh={() => setDbRefresh((v) => v + 1)}
-      />
-      <EntityManager
-        name="LayoutDistricts"
-        getAll={getLayoutDistricts}
-        create={createLayoutDistrict}
-        update={updateLayoutDistrict}
-        remove={deleteLayoutDistrict}
-        fields={[
-          { name: "id", label: "ID" },
-          { name: "layout_id", label: "Layout" },
-          { name: "district_id", label: "District" },
-        ]}
-        selectOptions={{ layout_id: layouts, district_id: districts }}
-        key={"layout-districts-" + dbRefresh}
-        refreshKey={dbRefresh}
-        onRefresh={() => setDbRefresh((v) => v + 1)}
-      />
-      <EntityManager
-        name="LayoutDistrictModules"
-        getAll={getLayoutDistrictModules}
-        create={createLayoutDistrictModule}
-        update={updateLayoutDistrictModule}
-        remove={deleteLayoutDistrictModule}
-        fields={[
-          { name: "id", label: "ID" },
-          { name: "layout_district_id", label: "LayoutDistrict" },
-          { name: "module_key", label: "Module Key" },
-          { name: "name", label: "Module Name" },
-          { name: "owner_name", label: "Owner Name" },
-          { name: "owner_email", label: "Owner Email" },
-          { name: "category", label: "Category" },
-          { name: "number_of_endplates", label: "# Endplates", type: "number", min: 1 },
-        ]}
-        selectOptions={{ layout_district_id: layoutDistricts }}
-        key={"layout-district-modules-" + dbRefresh}
         refreshKey={dbRefresh}
         onRefresh={() => setDbRefresh((v) => v + 1)}
       />
@@ -714,22 +669,69 @@ function AppDashboard({ layouts, onCreateLayout, onSelectLayout, versions }) {
   );
 }
 
+function LayoutDetailPage({ layout, onBack }) {
+  const [districts, setDistricts] = useState([]);
+  const [dispatchers, setDispatchers] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (layout) {
+      getDistricts(layout.id).then(setDistricts);
+    }
+    getDispatchers().then(setDispatchers);
+  }, [layout, refreshKey]);
+
+  return (
+    <div style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
+      <button onClick={onBack} style={{ marginBottom: 16, fontWeight: 'bold' }}>Back to Layouts</button>
+      <h2>Layout: {layout.name}</h2>
+      <div style={{ marginBottom: 24 }}>
+        <b>City:</b> {layout.location_city} <b>State:</b> {layout.location_state} <b>Start:</b> {layout.start_date} <b>End:</b> {layout.end_date}
+      </div>
+      <EntityManager
+        name="Districts"
+        getAll={() => getDistricts(layout.id)}
+        create={(data) => createDistrict(layout.id, { ...data, layout_id: layout.id })}
+        update={updateDistrict}
+        remove={deleteDistrict}
+        fields={[
+          { name: "id", label: "ID" },
+          { name: "name", label: "Name" },
+          { name: "channel_or_frequency", label: "Channel or Frequency" },
+        ]}
+        key={"districts-" + layout.id + "-" + refreshKey}
+        refreshKey={refreshKey}
+        onRefresh={() => setRefreshKey((v) => v + 1)}
+      />
+      <h3 style={{ marginTop: 32 }}>Dispatchers (Global)</h3>
+      <EntityManager
+        name="Dispatchers"
+        getAll={getDispatchers}
+        create={createDispatcher}
+        update={updateDispatcher}
+        remove={deleteDispatcher}
+        fields={[
+          { name: "id", label: "ID" },
+          { name: "last_name", label: "Last Name" },
+          { name: "first_name", label: "First Name" },
+          { name: "cell_number", label: "Cell Number" },
+        ]}
+        key={"dispatchers-" + refreshKey}
+        refreshKey={refreshKey}
+        onRefresh={() => setRefreshKey((v) => v + 1)}
+      />
+    </div>
+  );
+}
+
 export default function App() {
   const [dbRefresh, setDbRefresh] = useState(0);
-  const [page, setPage] = useState("dashboard"); // default to dashboard
+  const [page, setPage] = useState("dashboard");
   const [adminPage, setAdminPage] = useState("admin-overview");
-  const [dispatchers, setDispatchers] = useState([]);
-  const [districts, setDistricts] = useState([]);
-  const [modules, setModules] = useState([]);
   const [layouts, setLayouts] = useState([]);
-  const [layoutDistricts, setLayoutDistricts] = useState([]);
-  const [layoutDistrictModules, setLayoutDistrictModules] = useState([]);
-  const [districtsRefresh, setDistrictsRefresh] = useState(0);
-  const [modulesRefresh, setModulesRefresh] = useState(0);
   const [versions, setVersions] = useState({});
   const [selectedLayout, setSelectedLayout] = useState(null);
 
-  // Fetch versions.json on mount
   useEffect(() => {
     fetch('/versions.json')
       .then(res => res.json())
@@ -737,57 +739,24 @@ export default function App() {
       .catch(() => setVersions({}));
   }, []);
 
-  // Only fetch data for dashboard/main page
   useEffect(() => {
-    if (page === "dashboard") {
-      getLayouts().then(setLayouts);
-    }
-    if (page === "main") {
-      Promise.all([
-        getLayouts(),
-        getDispatchers(),
-        getDistricts(),
-        getModules(),
-        getLayoutDistricts(),
-        getLayoutDistrictModules()
-      ]).then(([
-        layouts,
-        dispatchers,
-        districts,
-        modules,
-        layoutDistricts,
-        layoutDistrictModules
-      ]) => {
-        setLayouts(layouts);
-        setDispatchers(dispatchers);
-        setDistricts(districts);
-        setModules(modules);
-        setLayoutDistricts(layoutDistricts);
-        setLayoutDistrictModules(layoutDistrictModules);
-      });
-    }
+    getLayouts().then(setLayouts);
   }, [page, dbRefresh]);
 
-  // Navigation handler for GlobalMenu
   const handleNavigate = (target) => {
     if (target === 'dashboard') setPage('dashboard');
     else if (target === 'admin') setPage('admin');
     else if (target === 'admin-config') { setPage('admin'); setAdminPage('admin-config'); }
-    // Add more as needed
   };
 
-  // Handler for Create Layout button
   const handleCreateLayout = () => {
     setPage('admin');
     setAdminPage('admin-config');
-    // Optionally, scroll to Layouts section if needed
   };
 
-  // Handler for Select Layout button
   const handleSelectLayout = (layout) => {
     setSelectedLayout(layout);
     setPage('main');
-    // In the future, could show a layout selection view
   };
 
   return (
@@ -796,12 +765,11 @@ export default function App() {
       <ThemeSwitcher />
       <div style={{ maxWidth: 900, margin: "auto" }}>
         <h1>Train Dispatcher Admin</h1>
-        {/* Remove old ThemeSwitcher here, now top right */}
         {page === "dashboard" ? (
           <AppDashboard
             layouts={layouts}
             onCreateLayout={handleCreateLayout}
-            onSelectLayout={handleSelectLayout}
+            onSelectLayout={setSelectedLayout}
             versions={versions}
           />
         ) : page === "admin" ? (
@@ -810,63 +778,40 @@ export default function App() {
           ) : (
             <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} versions={versions} />
           )
+        ) : selectedLayout ? (
+          <LayoutDetailPage layout={selectedLayout} onBack={() => setSelectedLayout(null)} />
         ) : (
-          // Main page: show entity managers for selected layout (future: filter by selectedLayout)
-          <>
-            <EntityManager
-              name="Layouts"
-              getAll={getLayouts}
-              create={createLayout}
-              update={updateLayout}
-              remove={deleteLayout}
-              fields={[
-                { name: "id", label: "ID" },
-                { name: "key", label: "Key" },
-                { name: "name", label: "Name" },
-                { name: "start_date", label: "Start Date" },
-                { name: "end_date", label: "End Date" },
-                { name: "location_city", label: "City" },
-                { name: "location_state", label: "State" },
-              ]}
-              key={"layouts-" + dbRefresh}
-              refreshKey={dbRefresh}
-            />
-            <EntityManager
-              name="LayoutDistricts"
-              getAll={getLayoutDistricts}
-              create={createLayoutDistrict}
-              update={updateLayoutDistrict}
-              remove={deleteLayoutDistrict}
-              fields={[
-                { name: "id", label: "ID" },
-                { name: "layout_id", label: "Layout" },
-                { name: "district_id", label: "District" },
-              ]}
-              selectOptions={{ layout_id: layouts, district_id: districts }}
-              key={"layout-districts-" + dbRefresh}
-              refreshKey={dbRefresh}
-            />
-            <EntityManager
-              name="LayoutDistrictModules"
-              getAll={getLayoutDistrictModules}
-              create={createLayoutDistrictModule}
-              update={updateLayoutDistrictModule}
-              remove={deleteLayoutDistrictModule}
-              fields={[
-                { name: "id", label: "ID" },
-                { name: "layout_district_id", label: "LayoutDistrict" },
-                { name: "module_key", label: "Module Key" },
-                { name: "name", label: "Module Name" },
-                { name: "owner_name", label: "Owner Name" },
-                { name: "owner_email", label: "Owner Email" },
-                { name: "category", label: "Category" },
-                { name: "number_of_endplates", label: "# Endplates", type: "number", min: 1 },
-              ]}
-              selectOptions={{ layout_district_id: layoutDistricts }}
-              key={"layout-district-modules-" + dbRefresh}
-              refreshKey={dbRefresh}
-            />
-          </>
+          <EntityManager
+            name="Layouts"
+            getAll={getLayouts}
+            create={createLayout}
+            update={updateLayout}
+            remove={deleteLayout}
+            fields={[
+              { name: "id", label: "ID" },
+              { name: "name", label: "Name" },
+              { name: "start_date", label: "Start Date", type: "date" },
+              { name: "end_date", label: "End Date", type: "date" },
+              { name: "location_city", label: "City" },
+              { name: "location_state", label: "State", type: "select", options: [
+                { id: "AL", name: "Alabama" }, { id: "AK", name: "Alaska" }, { id: "AZ", name: "Arizona" }, { id: "AR", name: "Arkansas" },
+                { id: "CA", name: "California" }, { id: "CO", name: "Colorado" }, { id: "CT", name: "Connecticut" }, { id: "DE", name: "Delaware" },
+                { id: "FL", name: "Florida" }, { id: "GA", name: "Georgia" }, { id: "HI", name: "Hawaii" }, { id: "ID", name: "Idaho" },
+                { id: "IL", name: "Illinois" }, { id: "IN", name: "Indiana" }, { id: "IA", name: "Iowa" }, { id: "KS", name: "Kansas" },
+                { id: "KY", name: "Kentucky" }, { id: "LA", name: "Louisiana" }, { id: "ME", name: "Maine" }, { id: "MD", name: "Maryland" },
+                { id: "MA", name: "Massachusetts" }, { id: "MI", name: "Michigan" }, { id: "MN", name: "Minnesota" }, { id: "MS", name: "Mississippi" },
+                { id: "MO", name: "Missouri" }, { id: "MT", name: "Montana" }, { id: "NE", name: "Nebraska" }, { id: "NV", name: "Nevada" },
+                { id: "NH", name: "New Hampshire" }, { id: "NJ", name: "New Jersey" }, { id: "NM", name: "New Mexico" }, { id: "NY", name: "New York" },
+                { id: "NC", name: "North Carolina" }, { id: "ND", name: "North Dakota" }, { id: "OH", name: "Ohio" }, { id: "OK", name: "Oklahoma" },
+                { id: "OR", name: "Oregon" }, { id: "PA", name: "Pennsylvania" }, { id: "RI", name: "Rhode Island" }, { id: "SC", name: "South Carolina" },
+                { id: "SD", name: "South Dakota" }, { id: "TN", name: "Tennessee" }, { id: "TX", name: "Texas" }, { id: "UT", name: "Utah" },
+                { id: "VT", name: "Vermont" }, { id: "VA", name: "Virginia" }, { id: "WA", name: "Washington" }, { id: "WV", name: "West Virginia" },
+                { id: "WI", name: "Wisconsin" }, { id: "WY", name: "Wyoming" }
+            ]},
+            ]}
+            key={"layouts-" + dbRefresh}
+            refreshKey={dbRefresh}
+          />
         )}
       </div>
     </>

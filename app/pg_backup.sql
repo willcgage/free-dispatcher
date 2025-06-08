@@ -106,17 +106,6 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: alembic_version; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.alembic_version (
-    version_num character varying(32) NOT NULL
-);
-
-
-ALTER TABLE public.alembic_version OWNER TO postgres;
-
---
 -- Name: dispatchers; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -331,14 +320,6 @@ ALTER TABLE ONLY public.trains ALTER COLUMN id SET DEFAULT nextval('public.train
 
 
 --
--- Data for Name: alembic_version; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY public.alembic_version (version_num) FROM stdin;
-\.
-
-
---
 -- Data for Name: dispatchers; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -427,14 +408,6 @@ SELECT pg_catalog.setval('public.modules_id_seq', 7, true);
 --
 
 SELECT pg_catalog.setval('public.trains_id_seq', 1, false);
-
-
---
--- Name: alembic_version alembic_version_pkc; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.alembic_version
-    ADD CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num);
 
 
 --

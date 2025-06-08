@@ -1,6 +1,9 @@
+#version: '3.8'
 services:
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "8001:8000"  # Changed host port to 8001 to resolve conflict
     depends_on:

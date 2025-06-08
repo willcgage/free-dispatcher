@@ -1,53 +1,8 @@
-import models
 from pydantic import BaseModel
 from typing import Optional
-import enum
-
-class DispatcherBase(BaseModel):
-    name: str
-
-class DispatcherCreate(DispatcherBase):
-    pass
-
-class DispatcherRead(DispatcherBase):
-    id: int
-    class Config:
-        orm_mode = True
-
-class DistrictBase(BaseModel):
-    name: str
-    dispatcher_id: int
-
-class DistrictCreate(DistrictBase):
-    pass
-
-class DistrictRead(DistrictBase):
-    id: int
-    class Config:
-        orm_mode = True
-
-class ModuleCategory(str, enum.Enum):
-    THROUGH = "Through"
-    SIDING = "Siding"
-    YARD = "Yard"
-    INDUSTRY = "Industry"
-    CROSSING_JUNCTION = "Crossing/Junction"
-    OTHER = "Other"
-
-class TrainBase(BaseModel):
-    name: str
-    status: Optional[str] = "idle"
-
-class TrainCreate(TrainBase):
-    pass
-
-class TrainRead(TrainBase):
-    id: int
-    class Config:
-        orm_mode = True
 
 class LayoutBase(BaseModel):
-    key: str
+    key: Optional[str] = None
     name: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -62,31 +17,28 @@ class LayoutRead(LayoutBase):
     class Config:
         orm_mode = True
 
-class LayoutDistrictBase(BaseModel):
+class DistrictBase(BaseModel):
+    name: str
+    channel_or_frequency: Optional[str] = None
     layout_id: int
-    district_id: int
 
-class LayoutDistrictCreate(LayoutDistrictBase):
+class DistrictCreate(DistrictBase):
     pass
 
-class LayoutDistrictRead(LayoutDistrictBase):
+class DistrictRead(DistrictBase):
     id: int
     class Config:
         orm_mode = True
 
-class LayoutDistrictModuleBase(BaseModel):
-    layout_district_id: int
-    module_key: str
-    name: str
-    owner_name: Optional[str] = None
-    owner_email: Optional[str] = None
-    category: Optional[str] = None
-    number_of_endplates: Optional[int] = None
+class DispatcherBase(BaseModel):
+    last_name: str
+    first_name: str
+    cell_number: Optional[str] = None
 
-class LayoutDistrictModuleCreate(LayoutDistrictModuleBase):
+class DispatcherCreate(DispatcherBase):
     pass
 
-class LayoutDistrictModuleRead(LayoutDistrictModuleBase):
+class DispatcherRead(DispatcherBase):
     id: int
     class Config:
         orm_mode = True
