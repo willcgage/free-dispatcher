@@ -105,3 +105,5 @@ Environment-based configuration for different deployment scenarios,
 ,
 
   This is a specialized application serving the active model railroad community, providing digital tools to manage what has traditionally been a  paper-based coordination process.
+
+  -- ReadME content by Dwight Kelly 
