@@ -315,6 +315,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                         min={f.min || undefined}
                         required={f.required}
                         readOnly={f.name === "id"}
+                        autoComplete="off"
                       />
                     </label>
                   </div>
@@ -398,6 +399,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                         min={f.min || undefined}
                         required={f.required}
                         readOnly={f.name === "id"}
+                        autoComplete="off"
                       />
                     </label>
                   </div>
@@ -632,7 +634,7 @@ function GlobalMenu({ onNavigate }) {
 /**
  * AppDashboard - Main landing page, shows version info and layout selection/creation.
  */
-function AppDashboard({ layouts, onCreateLayout, onSelectLayout, versions }) {
+function AppDashboard({ layouts, onCreateLayout, onSelectLayout, versions, onOpenLayoutSelect }) {
   return (
     <div className="app-dashboard">
       <h2 style={{ marginBottom: 16 }}>App Dashboard</h2>
@@ -659,12 +661,62 @@ function AppDashboard({ layouts, onCreateLayout, onSelectLayout, versions }) {
           </div>
           <button
             style={{ fontSize: 18, padding: '10px 28px', background: 'var(--dashboard-btn-select-bg, #388e3c)', color: 'var(--dashboard-btn-select-fg, #fff)', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
-            onClick={() => onSelectLayout(layouts[0])}
+            onClick={onOpenLayoutSelect}
           >
             Select Layout
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function LayoutSelectPopup({ layouts, onSelect, onClose }) {
+  const [search, setSearch] = React.useState("");
+  const filteredLayouts = layouts.filter(layout => {
+    const q = search.toLowerCase();
+    // Check name, city, state, start_date, end_date
+    return (
+      layout.name.toLowerCase().includes(q) ||
+      (layout.location_city && layout.location_city.toLowerCase().includes(q)) ||
+      (layout.location_state && layout.location_state.toLowerCase().includes(q)) ||
+      (layout.start_date && layout.start_date.toLowerCase().includes(q)) ||
+      (layout.end_date && layout.end_date.toLowerCase().includes(q))
+    );
+  });
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#fff', color: '#222', padding: 24, borderRadius: 8, minWidth: 320, position: 'relative' }}>
+        <h3>Select a Layout</h3>
+        <input
+          type="text"
+          placeholder="Search by name, city, state, or date..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ width: '100%', marginBottom: 16, padding: 8, borderRadius: 4, border: '1px solid #aaa' }}
+          autoFocus
+        />
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 300, overflowY: 'auto' }}>
+          {filteredLayouts.map(layout => (
+            <li key={layout.id} style={{ marginBottom: 12 }}>
+              <button
+                style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #aaa', background: '#f5f5f5', cursor: 'pointer', fontWeight: 600 }}
+                onClick={() => onSelect(layout)}
+              >
+                {layout.name} ({layout.location_city}, {layout.location_state})
+                <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                  {layout.start_date} - {layout.end_date}
+                </div>
+              </button>
+            </li>
+          ))}
+          {filteredLayouts.length === 0 && (
+            <li style={{ color: '#888', textAlign: 'center', marginTop: 24 }}>No layouts found.</li>
+          )}
+        </ul>
+        <button style={{ marginTop: 16 }} onClick={onClose}>Cancel</button>
+      </div>
     </div>
   );
 }
@@ -724,13 +776,14 @@ function LayoutDetailPage({ layout, onBack }) {
   );
 }
 
-export default function App() {
+function App() {
   const [dbRefresh, setDbRefresh] = useState(0);
   const [page, setPage] = useState("dashboard");
   const [adminPage, setAdminPage] = useState("admin-overview");
   const [layouts, setLayouts] = useState([]);
   const [versions, setVersions] = useState({});
   const [selectedLayout, setSelectedLayout] = useState(null);
+  const [showLayoutSelect, setShowLayoutSelect] = useState(false);
 
   useEffect(() => {
     fetch('/versions.json')
@@ -756,8 +809,12 @@ export default function App() {
 
   const handleSelectLayout = (layout) => {
     setSelectedLayout(layout);
+    setShowLayoutSelect(false);
     setPage('main');
   };
+
+  const handleOpenLayoutSelect = () => setShowLayoutSelect(true);
+  const handleCloseLayoutSelect = () => setShowLayoutSelect(false);
 
   return (
     <>
@@ -766,12 +823,22 @@ export default function App() {
       <div style={{ maxWidth: 900, margin: "auto" }}>
         <h1>Train Dispatcher Admin</h1>
         {page === "dashboard" ? (
-          <AppDashboard
-            layouts={layouts}
-            onCreateLayout={handleCreateLayout}
-            onSelectLayout={setSelectedLayout}
-            versions={versions}
-          />
+          <>
+            <AppDashboard
+              layouts={layouts}
+              onCreateLayout={handleCreateLayout}
+              onSelectLayout={handleSelectLayout}
+              versions={versions}
+              onOpenLayoutSelect={handleOpenLayoutSelect}
+            />
+            {showLayoutSelect && (
+              <LayoutSelectPopup
+                layouts={layouts}
+                onSelect={handleSelectLayout}
+                onClose={handleCloseLayoutSelect}
+              />
+            )}
+          </>
         ) : page === "admin" ? (
           adminPage === "admin-config" ? (
             <ConfigurationPage onDbChange={() => setDbRefresh((v) => v + 1)} onBackToAdmin={() => setAdminPage("admin-overview")} />
@@ -817,3 +884,5 @@ export default function App() {
     </>
   );
 }
+
+export default App;

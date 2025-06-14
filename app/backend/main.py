@@ -1,13 +1,28 @@
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from . import models, schemas
+import models, schemas
 from database import get_db
 from typing import List
-from .database import sync_engine
-from .models import Base
+from database import sync_engine
+from models import Base
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.requests import Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 @app.on_event("startup")
 def create_tables():
@@ -28,7 +43,9 @@ async def read_layout(layout_id: int, db: AsyncSession = Depends(get_db)):
 
 @app.post("/layouts/", response_model=schemas.LayoutRead)
 async def create_layout(layout: schemas.LayoutCreate, db: AsyncSession = Depends(get_db)):
-    db_layout = models.Layout(**layout.dict())
+    layout_data = layout.dict()
+    layout_data.pop("key", None)  # Remove 'key' if present
+    db_layout = models.Layout(**layout_data)
     db.add(db_layout)
     await db.commit()
     await db.refresh(db_layout)
@@ -64,7 +81,10 @@ async def read_districts(layout_id: int, db: AsyncSession = Depends(get_db)):
 
 @app.post("/layouts/{layout_id}/districts", response_model=schemas.DistrictRead)
 async def create_district(layout_id: int, district: schemas.DistrictCreate, db: AsyncSession = Depends(get_db)):
-    db_district = models.District(**district.dict(), layout_id=layout_id)
+    # Remove layout_id from the dict to avoid passing it twice
+    district_data = district.dict().copy()
+    district_data.pop("layout_id", None)
+    db_district = models.District(**district_data, layout_id=layout_id)
     db.add(db_district)
     await db.commit()
     await db.refresh(db_district)
@@ -127,3 +147,21 @@ async def delete_dispatcher(dispatcher_id: int, db: AsyncSession = Depends(get_d
     await db.delete(db_dispatcher)
     await db.commit()
     return {"ok": True}
+
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    response = await http_exception_handler(request, exc)
+    response.headers["Access-Control-Allow-Origin"] = "http://localhost:5173"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+        headers={
+            "Access-Control-Allow-Origin": "http://localhost:5173",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )

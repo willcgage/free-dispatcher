@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from typing import Optional
 
 class LayoutBase(BaseModel):
@@ -14,6 +14,11 @@ class LayoutCreate(LayoutBase):
 
 class LayoutRead(LayoutBase):
     id: int
+    key: int = None
+    
+    @field_serializer('key', mode='plain')
+    def set_key(self, v, info):
+        return self.id
     class Config:
         orm_mode = True
 
