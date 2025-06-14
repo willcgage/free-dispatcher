@@ -12,6 +12,9 @@ from fastapi.requests import Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+import socket
+from datetime import datetime
+import os
 
 app = FastAPI()
 
@@ -23,6 +26,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+BACKEND_PORT = int(os.environ.get("BACKEND_PORT", 8000))
 
 @app.on_event("startup")
 def create_tables():
@@ -165,3 +170,28 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "Access-Control-Allow-Credentials": "true"
         }
     )
+
+@app.get("/ip", include_in_schema=False)
+def get_ip():
+    # Return all IP addresses of the server
+    hostname = socket.gethostname()
+    try:
+        ips = socket.gethostbyname_ex(hostname)[2]
+    except Exception:
+        ips = []
+    return {"ip": ips, "port": BACKEND_PORT}
+
+@app.get("/status", include_in_schema=False)
+def get_status():
+    hostname = socket.gethostname()
+    try:
+        ips = socket.gethostbyname_ex(hostname)[2]
+    except Exception:
+        ips = []
+    return {
+        "ip": ips,
+        "port": BACKEND_PORT,
+        "time": datetime.utcnow().isoformat() + "Z",
+        "message": "Backend is running.",
+        "backend_version": "1.0.0"
+    }

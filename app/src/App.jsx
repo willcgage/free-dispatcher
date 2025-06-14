@@ -479,15 +479,29 @@ function Admin({ page, setPage, onDbChange, versions }) {
   useEffect(() => {
     let mounted = true;
     fetchWithBackendUrl('/status')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+        return res.json();
+      })
       .then((data) => { if (mounted) setStatus(data); })
-      .catch((e) => { if (mounted) setError(e.message); });
+      .catch((e) => {
+        if (mounted) {
+          setError(e.message);
+          // Log with context
+          console.error("Failed to fetch backend status:", e);
+        }
+      });
     return () => { mounted = false; };
   }, []);
 
   return (
     <div className="dashboard-container" style={{ margin: 16, padding: 16, border: "1px solid #aaa" }}>
       <h2>System Admin</h2>
+      {error && (
+        <div style={{ color: '#b00', marginBottom: 16, fontWeight: 'bold' }}>
+          Error connecting to backend: {error}
+        </div>
+      )}
       <div style={{ marginBottom: 16 }}>
         <b>Frontend Version:</b> <span className="dashboard-value">{versions && versions.frontend_version ? versions.frontend_version : 'Unknown'}</span>
       </div>
@@ -498,7 +512,7 @@ function Admin({ page, setPage, onDbChange, versions }) {
         <b>Backend IP Address:</b> {status && status.ip && status.ip.length ? status.ip[0] : "Unknown"}
       </div>
       <div style={{ marginBottom: 8 }}>
-        <b>Current Time:</b> {status && status.time}
+        {/* <b>Current Time:</b> {status && status.time} */}
       </div>
       <div style={{ marginTop: 12, color: "#bbb" }}>{status && status.message}</div>
       <button onClick={() => setPage("admin-config")} style={{ marginTop: 24, padding: '8px 16px', fontWeight: 'bold' }}>
@@ -784,6 +798,8 @@ function App() {
   const [versions, setVersions] = useState({});
   const [selectedLayout, setSelectedLayout] = useState(null);
   const [showLayoutSelect, setShowLayoutSelect] = useState(false);
+  // Add system time state
+  const [systemTime, setSystemTime] = useState(new Date());
 
   useEffect(() => {
     fetch('/versions.json')
@@ -795,6 +811,14 @@ function App() {
   useEffect(() => {
     getLayouts().then(setLayouts);
   }, [page, dbRefresh]);
+
+  // Update time every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSystemTime(new Date());
+    }, 1000); // 1 second interval
+    return () => clearInterval(interval);
+  }, []);
 
   const handleNavigate = (target) => {
     if (target === 'dashboard') setPage('dashboard');
@@ -820,6 +844,10 @@ function App() {
     <>
       <GlobalMenu onNavigate={handleNavigate} />
       <ThemeSwitcher />
+      {/* System Time Display */}
+      <div style={{ width: '100%', textAlign: 'center', fontWeight: 'bold', fontSize: '1.2em', margin: '10px 0' }}>
+        {systemTime.toLocaleString()}
+      </div>
       <div style={{ maxWidth: 900, margin: "auto" }}>
         <h1>Train Dispatcher Admin</h1>
         {page === "dashboard" ? (
