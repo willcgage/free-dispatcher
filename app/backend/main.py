@@ -15,13 +15,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import socket
 from datetime import datetime
 import os
+import psutil
 
 app = FastAPI()
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -171,25 +172,31 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         }
     )
 
+def get_host_ips():
+    # Return all non-loopback IPv4 addresses (including private/local)
+    ips = set()
+    for iface, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            if addr.family == socket.AF_INET:
+                ip = addr.address
+                if ip != '0.0.0.0':
+                    ips.add(ip)
+    # Always include 127.0.0.1 for dev
+    ips.add('127.0.0.1')
+    # Add HOST_IP from environment if set
+    host_ip_env = os.environ.get('HOST_IP')
+    if host_ip_env:
+        ips.add(host_ip_env)
+    return list(ips)
+
 @app.get("/ip", include_in_schema=False)
 def get_ip():
-    # Return all IP addresses of the server
-    hostname = socket.gethostname()
-    try:
-        ips = socket.gethostbyname_ex(hostname)[2]
-    except Exception:
-        ips = []
-    return {"ip": ips, "port": BACKEND_PORT}
+    return {"ip": get_host_ips(), "port": BACKEND_PORT}
 
 @app.get("/status", include_in_schema=False)
 def get_status():
-    hostname = socket.gethostname()
-    try:
-        ips = socket.gethostbyname_ex(hostname)[2]
-    except Exception:
-        ips = []
     return {
-        "ip": ips,
+        "ip": get_host_ips(),
         "port": BACKEND_PORT,
         "time": datetime.utcnow().isoformat() + "Z",
         "message": "Backend is running.",

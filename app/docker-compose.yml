@@ -5,12 +5,14 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     ports:
-      - "8001:8000"  # Changed host port to 8001 to resolve conflict
+      # Use LAN access by default, override for macOS
+      - "${BACKEND_PORT_MAPPING:-8001:8000}"
     depends_on:
       - db
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/dispatcher_db
       - RUNNING_IN_DOCKER=1
+      - HOST_IP=${HOST_IP}
   db:
     image: postgres:17
     restart: always
@@ -22,6 +24,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      - ./postgresql.conf:/var/lib/postgresql/data/postgresql.conf
 volumes:
   postgres_data:
 

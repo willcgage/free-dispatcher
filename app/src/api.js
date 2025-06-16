@@ -1,4 +1,5 @@
-const API_URL = "http://localhost:8001";
+// Use window.API_URL if set, otherwise default to current hostname with port 8001
+const API_URL = window.API_URL || `http://${window.location.hostname}:8001`;
 
 // Generic fetch helper
 async function apiFetch(endpoint, options = {}) {

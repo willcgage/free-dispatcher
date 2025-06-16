@@ -509,7 +509,14 @@ function Admin({ page, setPage, onDbChange, versions }) {
         <b>Backend Version:</b> <span className="dashboard-value">{versions && versions.backend_version ? versions.backend_version : 'Unknown'}</span>
       </div>
       <div style={{ marginBottom: 8 }}>
-        <b>Backend IP Address:</b> {status && status.ip && status.ip.length ? status.ip[0] : "Unknown"}
+        <b>Backend IP Addresses:</b>{' '}
+        {status && status.ip && status.ip.length
+          ? status.ip.map((ip, idx) => (
+              <span key={ip} className="dashboard-value">
+                {ip}{idx < status.ip.length - 1 ? ', ' : ''}
+              </span>
+            ))
+          : "Unknown"}
       </div>
       <div style={{ marginBottom: 8 }}>
         {/* <b>Current Time:</b> {status && status.time} */}
@@ -596,9 +603,11 @@ async function resolveBackendUrl() {
   try {
     const res = await fetch(`${candidateUrl}/ip`);
     const data = await res.json();
-    // If backend returns a list of IPs, try each
+    // If backend returns a list of IPs, try each, but skip Docker-internal/private IPs
     const ips = Array.isArray(data.ip) ? data.ip : [data.ip];
     for (const ip of ips) {
+      // Filter out private/internal IPs (Docker, local networks)
+      if (/^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|127\.|0\.)/.test(ip)) continue;
       const testUrl = `${protocol}//${ip}:8001`;
       try {
         const statusRes = await fetch(`${testUrl}/status`);
@@ -609,7 +618,7 @@ async function resolveBackendUrl() {
       } catch (e) { /* try next */ }
     }
   } catch (e) { /* fallback below */ }
-  // Fallback: use current hostname
+  // Fallback: use current hostname (localhost or host network)
   backendUrlCache = candidateUrl;
   return candidateUrl;
 }
