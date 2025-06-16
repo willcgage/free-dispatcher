@@ -1,6 +1,19 @@
 // App.jsx - Main frontend for Train Dispatcher Admin UI
-// Provides CRUD management for Dispatchers, Districts, Trains, and Modules
-// Uses a generic EntityManager component for each entity type
+//
+// This file implements the main React application for the Free Dispatcher project.
+//
+// Key Features:
+// - Provides CRUD management for Dispatchers, Districts, Trains, Modules, and Layouts.
+// - Uses a generic EntityManager component for each entity type.
+// - Fetches backend status and version info, and displays backend/server IPs for LAN access.
+// - Designed to work cross-platform with backend LAN access (see README and scripts for details).
+//
+// LAN Access Notes:
+// - The frontend will connect to the backend using the current hostname or LAN IP by default.
+// - For LAN access, ensure the backend is reachable at http://<mac-lan-ip>:8001 from other devices.
+// - See scripts/run-with-lan.sh and README.md for platform-specific backend setup.
+//
+// For more information, see project README and docker-compose.yml documentation.
 
 import React, { useEffect, useState } from "react";
 import { getLayouts, createLayout, updateLayout, deleteLayout, getDistricts, createDistrict, updateDistrict, deleteDistrict, getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher } from "./api";

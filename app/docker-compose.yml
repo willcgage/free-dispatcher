@@ -1,3 +1,17 @@
+# docker-compose.yml
+#
+# Cross-platform Docker Compose configuration for Free Dispatcher app.
+#
+# - By default, backend is exposed to the LAN on port 8001 (Linux/Windows).
+# - On macOS, set BACKEND_PORT_MAPPING=127.0.0.1:8001:8000 and use socat to forward LAN IP:8001 to localhost:8001.
+# - Database is exposed on port 5432 for LAN access (for development only; restrict in production).
+#
+# Usage:
+#   Linux/Windows: docker compose up -d
+#   macOS:        ./scripts/run-with-lan.sh (automates Docker Compose and socat)
+#
+# See scripts/ and README.md for more details.
+
 #version: '3.8'
 services:
   backend:
