@@ -39,6 +39,8 @@ class DispatcherBase(BaseModel):
     last_name: str
     first_name: str
     cell_number: Optional[str] = None
+    layout_id: int
+    district_id: int
 
 class DispatcherCreate(DispatcherBase):
     pass

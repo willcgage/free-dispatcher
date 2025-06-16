@@ -28,7 +28,7 @@ import { getLayouts, createLayout, updateLayout, deleteLayout, getDistricts, cre
  *   onRefresh: callback to trigger parent refresh
  *   extraData: optional extra props
  */
-function EntityManager({ name, getAll, create, update, remove, fields, selectOptions = {}, onRefresh, extraData = {}, refreshKey }) {
+function EntityManager({ name, getAll, create, update, remove, fields, selectOptions = {}, onRefresh, extraData = {}, refreshKey, onSelect }) {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({});
   const [editingId, setEditingId] = useState(null);
@@ -56,6 +56,17 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
       if (typeof getDispatchers === "function") {
         const dispatchersList = await getDispatchers();
         setDynamicOptions((opts) => ({ ...opts, dispatcher_id: dispatchersList }));
+      }
+    }
+    if (name === "Dispatchers") {
+      if (typeof getLayouts === "function") {
+        const layoutsList = await getLayouts();
+        setDynamicOptions((opts) => ({ ...opts, layout_id: layoutsList }));
+      }
+      if (typeof getDistricts === "function" && extraData && extraData.layout && extraData.layout.id) {
+        // Optionally, fetch all districts or filter by selected layout
+        const districtsList = await getDistricts(extraData.layout.id);
+        setDynamicOptions((opts) => ({ ...opts, district_id: districtsList }));
       }
     }
   };
@@ -243,13 +254,26 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
                     const dispatcher = (selectOptions.dispatcher_id || dynamicOptions.dispatcher_id || []).find(d => d.id === item.dispatcher_id);
                     return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{dispatcher ? dispatcher.name : item.dispatcher_id}</td>;
                   }
+                  // Show layout and district names for Dispatchers table
+                  if (name === "Dispatchers" && f.name === "layout_id") {
+                    const layout = (selectOptions.layout_id || dynamicOptions.layout_id || []).find(l => l.id === item.layout_id);
+                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{layout ? layout.name : item.layout_id}</td>;
+                  }
+                  if (name === "Dispatchers" && f.name === "district_id") {
+                    const district = (selectOptions.district_id || dynamicOptions.district_id || []).find(d => d.id === item.district_id);
+                    return <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{district ? district.name : item.district_id}</td>;
+                  }
                   return (
                     <td key={f.name} style={{ border: '1px solid #444', padding: 4 }}>{item[f.name]}</td>
                   );
                 })}
                 <td style={{ border: '1px solid #444', padding: 4 }}>
                   <button onClick={() => handleEdit(item)} style={{ marginRight: 8 }}>Edit</button>
-                  <button onClick={() => handleDelete(item.id)}>Delete</button>
+                  <button onClick={() => handleDelete(item.id)} style={{ marginRight: 8 }}>Delete</button>
+                  {/* Add Select button for Layouts */}
+                  {name === "Layouts" && onSelect && (
+                    <button onClick={() => onSelect(item)} style={{ marginRight: 8 }}>Select</button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -757,13 +781,13 @@ function LayoutSelectPopup({ layouts, onSelect, onClose }) {
   );
 }
 
-function LayoutDetailPage({ layout, onBack }) {
+function LayoutDetailPage({ layout, layouts, onBack }) {
   const [districts, setDistricts] = useState([]);
   const [dispatchers, setDispatchers] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (layout) {
+    if (layout && layout.id) {
       getDistricts(layout.id).then(setDistricts);
     }
     getDispatchers().then(setDispatchers);
@@ -795,15 +819,20 @@ function LayoutDetailPage({ layout, onBack }) {
       <EntityManager
         name="Dispatchers"
         getAll={getDispatchers}
-        create={createDispatcher}
-        update={updateDispatcher}
+        create={(data) => createDispatcher({ ...data, layout_id: layout.id })}
+        update={(id, data) => updateDispatcher(id, { ...data, layout_id: layout.id })}
         remove={deleteDispatcher}
         fields={[
           { name: "id", label: "ID" },
           { name: "last_name", label: "Last Name" },
           { name: "first_name", label: "First Name" },
           { name: "cell_number", label: "Cell Number" },
+          // Do NOT show layout_id field in this context
+          { name: "district_id", label: "District", type: "select", options: districts.map(d => ({ id: d.id, name: d.name })) },
         ]}
+        selectOptions={{
+          district_id: districts.map(d => ({ id: d.id, name: d.name })),
+        }}
         key={"dispatchers-" + refreshKey}
         refreshKey={refreshKey}
         onRefresh={() => setRefreshKey((v) => v + 1)}
@@ -862,6 +891,12 @@ function App() {
   const handleOpenLayoutSelect = () => setShowLayoutSelect(true);
   const handleCloseLayoutSelect = () => setShowLayoutSelect(false);
 
+  // In App component, define a handler for selecting a layout from the table
+  const handleTableLayoutSelect = (layout) => {
+    setSelectedLayout(layout);
+    setPage('main');
+  };
+
   return (
     <>
       <GlobalMenu onNavigate={handleNavigate} />
@@ -896,7 +931,7 @@ function App() {
             <Admin page={adminPage} setPage={setAdminPage} onDbChange={() => setDbRefresh((v) => v + 1)} versions={versions} />
           )
         ) : selectedLayout ? (
-          <LayoutDetailPage layout={selectedLayout} onBack={() => setSelectedLayout(null)} />
+          <LayoutDetailPage layout={selectedLayout} layouts={layouts} onBack={() => setSelectedLayout(null)} />
         ) : (
           <EntityManager
             name="Layouts"
@@ -928,6 +963,8 @@ function App() {
             ]}
             key={"layouts-" + dbRefresh}
             refreshKey={dbRefresh}
+            onRefresh={() => setDbRefresh((v) => v + 1)}
+            onSelect={handleTableLayoutSelect}
           />
         )}
       </div>
