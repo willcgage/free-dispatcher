@@ -1,6 +1,15 @@
 #!/bin/bash
 # run-with-lan.sh
-# Starts Docker Compose with cross-platform LAN support and socat forwarding on macOS.
+#
+# Cross-platform automation script for LAN access to Docker backend.
+#
+# - On macOS: Sets Docker Compose to bind backend to localhost, then runs socat to forward LAN IP:8001 to localhost:8001.
+# - On Linux/Windows: Uses direct LAN port mapping (no socat needed).
+#
+# Usage:
+#   ./scripts/run-with-lan.sh
+#
+# This script ensures the correct setup for LAN access on all platforms.
 
 set -e
 
