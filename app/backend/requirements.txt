@@ -8,3 +8,4 @@ setuptools
 zeroconf
 netifaces
 psutil
+alembic

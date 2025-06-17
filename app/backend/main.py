@@ -134,6 +134,7 @@ async def create_dispatcher(dispatcher: schemas.DispatcherCreate, db: AsyncSessi
 
 @app.put("/dispatchers/{dispatcher_id}", response_model=schemas.DispatcherRead)
 async def update_dispatcher(dispatcher_id: int, dispatcher: schemas.DispatcherCreate, db: AsyncSession = Depends(get_db)):
+    print("=== DISPATCHER UPDATE ENDPOINT CALLED")  # Debug log
     result = await db.execute(select(models.Dispatcher).where(models.Dispatcher.id == dispatcher_id))
     db_dispatcher = result.scalar_one_or_none()
     if db_dispatcher is None:
@@ -142,6 +143,7 @@ async def update_dispatcher(dispatcher_id: int, dispatcher: schemas.DispatcherCr
         setattr(db_dispatcher, key, value)
     await db.commit()
     await db.refresh(db_dispatcher)
+    print("Updated dispatcher DB object:", db_dispatcher.__dict__)  # Debug log
     return db_dispatcher
 
 @app.delete("/dispatchers/{dispatcher_id}")

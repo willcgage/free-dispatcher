@@ -143,10 +143,21 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
   };
 
   const handlePopupSave = async () => {
-    // Debug: show outgoing payload
-    alert("Saving Module with payload: " + JSON.stringify(popupForm));
+    // Convert district_id to number if present and string
+    let payload = { ...popupForm };
+    if (payload.district_id !== undefined && typeof payload.district_id === "string" && payload.district_id !== "") {
+      payload.district_id = Number(payload.district_id);
+    }
+    // Remove 'key' from payload if present
+    if (payload.key !== undefined) {
+      delete payload.key;
+    }
+    // If editing a Dispatcher from LayoutDetailPage, ensure layout_id is set
+    if (name === "Dispatchers" && extraData && extraData.layout && extraData.layout.id) {
+      payload.layout_id = extraData.layout.id;
+    }
     try {
-      await update(popupForm.id, popupForm);
+      await update(payload.id, payload);
       setShowEditPopup(false);
       setPopupForm({});
       fetchItems();
@@ -820,7 +831,14 @@ function LayoutDetailPage({ layout, layouts, onBack }) {
         name="Dispatchers"
         getAll={getDispatchers}
         create={(data) => createDispatcher({ ...data, layout_id: layout.id })}
-        update={(id, data) => updateDispatcher(id, { ...data, layout_id: layout.id })}
+        update={async (id, data) => {
+          await updateDispatcher(id, { ...data, layout_id: layout.id });
+          // Refresh districts after editing a dispatcher
+          if (layout && layout.id) {
+            const updatedDistricts = await getDistricts(layout.id);
+            setDistricts(updatedDistricts);
+          }
+        }}
         remove={deleteDispatcher}
         fields={[
           { name: "id", label: "ID" },
@@ -836,6 +854,7 @@ function LayoutDetailPage({ layout, layouts, onBack }) {
         key={"dispatchers-" + refreshKey}
         refreshKey={refreshKey}
         onRefresh={() => setRefreshKey((v) => v + 1)}
+        extraData={{ layout }}
       />
     </div>
   );

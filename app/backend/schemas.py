@@ -2,7 +2,6 @@ from pydantic import BaseModel, field_serializer
 from typing import Optional
 
 class LayoutBase(BaseModel):
-    key: Optional[str] = None
     name: str
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -14,11 +13,11 @@ class LayoutCreate(LayoutBase):
 
 class LayoutRead(LayoutBase):
     id: int
-    key: int = None
-    
+    key: Optional[int] = None
+
     @field_serializer('key', mode='plain')
     def set_key(self, v, info):
-        return self.id
+        return self.id if self.id is not None else 0
     class Config:
         orm_mode = True
 
@@ -39,8 +38,8 @@ class DispatcherBase(BaseModel):
     last_name: str
     first_name: str
     cell_number: Optional[str] = None
-    layout_id: int
-    district_id: int
+    layout_id: Optional[int] = None
+    district_id: Optional[int] = None
 
 class DispatcherCreate(DispatcherBase):
     pass

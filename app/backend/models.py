@@ -25,5 +25,5 @@ class Dispatcher(Base):
     last_name = Column(String, nullable=False)
     first_name = Column(String, nullable=False)
     cell_number = Column(String, nullable=True)
-    layout_id = Column(Integer, ForeignKey("layouts.id"), nullable=False)
-    district_id = Column(Integer, ForeignKey("districts.id"), nullable=False)
+    layout_id = Column(Integer, ForeignKey("layouts.id"), nullable=True)
+    district_id = Column(Integer, ForeignKey("districts.id"), nullable=True)
