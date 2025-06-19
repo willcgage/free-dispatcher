@@ -2,10 +2,8 @@ from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import models, schemas
-from database import get_db
+from database import get_db, sync_engine, Base
 from typing import List
-from database import sync_engine
-from models import Base
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
@@ -203,4 +201,29 @@ def get_status():
         "time": datetime.utcnow().isoformat() + "Z",
         "message": "Backend is running.",
         "backend_version": "1.0.0"
+    }
+
+@app.get("/schema")
+async def get_schema():
+    # Reflect the database schema
+    Base.metadata.reflect(bind=sync_engine)
+    tables = []
+    relationships = []
+
+    for table_name, table in Base.metadata.tables.items():
+        fields = [col.name for col in table.columns]
+        tables.append({"name": table_name, "fields": fields})
+
+        # Find foreign keys for relationships
+        for col in table.columns:
+            for fk in col.foreign_keys:
+                relationships.append({
+                    "from": table_name,
+                    "to": fk.column.table.name,
+                    "field": col.name
+                })
+
+    return {
+        "tables": tables,
+        "relationships": relationships
     }

@@ -17,6 +17,7 @@
 
 import React, { useEffect, useState } from "react";
 import { getLayouts, createLayout, updateLayout, deleteLayout, getDistricts, createDistrict, updateDistrict, deleteDistrict, getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher } from "./api";
+// import DataSchematic from './DataSchematic';
 
 /**
  * EntityManager - Generic CRUD UI for a given entity type.
@@ -461,6 +462,7 @@ function EntityManager({ name, getAll, create, update, remove, fields, selectOpt
           </div>
         </div>
       )}
+      {/* <DataSchematic /> */}
     </div>
   );
 }
