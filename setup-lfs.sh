@@ -10,7 +10,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR/.."
+PROJECT_ROOT="$SCRIPT_DIR"
 
 cd "$PROJECT_ROOT"
 
@@ -43,6 +43,8 @@ if [ ! -f ".gitattributes" ]; then
     echo "The repository should include a .gitattributes file with LFS patterns."
     exit 1
 fi
+
+echo "📝 Found .gitattributes with LFS patterns"
 
 echo -e "${GREEN}✅ Git LFS setup complete!${NC}"
 echo
