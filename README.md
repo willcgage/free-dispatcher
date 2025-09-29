@@ -102,7 +102,17 @@ Async/await patterns throughout,
 Type safety with Pydantic schemas,
 Database migrations (though currently using create_all),
 Environment-based configuration for different deployment scenarios,
+Git Large File Storage (LFS) for efficient handling of binary assets,
 ,
+
+## Git LFS Support
+
+This repository is configured with Git LFS to handle binary files efficiently:
+
+- **Automatically tracked**: Images, videos, audio files, documents, fonts, executables, and 3D/CAD files
+- **Setup**: Run `./app/scripts/lfs-helper.sh install` to initialize LFS
+- **Documentation**: See `docs/GIT_LFS_GUIDE.md` for complete usage guide
+- **Helper script**: Use `./app/scripts/lfs-helper.sh` for common LFS operations
 
   This is a specialized application serving the active model railroad community, providing digital tools to manage what has traditionally been a  paper-based coordination process.
 
