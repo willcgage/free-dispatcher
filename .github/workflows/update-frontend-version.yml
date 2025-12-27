@@ -15,16 +15,16 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: npm install
-        working-directory: app
+        working-directory: ./app
       - name: Update versions.json
         run: node scripts/update-frontend-version.js
-        working-directory: app
+        working-directory: ./app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit and push updated versions.json
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/versions.json
+          git -C app add public/versions.json
           git commit -m "Update frontend_version in versions.json [CI skip]" || echo "No changes to commit"
           git push
