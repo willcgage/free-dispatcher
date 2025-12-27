@@ -3,9 +3,11 @@ uvicorn[standard]
 sqlalchemy
 asyncpg
 psycopg2-binary
+aiosqlite
 python-multipart
 setuptools
 zeroconf
 netifaces
 psutil
 alembic
+pyinstaller

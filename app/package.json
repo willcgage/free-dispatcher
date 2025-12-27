@@ -1,33 +1,3 @@
-{
-  "name": "app",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview --host 0.0.0.0",
-    "dev:all": "npx concurrently \"npm:backend\" \"npm:start-frontend\"",
-    "backend": "cd backend && uvicorn main:app --host 0.0.0.0 --port 8001",
-    "start-frontend": "npx wait-on http://localhost:8001/docs && npm run dev"
-  },
-  "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "reactflow": "^11.11.4"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.25.0",
-    "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2",
-    "@vitejs/plugin-react": "^4.4.1",
-    "concurrently": "^7.6.0",
-    "eslint": "^9.25.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.19",
-    "globals": "^16.0.0",
-    "vite": "^6.3.5",
-    "wait-on": "^6.0.1"
-  }
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:dfa85d36dc0cf43a3a6f1989209d1cf782b8dfd2d090b80cac94d16fdf7c68ee
+size 1915

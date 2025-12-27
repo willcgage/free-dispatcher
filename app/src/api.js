@@ -1,9 +1,20 @@
-// Use window.API_URL if set, otherwise default to current hostname with port 8001
-const API_URL = window.API_URL || `http://${window.location.hostname}:8001`;
+// Resolve backend URL dynamically. In Electron we ask the main process; otherwise fall back to host:8001.
+let backendUrlPromise = null;
+
+async function resolveBackendUrl() {
+  if (backendUrlPromise) return backendUrlPromise;
+  if (window?.electronAPI?.getBackendUrl) {
+    backendUrlPromise = window.electronAPI.getBackendUrl();
+    return backendUrlPromise;
+  }
+  backendUrlPromise = Promise.resolve(window.API_URL || `http://${window.location.hostname}:8001`);
+  return backendUrlPromise;
+}
 
 // Generic fetch helper
 async function apiFetch(endpoint, options = {}) {
-  const res = await fetch(`${API_URL}${endpoint}`, {
+  const base = await resolveBackendUrl();
+  const res = await fetch(`${base}${endpoint}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });

@@ -200,7 +200,7 @@ def get_status():
         "port": BACKEND_PORT,
         "time": datetime.utcnow().isoformat() + "Z",
         "message": "Backend is running.",
-        "backend_version": "1.0.0"
+        "backend_version": "0.7.0"
     }
 
 @app.get("/schema")

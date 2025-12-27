@@ -1,29 +1,22 @@
 # Free Dispatcher App
 
-This project is a cross-platform web application with a React frontend, FastAPI backend, and PostgreSQL database, designed for easy LAN access and development.
+This project is a cross-platform app with a React frontend and FastAPI backend. It now ships with an Electron shell for desktop use; Docker has been retired for local workflows.
 
 ## Quick Start
 
-### Linux/Windows
-- Run: `docker compose up -d`
-- Backend will be available on your LAN at `http://<your-lan-ip>:8001`
+### Electron (new default)
+- Install Node deps: `npm install`
+- Install Python deps for backend: `cd backend && pip install -r requirements.txt`
+- Dev (Vite + Electron shell): `npm run electron:dev`
+- Prod preview (build renderer then run packaged layout): `npm run build` then `npm run electron`
+- Bundle backend binary (required before packaging): `npm run backend:bundle`
+- Package desktop app (dmg/nsis/AppImage): `npm run electron:build`
 
-### macOS (Docker Desktop)
-- Run: `./scripts/run-with-lan.sh`
-- This script starts Docker Compose with backend bound to localhost and uses socat to forward your LAN IP:8001 to localhost:8001.
-- See `scripts/socat-docker-lan.sh` for details and logs.
+By default the desktop app uses a local SQLite DB stored in your OS user data directory. To point at Postgres instead, set `DATABASE_URL` before launching Electron.
 
-## LAN Access Details
-- On macOS, socat is required due to Docker Desktop networking limitations.
-- On Linux/Windows, LAN access works out of the box.
-- Database is exposed on port 5432 for development (restrict in production).
-
-## Scripts
-- `scripts/run-with-lan.sh`: Automates Docker Compose and socat for cross-platform LAN access.
-- `scripts/socat-docker-lan.sh`: Handles LAN port forwarding and passwordless sudo setup for socat.
-
-## More Info
-- See comments in `docker-compose.yml` and scripts for platform-specific details.
+## Notes
+- Default DB: SQLite stored in your OS user data directory. Override with `DATABASE_URL` to point at Postgres.
+- Backend bundling: run `npm run backend:bundle` to produce the packaged backend binary used in Electron builds.
 
 ---
 
