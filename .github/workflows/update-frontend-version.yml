@@ -13,8 +13,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm install
-      - run: node scripts/update-frontend-version.js
+      - name: Install dependencies
+        run: npm install
+        working-directory: app
+      - name: Update versions.json
+        run: node scripts/update-frontend-version.js
+        working-directory: app
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit and push updated versions.json
         run: |
           git config --global user.name "github-actions[bot]"
