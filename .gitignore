@@ -1,0 +1,16 @@
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/
+
+# Python virtual environments
+.venv/
+.venv_*/
+__pycache__/
+*.pyc
+
+# Local databases and logs (never commit these)
+*.db
+*.sqlite
+*.sqlite3
+*.log

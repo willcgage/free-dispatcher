@@ -1,11 +1,8 @@
-# Train Dispatcher Backend
+# Free Dispatcher Backend
 
-This is a FastAPI backend service for the Train Dispatcher application.
-
-## LAN Access & Docker Compose
-- For cross-platform LAN access, see the main project README and `docker-compose.yml`.
-- On macOS, use `../scripts/run-with-lan.sh` to enable LAN access via socat.
-- On Linux/Windows, LAN access works out of the box with Docker Compose.
+This is a FastAPI + SQLAlchemy backend service for the Free Dispatcher application. It is
+launched either directly during development or as a PyInstaller-bundled binary inside the
+packaged Electron app (see `app/electron/main.js` and `run_backend.py`).
 
 ## Development
 
@@ -15,18 +12,20 @@ This is a FastAPI backend service for the Train Dispatcher application.
    ```
 2. Run the server:
    ```sh
-   uvicorn main:app --reload
+   uvicorn main:app --reload --port 8001
    ```
+   Or run the whole stack (backend + frontend) from `app/` with `npm run dev:all`.
 
-## Docker
+By default the backend stores data in a per-user SQLite database (see `database.py`); set
+`DATABASE_URL` to point at PostgreSQL or another SQLAlchemy-supported database instead.
 
-To build and run the backend in Docker:
+## Packaging
+
+The backend is bundled into a standalone binary for the Electron app via PyInstaller:
 
 ```sh
-docker build -t train-dispatcher-backend .
-docker run -p 8000:8000 train-dispatcher-backend
+npm run backend:bundle
 ```
 
-The API will be available at http://localhost:8000
-
-See the main project README for LAN access and platform-specific details.
+This uses `backend-app.spec` and produces the binary consumed by `electron-builder`
+(see the root `package.json` `electron:build` script).

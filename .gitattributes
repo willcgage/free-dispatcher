@@ -11,7 +11,6 @@
 *.tiff filter=lfs diff=lfs merge=lfs -text
 *.tga filter=lfs diff=lfs merge=lfs -text
 *.webp filter=lfs diff=lfs merge=lfs -text
-*.svg filter=lfs diff=lfs merge=lfs -text
 *.ico filter=lfs diff=lfs merge=lfs -text
 
 # Videos
@@ -55,14 +54,8 @@
 *.msi filter=lfs diff=lfs merge=lfs -text
 *.iso filter=lfs diff=lfs merge=lfs -text
 
-# Database files
-*.db filter=lfs diff=lfs merge=lfs -text
-*.sqlite filter=lfs diff=lfs merge=lfs -text
-*.sqlite3 filter=lfs diff=lfs merge=lfs -text
-
 # Large data files
 *.csv filter=lfs diff=lfs merge=lfs -text
-*.json filter=lfs diff=lfs merge=lfs -text
 *.xml filter=lfs diff=lfs merge=lfs -text
 
 # Specific to train/model railroad applications
@@ -73,10 +66,7 @@
 *.obj filter=lfs diff=lfs merge=lfs -text
 *.3mf filter=lfs diff=lfs merge=lfs -text
 
-# Large log files (over 1MB should use LFS)
-*.log filter=lfs diff=lfs merge=lfs -text
-
-# Note: Small files like package-lock.json (currently 128K) are intentionally 
+# Note: Small files like package-lock.json (currently 128K) are intentionally
 # NOT included here as they benefit from git's delta compression and are 
 # frequently updated. Only add them if they grow significantly larger.
 

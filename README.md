@@ -13,13 +13,13 @@ Layout documentation with location and scheduling information,
 
   Architecture
 
-  Full-Stack Web Application
+  Electron Desktop Application
 
   
-Frontend: React 19 + Vite (Single Page Application)
-Backend: FastAPI + SQLAlchemy (RESTful API),
-Database: PostgreSQL with async support,
-Deployment: Docker Compose with containerized services,
+Frontend: React 19 + Vite (Single Page Application, rendered in Electron)
+Backend: FastAPI + SQLAlchemy (RESTful API), bundled as a PyInstaller binary,
+Database: SQLite by default (per-user storage), with optional PostgreSQL via DATABASE_URL,
+Deployment: Packaged Electron app via electron-builder (Docker workflow retired in v0.7.0),
 ,
 
   Data Model
@@ -54,21 +54,21 @@ Theme Support: Light, dark, high-contrast, and system themes,
   Technical Features
 
   
-Auto-Discovery: Backend automatically detects network configuration
-Docker Support: Full containerization with PostgreSQL database,
+Electron Shell: IPC-based backend URL resolution between the renderer and bundled backend
+Bundled Backend: FastAPI service packaged as a standalone binary via PyInstaller,
 API Documentation: FastAPI automatic OpenAPI/Swagger docs,
 Real-time Updates: Dynamic form updates and data refresh,
 ,
 
   Current State
 
-  Functional MVP (v0.6)
+  Functional MVP (v0.7)
 
   
 Complete CRUD operations for all entities
-Working Docker deployment,
+Packaged Electron desktop app with bundled backend,
 Responsive web interface,
-Database persistence with PostgreSQL,
+Database persistence with SQLite (PostgreSQL override supported),
 ,
 
   Development Stage

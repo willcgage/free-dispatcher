@@ -11,7 +11,7 @@ Git LFS is an extension that replaces large files with text pointers inside Git,
 The repository is configured to automatically track these file types with LFS:
 
 ### Images
-- `*.jpg`, `*.jpeg`, `*.png`, `*.gif`, `*.bmp`, `*.tiff`, `*.webp`, `*.svg`, `*.ico`
+- `*.jpg`, `*.jpeg`, `*.png`, `*.gif`, `*.bmp`, `*.tiff`, `*.webp`, `*.ico`
 
 ### Videos
 - `*.mp4`, `*.avi`, `*.mov`, `*.mkv`, `*.wmv`, `*.webm`, `*.flv`
@@ -28,17 +28,17 @@ The repository is configured to automatically track these file types with LFS:
 ### Executables & Binaries
 - `*.exe`, `*.bin`, `*.dmg`, `*.pkg`, `*.deb`, `*.rpm`, `*.msi`, `*.iso`
 
-### Database Files
-- `*.db`, `*.sqlite`, `*.sqlite3`
-
 ### Large Data Files
-- `*.csv`, `*.json`, `*.xml` (only large ones)
+- `*.csv`, `*.xml` (only large ones)
 
 ### 3D/CAD Files (for model railroad layouts)
 - `*.dwg`, `*.dxf`, `*.scad`, `*.stl`, `*.obj`, `*.3mf`
 
-### Log Files
-- `*.log` (large log files)
+> **Not LFS-tracked:** `*.svg`, `*.json`, `*.db`/`*.sqlite`/`*.sqlite3`, and `*.log`. These are
+> small, build-critical, or simply shouldn't be committed at all (database/log files belong in
+> `.gitignore`, not version control). Routing them through LFS broke `npm install` for clones
+> without git-lfs configured, since `package.json`/`package-lock.json` were stored as pointer
+> files instead of real JSON.
 
 ## Prerequisites
 
