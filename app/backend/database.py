@@ -1,5 +1,3 @@
-globals()["sync_engine"] = sync_engine
-globals()["Base"] = Base
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
@@ -30,8 +28,6 @@ else:
 
 sync_engine = create_engine(SYNC_DATABASE_URL)
 Base = models.Base
-globals()["sync_engine"] = sync_engine
-globals()["Base"] = Base
 
 
 # Add get_db for FastAPI dependency

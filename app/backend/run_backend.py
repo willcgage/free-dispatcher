@@ -5,6 +5,7 @@ Runs uvicorn with settings driven by environment variables.
 import os
 import pathlib
 import uvicorn
+from main import app
 
 
 def main():
@@ -15,7 +16,8 @@ def main():
     sqlite_path = pathlib.Path(user_data) / "dispatcher.db"
     os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{sqlite_path}")
 
-    uvicorn.run("main:app", host=host, port=port, log_level="info")
+    # Importing app ensures PyInstaller bundles the ASGI module; run with the object directly.
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

@@ -3,10 +3,10 @@
 
 a = Analysis(
     ['run_backend.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=['main', 'aiosqlite'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

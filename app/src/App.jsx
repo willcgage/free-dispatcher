@@ -646,35 +646,20 @@ function ThemeSwitcher() {
 let backendUrlCache = null;
 async function resolveBackendUrl() {
   if (backendUrlCache) return backendUrlCache;
-  // Try to fetch /ip from the current host:8001
-  const { protocol } = window.location;
-  const candidateHost = window.location.hostname;
+  // Prefer Electron IPC when available (packaged app or electron:dev)
+  if (window?.electronAPI?.getBackendUrl) {
+    backendUrlCache = await window.electronAPI.getBackendUrl();
+    return backendUrlCache;
+  }
+  // Browser fallback (dev server + standalone backend on 8001)
+  const protocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
+  const candidateHost = window.location.hostname || '127.0.0.1';
   const candidateUrl = `${protocol}//${candidateHost}:8001`;
-  try {
-    const res = await fetch(`${candidateUrl}/ip`);
-    const data = await res.json();
-    // If backend returns a list of IPs, try each, but skip Docker-internal/private IPs
-    const ips = Array.isArray(data.ip) ? data.ip : [data.ip];
-    for (const ip of ips) {
-      // Filter out private/internal IPs (Docker, local networks)
-      if (/^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|127\.|0\.)/.test(ip)) continue;
-      const testUrl = `${protocol}//${ip}:8001`;
-      try {
-        const statusRes = await fetch(`${testUrl}/status`);
-        if (statusRes.ok) {
-          backendUrlCache = testUrl;
-          return testUrl;
-        }
-      } catch (e) { /* try next */ }
-    }
-  } catch (e) { /* fallback below */ }
-  // Fallback: use current hostname (localhost or host network)
   backendUrlCache = candidateUrl;
-  return candidateUrl;
+  return backendUrlCache;
 }
 
 function getBackendUrl() {
-  // Returns a promise that resolves to the backend URL
   return resolveBackendUrl();
 }
 
