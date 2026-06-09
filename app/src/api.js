@@ -34,17 +34,15 @@ export const createDispatcher = (data) => apiFetch("/dispatchers", { method: "PO
 export const updateDispatcher = (id, data) => apiFetch(`/dispatchers/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteDispatcher = (id) => apiFetch(`/dispatchers/${id}`, { method: "DELETE" });
 
-// Modules
-export const getModules = () => apiFetch("/modules/");
-export const createModule = (data) => apiFetch("/modules/", { method: "POST", body: JSON.stringify(data) });
-export const updateModule = (id, data) => apiFetch(`/modules/${id}`, { method: "PUT", body: JSON.stringify(data) });
-export const deleteModule = (id) => apiFetch(`/modules/${id}`, { method: "DELETE" });
+// Module Repository — cached catalog
+export const syncModules = () => apiFetch("/modules/sync", { method: "POST" });
+export const getCachedModules = () => apiFetch("/modules/");
 
-// Trains
-export const getTrains = () => apiFetch("/trains/");
-export const createTrain = (data) => apiFetch("/trains/", { method: "POST", body: JSON.stringify(data) });
-export const updateTrain = (id, data) => apiFetch(`/trains/${id}`, { method: "PUT", body: JSON.stringify(data) });
-export const deleteTrain = (id) => apiFetch(`/trains/${id}`, { method: "DELETE" });
+// Module assignments for a Layout
+export const getModuleAssignments = (layoutId) => apiFetch(`/layouts/${layoutId}/module-assignments`);
+export const createModuleAssignment = (layoutId, data) => apiFetch(`/layouts/${layoutId}/module-assignments`, { method: "POST", body: JSON.stringify(data) });
+export const updateModuleAssignment = (layoutId, id, data) => apiFetch(`/layouts/${layoutId}/module-assignments/${id}`, { method: "PUT", body: JSON.stringify(data) });
+export const deleteModuleAssignment = (layoutId, id) => apiFetch(`/layouts/${layoutId}/module-assignments/${id}`, { method: "DELETE" });
 
 // Layouts
 export const getLayouts = () => apiFetch("/layouts/");

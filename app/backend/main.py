@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import models, schemas
 from database import get_db, sync_engine, Base
-from typing import List
+from typing import List, Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
@@ -11,9 +11,25 @@ from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import socket
-from datetime import datetime
+from datetime import datetime, timezone
 import os
+import json
 import psutil
+import httpx
+
+# Module Repository connection config — defaults to local Supabase dev instance.
+# Override with env vars for production:
+#   MODULEREPO_URL=https://dpifxkipqfaxujidgjyg.supabase.co
+#   MODULEREPO_ANON_KEY=<production anon key>
+MODULEREPO_URL = os.environ.get(
+    "MODULEREPO_URL", "http://127.0.0.1:54321"
+)
+MODULEREPO_ANON_KEY = os.environ.get(
+    "MODULEREPO_ANON_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    ".eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9"
+    ".CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0",
+)
 
 app = FastAPI()
 
@@ -153,6 +169,249 @@ async def delete_dispatcher(dispatcher_id: int, db: AsyncSession = Depends(get_d
     await db.delete(db_dispatcher)
     await db.commit()
     return {"ok": True}
+
+# ---------------------------------------------------------------------------
+# Module Repository integration — sync + read
+# ---------------------------------------------------------------------------
+
+@app.post("/modules/sync", response_model=schemas.SyncResult)
+async def sync_modules(db: AsyncSession = Depends(get_db)):
+    """Fetch the full module catalog from the Module Repository and cache it locally."""
+    endpoint = f"{MODULEREPO_URL}/functions/v1/api/v1/modules/full"
+    headers = {
+        "apikey": MODULEREPO_ANON_KEY,
+        "Authorization": f"Bearer {MODULEREPO_ANON_KEY}",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(endpoint, headers=headers)
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="Cannot reach Module Repository — is local Supabase running (supabase start)?")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Module Repository timed out")
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Module Repository returned {resp.status_code}: {resp.text[:200]}",
+        )
+    modules_data = resp.json()
+    synced_at = datetime.now(timezone.utc).isoformat()
+    synced_count = 0
+    updated_count = 0
+
+    for m in modules_data:
+        record_number = m.get("record_number")
+        if not record_number:
+            continue
+        result = await db.execute(
+            select(models.RepoModule).where(models.RepoModule.record_number == record_number)
+        )
+        existing = result.scalar_one_or_none()
+        if existing is None:
+            db.add(models.RepoModule(
+                record_number=record_number,
+                module_name=m.get("module_name", ""),
+                category=m.get("category"),
+                geometry_type=m.get("geometry_type"),
+                length_feet=m.get("length_feet"),
+                length_inches=m.get("length_inches"),
+                has_mss=1 if m.get("has_mss") else 0,
+                status=m.get("status"),
+                repo_updated_at=m.get("updated_at"),
+                synced_at=synced_at,
+                data=json.dumps(m),
+            ))
+            synced_count += 1
+        else:
+            existing.module_name = m.get("module_name", "")
+            existing.category = m.get("category")
+            existing.geometry_type = m.get("geometry_type")
+            existing.length_feet = m.get("length_feet")
+            existing.length_inches = m.get("length_inches")
+            existing.has_mss = 1 if m.get("has_mss") else 0
+            existing.status = m.get("status")
+            existing.repo_updated_at = m.get("updated_at")
+            existing.synced_at = synced_at
+            existing.data = json.dumps(m)
+            updated_count += 1
+
+    await db.commit()
+    return schemas.SyncResult(synced=synced_count, updated=updated_count, synced_at=synced_at)
+
+
+@app.get("/modules/", response_model=List[schemas.RepoModuleRead])
+async def list_modules(db: AsyncSession = Depends(get_db)):
+    """Return all cached modules from the last sync."""
+    result = await db.execute(
+        select(models.RepoModule).order_by(models.RepoModule.record_number)
+    )
+    rows = result.scalars().all()
+    out = []
+    for row in rows:
+        d = {
+            "id": row.id,
+            "record_number": row.record_number,
+            "module_name": row.module_name,
+            "category": row.category,
+            "geometry_type": row.geometry_type,
+            "length_feet": row.length_feet,
+            "length_inches": row.length_inches,
+            "has_mss": bool(row.has_mss),
+            "status": row.status,
+            "repo_updated_at": row.repo_updated_at,
+            "synced_at": row.synced_at,
+            "data": json.loads(row.data),
+        }
+        out.append(d)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Layout module assignments
+# ---------------------------------------------------------------------------
+
+@app.get("/layouts/{layout_id}/module-assignments", response_model=List[schemas.LayoutModuleAssignmentRead])
+async def list_module_assignments(layout_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(models.LayoutModuleAssignment)
+        .where(models.LayoutModuleAssignment.layout_id == layout_id)
+        .order_by(models.LayoutModuleAssignment.position, models.LayoutModuleAssignment.id)
+    )
+    assignments = result.scalars().all()
+    out = []
+    for a in assignments:
+        mod_result = await db.execute(
+            select(models.RepoModule).where(models.RepoModule.record_number == a.record_number)
+        )
+        mod_row = mod_result.scalar_one_or_none()
+        mod = None
+        if mod_row:
+            mod = {
+                "id": mod_row.id,
+                "record_number": mod_row.record_number,
+                "module_name": mod_row.module_name,
+                "category": mod_row.category,
+                "geometry_type": mod_row.geometry_type,
+                "length_feet": mod_row.length_feet,
+                "length_inches": mod_row.length_inches,
+                "has_mss": bool(mod_row.has_mss),
+                "status": mod_row.status,
+                "repo_updated_at": mod_row.repo_updated_at,
+                "synced_at": mod_row.synced_at,
+                "data": json.loads(mod_row.data),
+            }
+        out.append({
+            "id": a.id,
+            "layout_id": a.layout_id,
+            "district_id": a.district_id,
+            "record_number": a.record_number,
+            "position": a.position,
+            "module": mod,
+        })
+    return out
+
+
+@app.post("/layouts/{layout_id}/module-assignments", response_model=schemas.LayoutModuleAssignmentRead)
+async def create_module_assignment(
+    layout_id: int,
+    body: schemas.LayoutModuleAssignmentCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify the module exists in local cache
+    mod_result = await db.execute(
+        select(models.RepoModule).where(models.RepoModule.record_number == body.record_number)
+    )
+    if mod_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Module not found in local cache — run sync first")
+    db.add(models.LayoutModuleAssignment(
+        layout_id=layout_id,
+        district_id=body.district_id,
+        record_number=body.record_number,
+        position=body.position,
+    ))
+    await db.commit()
+    # Re-read with module data via the list endpoint logic
+    result = await db.execute(
+        select(models.LayoutModuleAssignment)
+        .where(models.LayoutModuleAssignment.layout_id == layout_id)
+        .where(models.LayoutModuleAssignment.record_number == body.record_number)
+    )
+    a = result.scalar_one()
+    mod_result2 = await db.execute(
+        select(models.RepoModule).where(models.RepoModule.record_number == a.record_number)
+    )
+    mod_row = mod_result2.scalar_one()
+    return {
+        "id": a.id, "layout_id": a.layout_id, "district_id": a.district_id,
+        "record_number": a.record_number, "position": a.position,
+        "module": {
+            "id": mod_row.id, "record_number": mod_row.record_number,
+            "module_name": mod_row.module_name, "category": mod_row.category,
+            "geometry_type": mod_row.geometry_type, "length_feet": mod_row.length_feet,
+            "length_inches": mod_row.length_inches, "has_mss": bool(mod_row.has_mss),
+            "status": mod_row.status, "repo_updated_at": mod_row.repo_updated_at,
+            "synced_at": mod_row.synced_at, "data": json.loads(mod_row.data),
+        },
+    }
+
+
+@app.put("/layouts/{layout_id}/module-assignments/{assignment_id}", response_model=schemas.LayoutModuleAssignmentRead)
+async def update_module_assignment(
+    layout_id: int,
+    assignment_id: int,
+    body: schemas.LayoutModuleAssignmentUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(models.LayoutModuleAssignment)
+        .where(models.LayoutModuleAssignment.id == assignment_id)
+        .where(models.LayoutModuleAssignment.layout_id == layout_id)
+    )
+    a = result.scalar_one_or_none()
+    if a is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if body.district_id is not None or "district_id" in body.model_fields_set:
+        a.district_id = body.district_id
+    if body.position is not None:
+        a.position = body.position
+    await db.commit()
+    await db.refresh(a)
+    mod_result = await db.execute(
+        select(models.RepoModule).where(models.RepoModule.record_number == a.record_number)
+    )
+    mod_row = mod_result.scalar_one()
+    return {
+        "id": a.id, "layout_id": a.layout_id, "district_id": a.district_id,
+        "record_number": a.record_number, "position": a.position,
+        "module": {
+            "id": mod_row.id, "record_number": mod_row.record_number,
+            "module_name": mod_row.module_name, "category": mod_row.category,
+            "geometry_type": mod_row.geometry_type, "length_feet": mod_row.length_feet,
+            "length_inches": mod_row.length_inches, "has_mss": bool(mod_row.has_mss),
+            "status": mod_row.status, "repo_updated_at": mod_row.repo_updated_at,
+            "synced_at": mod_row.synced_at, "data": json.loads(mod_row.data),
+        },
+    }
+
+
+@app.delete("/layouts/{layout_id}/module-assignments/{assignment_id}")
+async def delete_module_assignment(
+    layout_id: int,
+    assignment_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(models.LayoutModuleAssignment)
+        .where(models.LayoutModuleAssignment.id == assignment_id)
+        .where(models.LayoutModuleAssignment.layout_id == layout_id)
+    )
+    a = result.scalar_one_or_none()
+    if a is None:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    await db.delete(a)
+    await db.commit()
+    return {"ok": True}
+
 
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):

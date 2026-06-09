@@ -16,7 +16,7 @@
 // For more information, see project README and docker-compose.yml documentation.
 
 import React, { useEffect, useState } from "react";
-import { getLayouts, createLayout, updateLayout, deleteLayout, getDistricts, createDistrict, updateDistrict, deleteDistrict, getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher } from "./api";
+import { getLayouts, createLayout, updateLayout, deleteLayout, getDistricts, createDistrict, updateDistrict, deleteDistrict, getDispatchers, createDispatcher, updateDispatcher, deleteDispatcher, syncModules, getCachedModules, getModuleAssignments, createModuleAssignment, updateModuleAssignment, deleteModuleAssignment } from "./api";
 // import DataSchematic from './DataSchematic';
 
 /**
@@ -779,6 +779,217 @@ function LayoutSelectPopup({ layouts, onSelect, onClose }) {
   );
 }
 
+/**
+ * ModuleAssignmentsPanel — sync Module Repo catalog and assign modules to a Layout.
+ */
+function ModuleAssignmentsPanel({ layout, districts }) {
+  const [assignments, setAssignments] = useState([]);
+  const [catalog, setCatalog] = useState([]);
+  const [syncStatus, setSyncStatus] = useState(null); // { synced, updated, synced_at } | null
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
+  const [search, setSearch] = useState("");
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [assignError, setAssignError] = useState("");
+
+  const loadAssignments = () =>
+    getModuleAssignments(layout.id).then(setAssignments).catch(() => {});
+
+  const loadCatalog = () =>
+    getCachedModules().then(setCatalog).catch(() => {});
+
+  useEffect(() => {
+    loadAssignments();
+    loadCatalog();
+  }, [layout.id]);
+
+  const assignedNumbers = new Set(assignments.map((a) => a.record_number));
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncError("");
+    try {
+      const result = await syncModules();
+      setSyncStatus(result);
+      await loadCatalog();
+    } catch (e) {
+      setSyncError(e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAssign = async (recordNumber) => {
+    setAssignError("");
+    try {
+      await createModuleAssignment(layout.id, { record_number: recordNumber, district_id: null, position: assignments.length });
+      await loadAssignments();
+    } catch (e) {
+      setAssignError(e.message);
+    }
+  };
+
+  const handleRemove = async (assignmentId) => {
+    try {
+      await deleteModuleAssignment(layout.id, assignmentId);
+      await loadAssignments();
+    } catch (e) {
+      setAssignError(e.message);
+    }
+  };
+
+  const handleDistrictChange = async (assignmentId, districtId) => {
+    try {
+      await updateModuleAssignment(layout.id, assignmentId, {
+        district_id: districtId ? parseInt(districtId) : null,
+      });
+      await loadAssignments();
+    } catch (e) {
+      setAssignError(e.message);
+    }
+  };
+
+  const filteredCatalog = catalog.filter((m) => {
+    const q = search.toLowerCase();
+    return (
+      m.record_number.toLowerCase().includes(q) ||
+      m.module_name.toLowerCase().includes(q) ||
+      (m.category || "").toLowerCase().includes(q)
+    );
+  });
+
+  const panelStyle = { marginTop: 32, padding: 16, border: "1px solid #aaa", borderRadius: 6 };
+  const rowStyle = { display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #eee" };
+  const badgeStyle = (cat) => ({
+    fontSize: 11, padding: "2px 7px", borderRadius: 10,
+    background: cat === "industry_spur" ? "#e3f2fd" : cat === "curve" ? "#f3e5f5" : "#f5f5f5",
+    color: "#444",
+  });
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <h3 style={{ margin: 0 }}>Module Assignments</h3>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          style={{ padding: "4px 14px", borderRadius: 5, background: "#1976d2", color: "#fff", border: "none", cursor: syncing ? "wait" : "pointer", fontWeight: 600 }}
+        >
+          {syncing ? "Syncing…" : "Sync Modules"}
+        </button>
+        {syncStatus && (
+          <span style={{ fontSize: 12, color: "#555" }}>
+            Last sync: {new Date(syncStatus.synced_at).toLocaleString()} — {syncStatus.synced} new, {syncStatus.updated} updated
+          </span>
+        )}
+        {catalog.length > 0 && !syncStatus && (
+          <span style={{ fontSize: 12, color: "#555" }}>{catalog.length} modules cached</span>
+        )}
+      </div>
+
+      {syncError && <div style={{ color: "#c00", marginBottom: 8, fontSize: 13 }}>{syncError}</div>}
+      {assignError && <div style={{ color: "#c00", marginBottom: 8, fontSize: 13 }}>{assignError}</div>}
+
+      {/* Assigned modules table */}
+      {assignments.length === 0 ? (
+        <div style={{ color: "#888", marginBottom: 12 }}>No modules assigned to this layout yet.</div>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12, fontSize: 14 }}>
+          <thead>
+            <tr style={{ background: "#f5f5f5" }}>
+              <th style={{ textAlign: "left", padding: "6px 8px" }}>Record #</th>
+              <th style={{ textAlign: "left", padding: "6px 8px" }}>Name</th>
+              <th style={{ textAlign: "left", padding: "6px 8px" }}>Category</th>
+              <th style={{ textAlign: "left", padding: "6px 8px" }}>District</th>
+              <th style={{ padding: "6px 8px" }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {assignments.map((a) => (
+              <tr key={a.id} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "6px 8px", fontFamily: "monospace" }}>{a.record_number}</td>
+                <td style={{ padding: "6px 8px" }}>{a.module?.module_name ?? a.record_number}</td>
+                <td style={{ padding: "6px 8px" }}>
+                  {a.module?.category && <span style={badgeStyle(a.module.category)}>{a.module.category.replace(/_/g, " ")}</span>}
+                </td>
+                <td style={{ padding: "6px 8px" }}>
+                  <select
+                    value={a.district_id ?? ""}
+                    onChange={(e) => handleDistrictChange(a.id, e.target.value || null)}
+                    style={{ fontSize: 13, padding: "2px 6px", borderRadius: 4 }}
+                  >
+                    <option value="">— unassigned —</option>
+                    {districts.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </td>
+                <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                  <button
+                    onClick={() => handleRemove(a.id)}
+                    style={{ color: "#c00", background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}
+                    title="Remove from layout"
+                  >✕</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Module catalog browser */}
+      <button
+        onClick={() => setShowCatalog((v) => !v)}
+        style={{ marginBottom: 8, padding: "4px 14px", borderRadius: 5, border: "1px solid #aaa", cursor: "pointer", background: "var(--btn-bg, #f5f5f5)" }}
+      >
+        {showCatalog ? "▲ Hide Catalog" : "▼ Browse Catalog"}
+        {catalog.length > 0 && ` (${catalog.length - assignedNumbers.size} available)`}
+      </button>
+
+      {showCatalog && (
+        <div style={{ border: "1px solid #ddd", borderRadius: 5, padding: 10 }}>
+          {catalog.length === 0 ? (
+            <div style={{ color: "#888" }}>No modules cached yet — click Sync Modules to fetch from the Module Repository.</div>
+          ) : (
+            <>
+              <input
+                type="text"
+                placeholder="Search by record #, name, or category…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ width: "100%", marginBottom: 8, padding: "6px 8px", borderRadius: 4, border: "1px solid #ccc", boxSizing: "border-box" }}
+              />
+              <div style={{ maxHeight: 280, overflowY: "auto" }}>
+                {filteredCatalog.map((m) => {
+                  const already = assignedNumbers.has(m.record_number);
+                  return (
+                    <div key={m.record_number} style={{ ...rowStyle, opacity: already ? 0.5 : 1 }}>
+                      <span style={{ fontFamily: "monospace", minWidth: 90 }}>{m.record_number}</span>
+                      <span style={{ flex: 1 }}>{m.module_name}</span>
+                      {m.category && <span style={badgeStyle(m.category)}>{m.category.replace(/_/g, " ")}</span>}
+                      {m.length_feet != null && (
+                        <span style={{ fontSize: 12, color: "#666" }}>{m.length_feet}′{m.length_inches ? `${m.length_inches}"` : ""}</span>
+                      )}
+                      <button
+                        onClick={() => !already && handleAssign(m.record_number)}
+                        disabled={already}
+                        style={{ padding: "3px 12px", borderRadius: 4, background: already ? "#ccc" : "#388e3c", color: already ? "#888" : "#fff", border: "none", cursor: already ? "default" : "pointer", fontWeight: 600, fontSize: 13 }}
+                      >
+                        {already ? "Added" : "+ Add"}
+                      </button>
+                    </div>
+                  );
+                })}
+                {filteredCatalog.length === 0 && <div style={{ color: "#888", padding: 8 }}>No modules match your search.</div>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LayoutDetailPage({ layout, layouts, onBack }) {
   const [districts, setDistricts] = useState([]);
   const [dispatchers, setDispatchers] = useState([]);
@@ -843,6 +1054,7 @@ function LayoutDetailPage({ layout, layouts, onBack }) {
         onRefresh={() => setRefreshKey((v) => v + 1)}
         extraData={{ layout }}
       />
+      <ModuleAssignmentsPanel layout={layout} districts={districts} />
     </div>
   );
 }

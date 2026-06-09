@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_serializer
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 class LayoutBase(BaseModel):
     name: str
@@ -46,5 +46,47 @@ class DispatcherCreate(DispatcherBase):
 
 class DispatcherRead(DispatcherBase):
     id: int
+    class Config:
+        orm_mode = True
+
+# --- Module Repository integration ---
+
+class RepoModuleRead(BaseModel):
+    id: int
+    record_number: str
+    module_name: str
+    category: Optional[str] = None
+    geometry_type: Optional[str] = None
+    length_feet: Optional[int] = None
+    length_inches: Optional[int] = None
+    has_mss: Optional[bool] = None
+    status: Optional[str] = None
+    repo_updated_at: Optional[str] = None
+    synced_at: str
+    data: Dict[str, Any]  # full parsed JSON blob
+    class Config:
+        orm_mode = True
+
+class SyncResult(BaseModel):
+    synced: int
+    updated: int
+    synced_at: str
+
+class LayoutModuleAssignmentBase(BaseModel):
+    record_number: str
+    district_id: Optional[int] = None
+    position: int = 0
+
+class LayoutModuleAssignmentCreate(LayoutModuleAssignmentBase):
+    pass
+
+class LayoutModuleAssignmentUpdate(BaseModel):
+    district_id: Optional[int] = None
+    position: Optional[int] = None
+
+class LayoutModuleAssignmentRead(LayoutModuleAssignmentBase):
+    id: int
+    layout_id: int
+    module: Optional[RepoModuleRead] = None
     class Config:
         orm_mode = True
