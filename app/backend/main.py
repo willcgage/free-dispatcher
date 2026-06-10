@@ -177,7 +177,7 @@ async def delete_dispatcher(dispatcher_id: int, db: AsyncSession = Depends(get_d
 @app.post("/modules/sync", response_model=schemas.SyncResult)
 async def sync_modules(db: AsyncSession = Depends(get_db)):
     """Fetch the full module catalog from the Module Repository and cache it locally."""
-    endpoint = f"{MODULEREPO_URL}/functions/v1/api/v1/modules/full"
+    endpoint = f"{MODULEREPO_URL}/functions/v1/modules-full"
     headers = {
         "apikey": MODULEREPO_ANON_KEY,
         "Authorization": f"Bearer {MODULEREPO_ANON_KEY}",
