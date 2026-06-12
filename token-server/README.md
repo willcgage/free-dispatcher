@@ -1,8 +1,17 @@
-# Zello token server
+# Zello token server (OPTIONAL — self-hosted production path)
 
-Local JWT issuer for the Zello Channel API (spec §7.7). Runs on the event host
-alongside the Next.js app; the main app's `/api/zello/token` route proxies here
-so the Zello private key never reaches the browser.
+> **You usually don't need this.** On the **free consumer tier**, paste the
+> 30-day **Sample Development Token** from developers.zello.com into the Admin
+> → Settings → Zello field. `/api/zello/token` serves that directly — no signing,
+> no Enterprise account, no token server.
+>
+> Use this token server only if you have access to a Zello **Issuer + Private
+> Key** (self-signed/production) and want auto-rotated tokens instead of pasting
+> a dev token every 30 days. `/api/zello/token` falls back to it when no dev
+> token is saved.
+
+Local RS256 JWT issuer for the Zello Channel API (spec §7.7). Runs on the event
+host alongside the Next.js app so the private key never reaches the browser.
 
 ## One-time setup
 

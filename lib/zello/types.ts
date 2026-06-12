@@ -22,7 +22,8 @@ export interface ZelloContextValue {
   isConnected: boolean;
   isTx: boolean; // this device is transmitting
   rxSpeaker: string | null; // username currently speaking on channel
-  configured: boolean; // token server + creds available
+  configured: boolean; // a Zello dev token is available
+  canTalk: boolean; // a named Zello account is set (else listen-only)
   error: string | null;
   setRole: (r: Role) => void;
   switchChannel: (ch: string) => void;

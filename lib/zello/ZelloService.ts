@@ -21,8 +21,14 @@ export interface ZelloServiceCallbacks {
 
 export interface ZelloServiceOptions {
   wsUrl: string;
-  username: string;
-  tokenUrl: string; // /api/zello/token
+  tokenUrl: string; // /api/zello/token — returns the shared dev token
+  /**
+   * Optional named Zello account for IN-APP TALK on the free consumer tier.
+   * Omitted → listen-only (no mic, works over plain HTTP). Provided → the
+   * operator can transmit (requires HTTPS for getUserMedia + channel membership).
+   */
+  zelloUsername?: string;
+  zelloPassword?: string;
   callbacks: ZelloServiceCallbacks;
 }
 
@@ -46,19 +52,27 @@ export class ZelloService {
 
   // ---- Connection --------------------------------------------------------
 
+  /** Whether this connection can transmit (named Zello account provided). */
+  get canTalk(): boolean {
+    return Boolean(this.opts.zelloUsername && this.opts.zelloPassword);
+  }
+
   async connect(channel: string): Promise<void> {
     this.disconnect();
     this.channel = channel;
+
+    // Fetch the shared 30-day Zello development token (free consumer tier).
+    // The token authorizes the integration; per-operator talk uses a named
+    // Zello account below.
     let token: string;
     try {
-      const res = await fetch(
-        `${this.opts.tokenUrl}?username=${encodeURIComponent(this.opts.username)}`,
-      );
+      const res = await fetch(this.opts.tokenUrl);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? `token ${res.status}`);
       }
       token = (await res.json()).token;
+      if (!token) throw new Error("no Zello dev token configured");
     } catch (e) {
       this.opts.callbacks.onError(
         e instanceof Error ? e.message : "token fetch failed",
@@ -71,13 +85,21 @@ export class ZelloService {
     ws.binaryType = "arraybuffer";
 
     ws.onopen = () => {
-      this.send({
+      // Friends & Family logon: auth_token + channels[]; username/password only
+      // when talking, else listen_only (spec §7 + zello-channel-api API.md).
+      const logon: Record<string, unknown> = {
         command: "logon",
         seq: this.nextSeq(),
         auth_token: token,
-        username: this.opts.username,
-        channel,
-      });
+        channels: [channel],
+      };
+      if (this.canTalk) {
+        logon.username = this.opts.zelloUsername;
+        logon.password = this.opts.zelloPassword;
+      } else {
+        logon.listen_only = true;
+      }
+      this.send(logon);
       this.startKeepalive();
     };
     ws.onmessage = (ev) => this.onMessage(ev);
@@ -110,8 +132,11 @@ export class ZelloService {
 
   private startKeepalive() {
     this.stopKeepalive();
+    // Lightweight liveness check; a real ping/refresh is finalized during
+    // on-device testing. Avoids sending channel messages (would error on a
+    // listen-only connection).
     this.keepalive = setInterval(() => {
-      this.send({ command: "send_text_message", seq: this.nextSeq(), channel: this.channel, text: "" });
+      if (this.ws?.readyState !== WebSocket.OPEN) this.opts.callbacks.onState(false);
     }, KEEPALIVE_MS);
   }
   private stopKeepalive() {
@@ -151,6 +176,10 @@ export class ZelloService {
 
   async startTx(): Promise<void> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.channel) return;
+    if (!this.canTalk) {
+      this.opts.callbacks.onError("listen-only — talk in the Zello app");
+      return;
+    }
     try {
       this.audioCtx = new AudioContext({ sampleRate: 16000 });
       this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });

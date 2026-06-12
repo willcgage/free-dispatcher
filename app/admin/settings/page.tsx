@@ -7,6 +7,7 @@ import { Panel } from "@/components/admin/ui";
 interface Settings {
   withrottle?: { host?: string; port?: number; enabled?: boolean };
   zello?: {
+    devToken?: string;
     tokenServerUrl?: string;
     username?: string;
     channels?: {
@@ -168,7 +169,27 @@ export default function AdminSettings() {
       <Panel title="Zello PTT">
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className={label}>Token server URL</label>
+            <label className={label}>Development token (30-day, free tier)</label>
+            <textarea
+              className={`${input} font-mono text-xs`}
+              rows={3}
+              placeholder="Paste the Sample Development Token from developers.zello.com"
+              value={zello.devToken ?? ""}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  zello: { ...zello, devToken: e.target.value },
+                })
+              }
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Free consumer tier — expires every 30 days; re-paste before each event.
+              Operators hear comms listen-only; talking uses each operator’s own Zello
+              login (Settings) or the standalone Zello app.
+            </p>
+          </div>
+          <div className="col-span-2">
+            <label className={label}>Token server URL (optional, self-hosted)</label>
             <input
               className={input}
               placeholder="http://192.168.1.10:3001"

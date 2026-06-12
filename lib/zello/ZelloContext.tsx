@@ -10,7 +10,7 @@ import {
 } from "react";
 import { ZelloService } from "./ZelloService";
 import { apiSend } from "@/lib/client/api";
-import { getOperator, CHANNEL_DEFAULTS } from "@/lib/client/operator";
+import { getOperator, getZelloCreds, CHANNEL_DEFAULTS } from "@/lib/client/operator";
 import type { Role, ZelloContextValue } from "./types";
 
 const WS_URL = "wss://zello.io/ws";
@@ -37,14 +37,18 @@ export function ZelloProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const serviceRef = useRef<ZelloService | null>(null);
+  // Optional named Zello account (device-local) → enables in-app talk.
+  const creds = useMemo(() => getZelloCreds(), []);
+  const canTalk = Boolean(creds);
 
   // Establish the connection once we know the operator + default channel.
   useEffect(() => {
     if (!op || !channelSet) return;
     const service = new ZelloService({
       wsUrl: WS_URL,
-      username: op.name,
       tokenUrl: "/api/zello/token",
+      zelloUsername: creds?.username,
+      zelloPassword: creds?.password,
       callbacks: {
         onState: setConnected,
         onRxSpeaker: setRxSpeaker,
@@ -97,6 +101,7 @@ export function ZelloProvider({ children }: { children: React.ReactNode }) {
     isTx,
     rxSpeaker,
     configured,
+    canTalk,
     error,
     setRole: () => {},
     switchChannel,

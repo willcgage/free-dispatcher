@@ -11,19 +11,24 @@ export default function CommsScreen() {
     isTx,
     rxSpeaker,
     configured,
+    canTalk,
     startTx,
     stopTx,
   } = useZello();
 
   const status = !configured
-    ? "PTT unavailable — token server not configured"
+    ? "Voice unavailable — no Zello token configured"
     : !isConnected
-      ? "Reconnecting…"
+      ? "Connecting…"
       : isTx
         ? "Transmitting…"
         : rxSpeaker
           ? `🔊 ${rxSpeaker} speaking`
-          : "Channel quiet";
+          : canTalk
+            ? "Channel quiet"
+            : "Listen-only — hearing this channel";
+
+  const canPtt = configured && isConnected && canTalk;
 
   return (
     <div className="space-y-4">
@@ -52,7 +57,7 @@ export default function CommsScreen() {
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-center">
         <div className={isTx ? "text-emerald-400" : "text-slate-400"}>{status}</div>
         <button
-          disabled={!configured || !isConnected}
+          disabled={!canPtt}
           onMouseDown={(e) => {
             e.preventDefault();
             startTx();
@@ -78,16 +83,36 @@ export default function CommsScreen() {
           className={`mt-4 w-full select-none rounded-2xl py-10 text-xl font-bold ${
             isTx
               ? "bg-emerald-500 text-white"
-              : !configured || !isConnected
+              : !canPtt
                 ? "bg-slate-800 text-slate-500"
                 : "bg-sky-600 text-white active:bg-sky-700"
           }`}
         >
-          🎙 {isTx ? "Release to stop" : "Hold to transmit"}
+          🎙 {isTx ? "Release to stop" : canTalk ? "Hold to transmit" : "Listen-only"}
         </button>
+
+        {configured && !canTalk && (
+          <div className="mt-3 space-y-2 text-xs text-slate-400">
+            <p>
+              You’re hearing the channel. To talk, either add your Zello login in{" "}
+              <a href="/settings" className="text-sky-400 hover:underline">
+                Settings
+              </a>{" "}
+              or use the standalone Zello app.
+            </p>
+            {activeChannel && (
+              <a
+                href={`zello://${encodeURIComponent(activeChannel)}`}
+                className="inline-block rounded-lg border border-slate-600 px-3 py-1.5 text-slate-200"
+              >
+                Open in Zello app →
+              </a>
+            )}
+          </div>
+        )}
         {!configured && (
           <p className="mt-2 text-xs text-slate-600">
-            Set up the Zello token server (token-server/) to enable voice.
+            Admin: paste a Zello 30-day dev token in Settings to enable voice.
           </p>
         )}
       </section>

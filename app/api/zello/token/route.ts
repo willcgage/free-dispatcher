@@ -1,37 +1,53 @@
 /**
- * GET /api/zello/token?username=... — proxy to the local token server (spec §7.7,
- * §5.2). Keeps the Zello private key server-side. Returns { token } or a clear
- * error if the token server isn't running / configured.
+ * GET /api/zello/token — returns the Zello auth token for the client logon.
+ *
+ * Free consumer tier (default): returns the **30-day development token** the
+ * admin pasted into settings (`app_settings.zello.devToken`). No signing, no
+ * Enterprise account. Kept server-side so it isn't baked into the bundle and
+ * can be rotated without a redeploy.
+ *
+ * Optional production path: if no dev token is saved but a local token-server
+ * is running (self-signed RS256, see token-server/), proxy to it.
  */
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { appSettings } from "@/lib/db/schema";
 import { config } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
-  const username =
-    new URL(req.url).searchParams.get("username") ?? "anonymous";
+export async function GET() {
+  // 1) Saved development token (free consumer tier).
+  const [row] = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.key, "zello"))
+    .limit(1);
+  const zello = (row?.value ?? {}) as { devToken?: string };
+  if (zello.devToken && zello.devToken.trim()) {
+    return NextResponse.json({ token: zello.devToken.trim(), source: "dev-token" });
+  }
+
+  // 2) Optional self-hosted token-server fallback.
   try {
     const res = await fetch(`${config.tokenServerUrl}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username }),
-      // token server is local; fail fast if it's not up
-      signal: AbortSignal.timeout(3000),
+      body: JSON.stringify({ username: "freedispatcher" }),
+      signal: AbortSignal.timeout(2000),
     });
-    if (!res.ok) {
-      const detail = await res.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: detail.error ?? `token server ${res.status}` },
-        { status: 502 },
-      );
+    if (res.ok) {
+      const j = await res.json();
+      return NextResponse.json({ token: j.token, source: "token-server" });
     }
-    return NextResponse.json(await res.json());
   } catch {
-    return NextResponse.json(
-      { error: "token server unreachable", configured: false },
-      { status: 503 },
-    );
+    /* token server not running — fall through */
   }
+
+  return NextResponse.json(
+    { error: "no Zello token configured", configured: false },
+    { status: 503 },
+  );
 }

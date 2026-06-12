@@ -229,7 +229,27 @@ Each phase is independently testable before the next begins (spec §10). I've in
       (in ops_log), and Admin UI showed "connected · 1 loco(s)". Stop works; no server =
       quiet retry (graceful degrade). 8/8 parser unit tests. Build + tsc + ESLint clean.
 
-### Phase 5 — Zello PTT (spec Days 11–15) 🟡 SCAFFOLDED 2026-06-12 (untested — needs creds)
+### Phase 5 — Zello PTT — FREE consumer tier (revised 2026-06-12)
+
+**Auth correction:** the spec's issuer/private-key RS256 signing is the Zello
+Work / Enterprise path. The free consumer tier uses a **30-day Sample
+Development Token** (free Zello account → developers.zello.com), pasted into
+Admin → Settings; `/api/zello/token` serves it (no signing). The token-server
+stays as the *optional* self-hosted/production path.
+
+**Talk model (recommended hybrid, implemented):** default **listen-only** for
+everyone using the shared dev token (zero per-user setup; F&F `listen_only`).
+To talk in-app, an operator adds their *own* Zello username/password in mobile
+Settings (device-local, never sent to our server) → logs on as a named account.
+Otherwise they talk via the standalone Zello app (deep link from Comms). This
+matches the spec's "standalone Zello app as fallback" and the "no hardware PTT
+in browser" constraint.
+
+**HTTPS impact:** `getUserMedia` (mic) is only needed for in-app *talk*.
+Listen-only playback works over plain HTTP, so the **default mode needs no
+domain/cert (Q2/Q5 become optional)** — HTTPS only for the opt-in talk upgrade.
+
+🟡 SCAFFOLDED 2026-06-12 (untested live — needs a real dev token + Opus codec)
 - [x] `token-server/` — local JWT issuer (`express` + `jsonwebtoken` + `dotenv`); `.env.example`,
       README, `/health` + `/token`.
 - [x] `app/api/zello/token` (proxy to token server, graceful 503) + `app/api/zello/tx`
@@ -259,7 +279,8 @@ Each phase is independently testable before the next begins (spec §10). I've in
 | # | Item | Resolution |
 | - | ---- | ---------- |
 | Q1 | Local DB engine | ✅ **LOCKED: PGlite (embedded Postgres) + Drizzle** |
-| Q2 | LAN HTTPS approach | ✅ **LOCKED: Caddy + Let's Encrypt DNS-01 on a fixed public hostname → host LAN IP; HTTP-only + PTT off when offline; self-signed as last-resort fallback** |
+| Q2 | LAN HTTPS approach | ✅ LOCKED (Caddy + LE DNS-01) — but now **only needed for opt-in in-app talk**; listen-only default works over plain HTTP. |
+| Q4b | Zello talk-auth model | ✅ **LOCKED: listen-only default (shared 30-day dev token) + opt-in per-operator Zello login for in-app talk; standalone Zello app otherwise** |
 | Q3 | Repo layout | ✅ **LOCKED: old app → `legacy/` subdir + `archive/electron-v0.7` tag; new app at repo root** |
 | Q4 | Zello account/keys + 4 channels ahead of Phase 5 (spec §11.3) | ⏳ needs your setup |
 | Q5 | Domain + DNS provider w/ API for Q2 (Cloudflare free tier) | ⏳ needs your setup |

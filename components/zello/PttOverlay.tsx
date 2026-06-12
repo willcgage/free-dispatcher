@@ -9,12 +9,12 @@ import { useZello } from "@/hooks/useZello";
  * avoid the mobile double-fire.
  */
 export function PttOverlay() {
-  const { isConnected, isTx, rxSpeaker, configured, startTx, stopTx, activeChannel } =
+  const { isConnected, isTx, rxSpeaker, configured, canTalk, startTx, stopTx, activeChannel } =
     useZello();
 
   const down = (e: React.SyntheticEvent) => {
     e.preventDefault();
-    if (configured && isConnected) startTx();
+    if (configured && isConnected && canTalk) startTx();
   };
   const up = (e: React.SyntheticEvent) => {
     e.preventDefault();
@@ -28,6 +28,9 @@ export function PttOverlay() {
     disabled = true;
   } else if (!isConnected) {
     label = "Reconnecting…";
+    disabled = true;
+  } else if (!canTalk) {
+    label = rxSpeaker ? `🔊 ${rxSpeaker}` : "Listen-only · talk in Zello app";
     disabled = true;
   } else if (isTx) {
     label = "Transmitting…";
