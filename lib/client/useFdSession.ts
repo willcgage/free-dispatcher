@@ -49,6 +49,9 @@ export function useFdSession(): UseFdSession {
   }, []);
 
   useEffect(() => {
+    // Initial load + subscribe to the SSE stream (external system). refresh()
+    // is async: its setState calls run after an await, not synchronously here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
 
     const es = new EventSource("/api/events");

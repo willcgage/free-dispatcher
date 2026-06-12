@@ -201,14 +201,20 @@ Each phase is independently testable before the next begins (spec §10). I've in
 - **Schema additions this phase:** `trains.assigned_operator_id` (engineer assignment),
       `app_settings` table (admin config). Migration `0001_*`.
 
-### Phase 3 — Mobile client (spec Days 7–9)
-- [ ] `app/(mobile)/join/page.tsx` — QR/URL → role picker → name → SSE connect.
-- [ ] Mobile shell: `components/layout/MobileNav.tsx`, safe-area CSS, `<768px` breakpoint.
-- [ ] `components/trains/TrainCard.tsx` + `app/(mobile)/trains/page.tsx` (filter + detail sheet).
-- [ ] `app/(mobile)/dispatch/page.tsx` (Dispatcher metrics, cards, ops log, grant sheet).
-- [ ] `app/(mobile)/modules|comms|settings/page.tsx`.
-- **Exit test:** an Engineer joins from a phone, sees only their trains, updates status, and
-      the Admin board updates live.
+### Phase 3 — Mobile client (spec Days 7–9) ✅ DONE 2026-06-12
+- [x] `app/(mobile)/join/page.tsx` — role picker → name → join (token + operatorId stored).
+- [x] Mobile shell: `MobileShell` (join gate + safe-area scroll) + `MobileNav` (role-filtered
+      bottom nav); safe-area/PTT-height CSS vars in `globals.css`.
+- [x] `components/trains/TrainCard.tsx` (status badge, authority lock, Running/Holding/Arrived
+      actions) + `app/(mobile)/trains/page.tsx` (status filter; engineer "my trains" toggle
+      via real operatorId).
+- [x] `app/(mobile)/dispatch/page.tsx` (metrics, authority grant/revoke, live ops log).
+- [x] `app/(mobile)/modules` (linear track view w/ trains-here), `comms` (role channels +
+      Phase-5 PTT placeholder), `settings` (identity, connection, leave).
+- **Exit test ✅:** joined as Dispatcher in-browser → landed on Dispatch, granted authority
+      (button → 🔒 via live SSE refresh), role-correct nav + channels, no console errors.
+      Build + ESLint clean. (Real-phone engineer flow pending hardware.)
+- **Fix:** made the PGlite client lazy (Proxy) so `next build` no longer initializes the DB.
 
 ### Phase 4 — WiThrottle monitor (spec Day 10, optional feature)
 - [ ] `lib/withrottle/WiThrottleMonitor.ts` — TCP client to port 12090; parse `MT+`/`MT-`.

@@ -4,6 +4,11 @@
  * Runs in-process inside the Next.js server. No external service, no network,
  * fully offline. The data dir persists to disk under `config.dbDataDir`.
  *
+ * Initialization is LAZY: PGlite opens on first query, not at module import.
+ * This keeps `next build` from touching the database when it imports route
+ * modules to read their config (which otherwise causes parallel build workers
+ * to fail opening the same data dir).
+ *
  * Driver-swap path: to promote to a real Postgres box later, replace this file
  * with `drizzle-orm/node-postgres` + a connection string — schema unchanged.
  *
@@ -24,20 +29,38 @@ const globalForDb = globalThis as unknown as {
   __fdDb?: DbClient;
 };
 
-// PGlite creates the data dir but not its parent — ensure the parent exists.
-if (!globalForDb.__fdPglite) {
+function init(): { client: PGlite; db: DbClient } {
+  if (globalForDb.__fdPglite && globalForDb.__fdDb) {
+    return { client: globalForDb.__fdPglite, db: globalForDb.__fdDb };
+  }
+  // PGlite creates the data dir but not its parent — ensure the parent exists.
   mkdirSync(dirname(config.dbDataDir), { recursive: true });
-}
-
-const client =
-  globalForDb.__fdPglite ?? new PGlite(config.dbDataDir);
-
-export const db: DbClient =
-  globalForDb.__fdDb ?? drizzle(client, { schema });
-
-if (process.env.NODE_ENV !== "production") {
+  const client = new PGlite(config.dbDataDir);
+  const db = drizzle(client, { schema });
   globalForDb.__fdPglite = client;
   globalForDb.__fdDb = db;
+  return { client, db };
 }
 
-export { client as pglite };
+/** The raw PGlite instance (for migrations / explicit close). Lazily opened. */
+export function getPglite(): PGlite {
+  return init().client;
+}
+
+/**
+ * Drizzle client. A Proxy so the underlying PGlite only opens on first actual
+ * use, never at import time.
+ */
+export const db: DbClient = new Proxy({} as DbClient, {
+  get(_target, prop, receiver) {
+    const real = init().db as unknown as Record<string | symbol, unknown>;
+    return Reflect.get(real, prop, receiver);
+  },
+});
+
+/** Back-compat alias used by migrate/seed scripts. */
+export const pglite = {
+  close: async () => {
+    if (globalForDb.__fdPglite) await globalForDb.__fdPglite.close();
+  },
+};

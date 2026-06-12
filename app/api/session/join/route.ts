@@ -46,7 +46,12 @@ export async function POST(req: Request) {
       deviceId,
     });
     const state = await sessionManager.getFullState();
-    return NextResponse.json({ sessionToken, deviceId, state });
+    return NextResponse.json({
+      sessionToken,
+      deviceId,
+      operatorId: operator.id,
+      state,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "join failed";
     const status = message === "no active session" ? 409 : 500;
