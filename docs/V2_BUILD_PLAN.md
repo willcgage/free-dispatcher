@@ -229,12 +229,24 @@ Each phase is independently testable before the next begins (spec §10). I've in
       (in ops_log), and Admin UI showed "connected · 1 loco(s)". Stop works; no server =
       quiet retry (graceful degrade). 8/8 parser unit tests. Build + tsc + ESLint clean.
 
-### Phase 5 — Zello PTT (spec Days 11–15)
-- [ ] **HTTPS-on-LAN first** (see §4.1) — blocker for mic on phones.
-- [ ] `token-server/` — local JWT issuer (`express` + `jsonwebtoken`); test with `curl`.
-- [ ] `app/api/zello/token/route.ts` — proxy to token server.
-- [ ] `lib/zello/ZelloService.ts` — WS singleton, logon, keepalive; `ZelloContext.tsx` + `useZello`.
-- [ ] Opus encode/decode — validate standalone before integrating.
+### Phase 5 — Zello PTT (spec Days 11–15) 🟡 SCAFFOLDED 2026-06-12 (untested — needs creds)
+- [x] `token-server/` — local JWT issuer (`express` + `jsonwebtoken` + `dotenv`); `.env.example`,
+      README, `/health` + `/token`.
+- [x] `app/api/zello/token` (proxy to token server, graceful 503) + `app/api/zello/tx`
+      (broadcasts `zello_tx_start/stop` to SSE).
+- [x] `lib/zello/ZelloService.ts` (WS, logon, keepalive, channel switch, tx/rx state machine),
+      `ZelloContext.tsx` + `hooks/useZello.ts`, `audio.ts` (9-byte header), capture worklet.
+- [x] `components/zello/{PttOverlay,ChannelBar}.tsx` mounted persistently in the mobile shell;
+      Comms screen wired to real context. Degrades gracefully when unconfigured.
+- [ ] **Opus encode/decode** — `loadOpusEncoder()` is a no-op stub; the spec's
+      `ogg-opus-encoder` is not a published package. Pick a real WASM Opus lib during
+      on-device testing.
+- [ ] **LAN HTTPS** (§4.1, Q2) — required before mic works on real phones.
+- **Verified ✅ (scaffolding):** provider + channel bar + PTT overlay + Comms mount, show
+      role-correct channels, and degrade to "PTT unavailable" with no token server; no console
+      errors; build + tsc + ESLint clean.
+- **BLOCKED on user:** Q4 Zello account/keys + 4 channels, Q5 domain/DNS for LAN HTTPS, and
+      the Opus codec choice — needed to finish + test live voice.
 - [ ] `components/zello/PttOverlay.tsx` + `ChannelBar.tsx`; mount once in `app/layout.tsx`.
 - [ ] SSE `zello_tx_start/stop` so Dispatchers see who's speaking.
 - **Exit test:** hold-to-talk works on a real phone across every screen; channel switch

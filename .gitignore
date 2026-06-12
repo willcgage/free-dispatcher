@@ -24,6 +24,7 @@ __pycache__/
 next-env.d.ts
 .vercel
 .env*
+!.env.example
 *.pem
 
 # Local PGlite data dir

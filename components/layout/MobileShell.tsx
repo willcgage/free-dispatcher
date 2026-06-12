@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getOperator, type Operator } from "@/lib/client/operator";
 import { MobileNav } from "./MobileNav";
+import { ZelloProvider } from "@/lib/zello/ZelloContext";
+import { ChannelBar } from "@/components/zello/ChannelBar";
+import { PttOverlay } from "@/components/zello/PttOverlay";
+
+// Reserve room for the persistent PTT bar above the nav (spec §7.3/§7.5).
+const PTT_VARS = { "--fd-ptt-height": "60px" } as CSSProperties;
 
 /**
  * Mobile shell: gates operator routes behind a join, renders the page content
@@ -42,9 +48,15 @@ export function MobileShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="fd-mobile min-h-screen bg-slate-950 text-slate-100">
-      <div className="fd-mobile-scroll mx-auto max-w-md px-4 pt-4">{children}</div>
-      <MobileNav role={operator.role} />
-    </div>
+    <ZelloProvider>
+      <div className="fd-mobile min-h-screen bg-slate-950 text-slate-100" style={PTT_VARS}>
+        <div className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+          <ChannelBar />
+        </div>
+        <div className="fd-mobile-scroll mx-auto max-w-md px-4 pt-4">{children}</div>
+        <PttOverlay />
+        <MobileNav role={operator.role} />
+      </div>
+    </ZelloProvider>
   );
 }
