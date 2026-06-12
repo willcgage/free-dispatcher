@@ -18,16 +18,40 @@ interface Settings {
   };
 }
 
+interface WtStatus {
+  enabled: boolean;
+  state: "disconnected" | "connecting" | "connected";
+  acquired: { address: number; name: string; trainNumber: string | null }[];
+}
+
 export default function AdminSettings() {
   const [settings, setSettings] = useState<Settings>({});
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [wtStatus, setWtStatus] = useState<WtStatus | null>(null);
 
   useEffect(() => {
     apiGet<{ settings: Settings }>("/api/settings")
       .then((r) => setSettings(r.settings ?? {}))
       .catch(() => {});
+    const poll = () =>
+      apiGet<WtStatus>("/api/withrottle").then(setWtStatus).catch(() => {});
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
   }, []);
+
+  async function controlMonitor(action: "start" | "stop") {
+    setBusy(true);
+    try {
+      const s = await apiSend<WtStatus>("POST", "/api/withrottle", { action });
+      setWtStatus(s);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "monitor control failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save(partial: Settings) {
     setBusy(true);
@@ -105,13 +129,40 @@ export default function AdminSettings() {
             Enable WiThrottle monitoring
           </label>
         </div>
-        <button
-          disabled={busy}
-          onClick={() => save({ withrottle: settings.withrottle ?? {} })}
-          className="mt-3 rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
-        >
-          Save WiThrottle
-        </button>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            disabled={busy}
+            onClick={() => save({ withrottle: settings.withrottle ?? {} })}
+            className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+          >
+            Save WiThrottle
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => controlMonitor(wtStatus?.enabled ? "stop" : "start")}
+            className="rounded-md border border-slate-600 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {wtStatus?.enabled ? "Stop monitor" : "Start monitor"}
+          </button>
+          <span className="text-sm">
+            <span
+              className={`mr-1.5 inline-block h-2 w-2 rounded-full ${
+                wtStatus?.state === "connected"
+                  ? "bg-emerald-400"
+                  : wtStatus?.enabled
+                    ? "bg-amber-400"
+                    : "bg-slate-600"
+              }`}
+            />
+            <span className="text-slate-400">
+              {!wtStatus?.enabled
+                ? "stopped"
+                : wtStatus.state === "connected"
+                  ? `connected · ${wtStatus.acquired.length} loco(s)`
+                  : wtStatus.state}
+            </span>
+          </span>
+        </div>
       </Panel>
 
       <Panel title="Zello PTT">

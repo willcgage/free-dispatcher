@@ -1,8 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFdSession } from "@/lib/client/useFdSession";
+import { apiGet } from "@/lib/client/api";
 import { getOperator, clearOperator, CHANNEL_DEFAULTS } from "@/lib/client/operator";
+
+interface WiThrottleStatus {
+  enabled: boolean;
+  state: "disconnected" | "connecting" | "connected";
+  acquired: { address: number; name: string; trainNumber: string | null }[];
+}
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -18,6 +26,32 @@ export default function SettingsScreen() {
   const { state, connected } = useFdSession();
   const op = getOperator();
   const channels = op ? CHANNEL_DEFAULTS[op.role] : null;
+  const showWiThrottle = op?.role === "engineer" || op?.role === "yardmaster";
+
+  const [wt, setWt] = useState<WiThrottleStatus | null>(null);
+  useEffect(() => {
+    if (!showWiThrottle) return;
+    let alive = true;
+    const poll = () =>
+      apiGet<WiThrottleStatus>("/api/withrottle")
+        .then((s) => alive && setWt(s))
+        .catch(() => {});
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [showWiThrottle]);
+
+  const wtLabel = !wt?.enabled
+    ? "Off"
+    : wt.state === "connected"
+      ? "Connected"
+      : wt.state === "connecting"
+        ? "Connecting…"
+        : "Disconnected";
+  const myLoco = wt?.acquired[0];
 
   function leave() {
     if (!confirm("Leave the session on this device?")) return;
@@ -45,11 +79,47 @@ export default function SettingsScreen() {
           }
         />
         <Row label="Zello channel" value={channels?.default ?? "—"} />
-        <Row
-          label="WiThrottle"
-          value={<span className="text-slate-500">Phase 4</span>}
-        />
+        {showWiThrottle && (
+          <Row
+            label="WiThrottle"
+            value={
+              <span
+                className={
+                  wt?.state === "connected"
+                    ? "text-emerald-400"
+                    : wt?.enabled
+                      ? "text-amber-400"
+                      : "text-slate-500"
+                }
+              >
+                {wtLabel}
+              </span>
+            }
+          />
+        )}
+        {showWiThrottle && (
+          <Row
+            label="Loco acquired"
+            value={
+              myLoco ? (
+                <span>
+                  {myLoco.address}
+                  {myLoco.trainNumber ? ` · #${myLoco.trainNumber}` : ""}
+                </span>
+              ) : (
+                <span className="text-slate-500">none</span>
+              )
+            }
+          />
+        )}
       </section>
+
+      {showWiThrottle && wt?.enabled && wt.state !== "connected" && (
+        <p className="rounded-lg border border-amber-900/60 bg-amber-950/30 px-4 py-2 text-xs text-amber-300">
+          Tip: open Engine Driver / WiThrottle and connect to the layout’s
+          WiThrottle server on the same Wi-Fi.
+        </p>
+      )}
 
       <button
         onClick={() => router.refresh()}

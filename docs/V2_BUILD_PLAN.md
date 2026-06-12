@@ -216,13 +216,18 @@ Each phase is independently testable before the next begins (spec §10). I've in
       Build + ESLint clean. (Real-phone engineer flow pending hardware.)
 - **Fix:** made the PGlite client lazy (Proxy) so `next build` no longer initializes the DB.
 
-### Phase 4 — WiThrottle monitor (spec Day 10, optional feature)
-- [ ] `lib/withrottle/WiThrottleMonitor.ts` — TCP client to port 12090; parse `MT+`/`MT-`.
-- [ ] Wire into `SessionManager`: auto-assign train to engineer on loco acquire; fire
-      `train_status_changed`.
-- [ ] WiThrottle status indicator on Engineer settings + train card.
-- **Exit test:** acquiring a DCC address in Engine Driver auto-links that train; if no
-      JMRI/DCC-EX present, manual assignment still works (graceful degrade).
+### Phase 4 — WiThrottle monitor (spec Day 10, optional feature) ✅ DONE 2026-06-12
+- [x] `lib/withrottle/parse.ts` (pure MT+/MT-/MTA parser, unit-tested) + `WiThrottleMonitor.ts`
+      (TCP client w/ handshake + auto-reconnect, typed EventEmitter).
+- [x] `lib/withrottle/WiThrottleService.ts` singleton: tracks acquired locos, maps DCC address →
+      roster train, fires `train_status_changed` via `SessionManager` on acquire/release.
+- [x] `GET/POST /api/withrottle` (status + admin start/stop, host/port from `app_settings`).
+- [x] WiThrottle status + acquired loco on Engineer/Yardmaster mobile settings; start/stop +
+      live status in Admin settings.
+- **Exit test ✅:** against a fake WiThrottle TCP server, monitor connected, parsed
+      `MT+L4449`, auto-mapped DCC 4449 → train #101, broadcast `train_status_changed`
+      (in ops_log), and Admin UI showed "connected · 1 loco(s)". Stop works; no server =
+      quiet retry (graceful degrade). 8/8 parser unit tests. Build + tsc + ESLint clean.
 
 ### Phase 5 — Zello PTT (spec Days 11–15)
 - [ ] **HTTPS-on-LAN first** (see §4.1) — blocker for mic on phones.
