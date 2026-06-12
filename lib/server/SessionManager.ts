@@ -16,10 +16,12 @@ import {
   sessions,
   trains,
   trainStatuses,
+  authorityLog,
   operators,
   moduleLayouts,
   opsLog,
   type OperatorRole,
+  type TrainStatus,
 } from "@/lib/db/schema";
 import type { FdEvent } from "./events";
 
@@ -168,6 +170,155 @@ class SessionManager {
       session.id,
     );
     return { session, operator: op };
+  }
+
+  /** Mark an operator as left and broadcast (spec §3.3 force-disconnect / leave). */
+  async leaveOperator(deviceId: string): Promise<void> {
+    const session = await this.getActiveSession();
+    if (!session) return;
+    await db
+      .update(operators)
+      .set({ leftAt: new Date() })
+      .where(
+        and(
+          eq(operators.sessionId, session.id),
+          eq(operators.deviceId, deviceId),
+          isNull(operators.leftAt),
+        ),
+      );
+    await this.broadcast({ type: "operator_left", deviceId }, session.id);
+  }
+
+  // ---- Train status & authority -----------------------------------------
+
+  /**
+   * Update a train's current status row (status / location / authority) and
+   * broadcast train_status_changed. Upserts the train_statuses row if missing.
+   */
+  async updateTrainStatus(
+    trainId: string,
+    patch: {
+      status?: TrainStatus;
+      locationName?: string | null;
+      hasAuthority?: boolean;
+    },
+    updatedBy: string | null,
+  ) {
+    const session = await this.getActiveSession();
+    if (!session) throw new Error("no active session");
+
+    const existing = await db
+      .select()
+      .from(trainStatuses)
+      .where(eq(trainStatuses.trainId, trainId))
+      .limit(1);
+
+    let row;
+    if (existing[0]) {
+      [row] = await db
+        .update(trainStatuses)
+        .set({ ...patch, updatedBy, updatedAt: new Date() })
+        .where(eq(trainStatuses.id, existing[0].id))
+        .returning();
+    } else {
+      [row] = await db
+        .insert(trainStatuses)
+        .values({
+          trainId,
+          sessionId: session.id,
+          status: patch.status ?? "yard",
+          locationName: patch.locationName ?? null,
+          hasAuthority: patch.hasAuthority ?? false,
+          updatedBy,
+        })
+        .returning();
+    }
+
+    await this.broadcast(
+      {
+        type: "train_status_changed",
+        trainId,
+        status: row.status,
+        location: row.locationName,
+        hasAuthority: row.hasAuthority,
+      },
+      session.id,
+    );
+    return row;
+  }
+
+  /** Grant track authority to a train (Dispatcher/Admin). */
+  async grantAuthority(
+    trainId: string,
+    segment: string | null,
+    byOperator: string | null,
+  ) {
+    const session = await this.getActiveSession();
+    if (!session) throw new Error("no active session");
+
+    await db
+      .update(trainStatuses)
+      .set({ hasAuthority: true, updatedAt: new Date() })
+      .where(eq(trainStatuses.trainId, trainId));
+    await db
+      .insert(authorityLog)
+      .values({ sessionId: session.id, trainId, segment, action: "granted", byOperator });
+
+    await this.broadcast(
+      { type: "authority_granted", trainId, segment, grantedBy: byOperator },
+      session.id,
+    );
+  }
+
+  /** Revoke authority by train or segment (Dispatcher/Admin). */
+  async revokeAuthority(
+    target: { trainId?: string; segment?: string },
+    byOperator: string | null,
+  ) {
+    const session = await this.getActiveSession();
+    if (!session) throw new Error("no active session");
+
+    if (target.trainId) {
+      await db
+        .update(trainStatuses)
+        .set({ hasAuthority: false, updatedAt: new Date() })
+        .where(eq(trainStatuses.trainId, target.trainId));
+    }
+    await db.insert(authorityLog).values({
+      sessionId: session.id,
+      trainId: target.trainId ?? null,
+      segment: target.segment ?? null,
+      action: "revoked",
+      byOperator,
+    });
+
+    await this.broadcast(
+      {
+        type: "authority_revoked",
+        trainId: target.trainId ?? null,
+        segment: target.segment ?? null,
+      },
+      session.id,
+    );
+  }
+
+  /** Emergency Stop All: revoke every train's authority, broadcast E-stop (spec §3.2). */
+  async emergencyStop(byOperator: string | null) {
+    const session = await this.getActiveSession();
+    if (!session) throw new Error("no active session");
+
+    await db
+      .update(trainStatuses)
+      .set({ hasAuthority: false, updatedAt: new Date() })
+      .where(eq(trainStatuses.sessionId, session.id));
+    await db.insert(authorityLog).values({
+      sessionId: session.id,
+      action: "revoked",
+      segment: "ALL",
+      byOperator,
+    });
+
+    await this.broadcast({ type: "emergency_stop" }, session.id);
   }
 }
 

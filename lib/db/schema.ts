@@ -73,11 +73,17 @@ export const trains = pgTable(
     owner: text("owner"),
     consistId: text("consist_id"),
     equipmentType: text("equipment_type").$type<EquipmentType>(),
+    // Engineer assigned to this train for the session (spec §3.3). Set in the
+    // Admin roster or auto-set by the WiThrottle monitor on loco acquisition.
+    assignedOperatorId: uuid("assigned_operator_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("trains_session_idx").on(t.sessionId)],
+  (t) => [
+    index("trains_session_idx").on(t.sessionId),
+    index("trains_assigned_idx").on(t.assignedOperatorId),
+  ],
 );
 
 // ---- train_statuses ------------------------------------------------------
@@ -198,6 +204,18 @@ export const stagingTracks = pgTable(
   (t) => [index("staging_tracks_layout_idx").on(t.layoutId)],
 );
 
+// ---- app_settings --------------------------------------------------------
+// Singleton-ish key/value store for Admin configuration (WiThrottle, Zello,
+// server). Not in spec §9 but required by the §3.3 settings screens; persisted
+// so all clients load it on connect.
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const schema = {
   sessions,
   trains,
@@ -207,4 +225,5 @@ export const schema = {
   opsLog,
   moduleLayouts,
   stagingTracks,
+  appSettings,
 };

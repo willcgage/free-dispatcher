@@ -183,16 +183,23 @@ Each phase is independently testable before the next begins (spec §10). I've in
   second client hit `/api/session/join`; event durably written to `ops_log`. (Live phone mDNS
   discovery to be confirmed on real hardware.) `npm run build` + ESLint clean.
 
-### Phase 2 — Admin UI (spec Days 4–6)
-- [ ] `app/admin/page.tsx` dashboard shell: session bar, train board, authority map, device
-      list, ops log, quick actions (E-stop / reset / export).
-- [ ] Train roster: `app/api/trains/*` + `app/admin/trains/page.tsx` (full CRUD).
-- [ ] Module layout: `app/api/modules` + `app/admin/modules/page.tsx` (linear track-order
-      editor) — reads the locally-synced module catalog.
-- [ ] Authority: `app/api/authority/{grant,revoke}` + `ops_log` entries.
-- [ ] `app/admin/settings/page.tsx` — WiThrottle + Zello config (persist only, no logic yet).
-- **Exit test:** create a session, add trains, order modules, grant/revoke authority — all
-      reflected in the local DB and broadcast over SSE.
+### Phase 2 — Admin UI (spec Days 4–6) ✅ DONE 2026-06-12
+- [x] `app/admin/` shell (`AdminShell` nav + host admin-token bootstrap) + dashboard:
+      session bar, train board w/ inline authority toggle, connected devices, ops log,
+      Emergency Stop. Live via `useFdSession` (SSE-driven).
+- [x] Train roster: `app/api/trains/*` + `app/admin/trains/page.tsx` (create/list/delete,
+      RBAC-gated; engineer-owns-train rule on PATCH).
+- [x] Module layout: `app/api/modules/*` + `app/admin/modules/page.tsx` (linear sequence
+      editor; full Module Repository catalog sync is the separate M6 carry-over).
+- [x] Authority: `app/api/authority/{grant,revoke}` + `app/api/admin/emergency-stop`,
+      all `authority_log` + `ops_log` + SSE broadcast.
+- [x] `app/admin/session/page.tsx` (create/archive, singleton) and
+      `app/admin/settings/page.tsx` (WiThrottle + Zello config persisted to `app_settings`).
+- **Exit test ✅:** via API — created train (401 without token, 201 with), granted authority
+      (reflected in state), Emergency Stop revoked all authority, settings + modules persisted.
+      Dashboard + roster verified in-browser with live data, no console errors. Build + tsc clean.
+- **Schema additions this phase:** `trains.assigned_operator_id` (engineer assignment),
+      `app_settings` table (admin config). Migration `0001_*`.
 
 ### Phase 3 — Mobile client (spec Days 7–9)
 - [ ] `app/(mobile)/join/page.tsx` — QR/URL → role picker → name → SSE connect.
