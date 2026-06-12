@@ -14,3 +14,21 @@ __pycache__/
 *.sqlite
 *.sqlite3
 *.log
+
+# Next.js / Node (added for v2 rebuild)
+/node_modules
+/.next/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+.env*
+!.env.example
+*.pem
+
+# Local PGlite data dir
+/.data/
+
+# Zello credentials (issuer + private key) — never commit
+zello-credentials.json
