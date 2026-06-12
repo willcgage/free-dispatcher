@@ -16,6 +16,29 @@ export function build9ByteHeader(streamId: number, packetIndex: number): Uint8Ar
   return header;
 }
 
+/**
+ * Build the base64 Opus codec header Zello's start_stream expects:
+ *   [sampleRate uint16 LE][framesPerPacket uint8][frameDurationMs uint8]
+ * (e.g. 16000 Hz, 1 frame/packet, 20 ms). The exact bytes are finalized during
+ * on-device testing against the live Zello stream.
+ */
+export function buildOpusCodecHeader(
+  sampleRate: number,
+  framesPerPacket = 1,
+  frameDurationMs = 20,
+): string {
+  const buf = new Uint8Array(4);
+  buf[0] = sampleRate & 0xff;
+  buf[1] = (sampleRate >> 8) & 0xff;
+  buf[2] = framesPerPacket;
+  buf[3] = frameDurationMs;
+  let bin = "";
+  for (const b of buf) bin += String.fromCharCode(b);
+  return typeof btoa !== "undefined"
+    ? btoa(bin)
+    : Buffer.from(buf).toString("base64");
+}
+
 /** Parse a received binary packet's header; returns the Opus payload slice. */
 export function stripHeader(data: ArrayBuffer): {
   streamId: number;

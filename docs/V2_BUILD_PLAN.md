@@ -269,9 +269,12 @@ Opus codec; channels created manually in Zello app)
       `ZelloContext.tsx` + `hooks/useZello.ts`, `audio.ts` (9-byte header), capture worklet.
 - [x] `components/zello/{PttOverlay,ChannelBar}.tsx` mounted persistently in the mobile shell;
       Comms screen wired to real context. Degrades gracefully when unconfigured.
-- [ ] **Opus encode/decode** — `loadOpusEncoder()` is a no-op stub; the spec's
-      `ogg-opus-encoder` is not a published package. Pick a real WASM Opus lib during
-      on-device testing.
+- [x] **Opus encode/decode** — wired `libopus-wasm` (raw-packet, browser+Node, MIT,
+      zero-dep): `createEncoder`/`createDecoder` at 16 kHz mono, dynamically imported
+      (~640 KB chunk, lazy on first TX/RX — verified not in initial bundle). RX decodes +
+      plays via Web Audio. Verified offline round-trip (320 samples → 231-byte Opus → 320
+      samples). Remaining: the Zello `codec_header` byte layout still needs live-stream
+      verification.
 - [ ] **LAN HTTPS** (§4.1, Q2) — required before mic works on real phones.
 - **Verified ✅ (scaffolding):** provider + channel bar + PTT overlay + Comms mount, show
       role-correct channels, and degrade to "PTT unavailable" with no token server; no console

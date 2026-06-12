@@ -3,14 +3,22 @@
  * Channel API: logon, keepalive, channel switch, PTT transmit/receive.
  *
  * Free consumer tier: one channel per WebSocket; switching closes and reopens
- * (~1–2 s). The Opus encoder is dynamically imported so its ~500 KB bundle is
- * lazy-loaded only when the operator first transmits (spec §12).
+ * (~1–2 s). Opus encode/decode uses libopus-wasm, dynamically imported so its
+ * ~430 KB WASM is lazy-loaded only when first transmitting/receiving (spec §12).
  *
- * NOTE: requires a secure context (HTTPS/localhost) for getUserMedia, real
- * Zello credentials via the token server, and on-device verification. Without
- * configuration it stays in a graceful "unconfigured" state.
+ * NOTE: TX requires a secure context (HTTPS/localhost) for getUserMedia and a
+ * named Zello account; RX/listen works without. The Zello opus codec_header
+ * byte layout is still pending on-device verification against a live stream.
+ * Without a configured token the service stays in a graceful state.
  */
-import { build9ByteHeader } from "./audio";
+import { build9ByteHeader, buildOpusCodecHeader, stripHeader } from "./audio";
+import type {
+  OpusEncoderHandle,
+  OpusDecoderHandle,
+} from "libopus-wasm";
+
+const SAMPLE_RATE = 16000;
+const FRAME_SIZE = 320; // 20 ms @ 16 kHz
 
 export interface ZelloServiceCallbacks {
   onState: (connected: boolean) => void;
@@ -44,9 +52,14 @@ export class ZelloService {
   private audioCtx: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private workletNode: AudioWorkletNode | null = null;
-  private encoder: { encode: (pcm: Int16Array) => Uint8Array | null } | null = null;
+  private encoder: OpusEncoderHandle | null = null;
   private streamId: number | null = null;
   private packetIndex = 0;
+
+  // Rx state (playback)
+  private rxCtx: AudioContext | null = null;
+  private decoder: OpusDecoderHandle | null = null;
+  private rxPlayheadAt = 0;
 
   constructor(private opts: ZelloServiceOptions) {}
 
@@ -112,6 +125,7 @@ export class ZelloService {
 
   disconnect(): void {
     this.stopTx();
+    this.teardownRx();
     this.stopKeepalive();
     if (this.ws) {
       this.ws.onclose = null;
@@ -160,6 +174,7 @@ export class ZelloService {
         this.streamId = msg.stream_id;
       } else if (msg.command === "on_stream_start") {
         this.opts.callbacks.onRxSpeaker(String(msg.from ?? "unknown"));
+        void this.ensureDecoder();
       } else if (msg.command === "on_stream_stop") {
         this.opts.callbacks.onRxSpeaker(null);
       } else if (msg.error) {
@@ -167,9 +182,12 @@ export class ZelloService {
       }
       return;
     }
-    // Binary RX audio: strip the 9-byte header. Playback/decode is wired in
-    // audio.ts and requires on-device verification with real Opus packets.
-    // (Intentionally a no-op until decode is validated against live Zello.)
+    // Binary RX audio: strip the 9-byte Zello header, decode the Opus payload,
+    // and play it back through Web Audio.
+    const data = ev.data as ArrayBuffer;
+    if (data.byteLength <= 9) return;
+    const { payload } = stripHeader(data);
+    void this.playOpusPacket(payload);
   }
 
   // ---- Transmit ----------------------------------------------------------
@@ -189,8 +207,14 @@ export class ZelloService {
       const node = new AudioWorkletNode(this.audioCtx, "zello-capture");
       this.workletNode = node;
 
-      // Lazy-load the Opus encoder (~500 KB) only on first transmit (spec §12).
-      this.encoder = await loadOpusEncoder();
+      // Lazy-load the Opus encoder (~430 KB WASM) only on first transmit (spec §12).
+      const { createEncoder, Application } = await import("libopus-wasm");
+      this.encoder = await createEncoder({
+        sampleRate: SAMPLE_RATE,
+        channels: 1,
+        application: Application.Voip,
+        frameSize: FRAME_SIZE,
+      });
 
       this.packetIndex = 0;
       this.send({
@@ -199,7 +223,7 @@ export class ZelloService {
         channel: this.channel,
         type: "audio",
         codec: "opus",
-        codec_header: "", // negotiated header; finalize during device testing
+        codec_header: buildOpusCodecHeader(SAMPLE_RATE, 1, 20),
         packet_duration: 20,
       });
 
@@ -216,8 +240,13 @@ export class ZelloService {
 
   private onPcmFrame(pcm: Int16Array) {
     if (this.streamId == null || !this.encoder || !this.ws) return;
-    const opus = this.encoder.encode(pcm);
-    if (!opus) return;
+    let opus: Uint8Array;
+    try {
+      opus = this.encoder.encode(pcm);
+    } catch {
+      return;
+    }
+    if (!opus || opus.length === 0) return;
     const header = build9ByteHeader(this.streamId, this.packetIndex++);
     const frame = new Uint8Array(header.length + opus.length);
     frame.set(header, 0);
@@ -236,8 +265,51 @@ export class ZelloService {
     this.mediaStream = null;
     void this.audioCtx?.close();
     this.audioCtx = null;
+    this.encoder?.free();
     this.encoder = null;
     this.opts.callbacks.onTx(false);
+  }
+
+  // ---- Receive (decode + playback) --------------------------------------
+
+  private async ensureDecoder() {
+    if (this.decoder) return;
+    const { createDecoder } = await import("libopus-wasm");
+    this.decoder = await createDecoder({ sampleRate: SAMPLE_RATE, channels: 1 });
+    this.rxCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    this.rxPlayheadAt = this.rxCtx.currentTime;
+  }
+
+  private async playOpusPacket(payload: Uint8Array) {
+    await this.ensureDecoder();
+    if (!this.decoder || !this.rxCtx) return;
+    let pcm: Int16Array;
+    try {
+      pcm = this.decoder.decode(payload, { frameSize: FRAME_SIZE });
+    } catch {
+      return;
+    }
+    if (!pcm || pcm.length === 0) return;
+
+    const buffer = this.rxCtx.createBuffer(1, pcm.length, SAMPLE_RATE);
+    const channel = buffer.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) channel[i] = pcm[i] / 0x8000;
+
+    const src = this.rxCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.rxCtx.destination);
+    // Schedule sequentially; keep a small lead to avoid underruns.
+    const now = this.rxCtx.currentTime;
+    if (this.rxPlayheadAt < now) this.rxPlayheadAt = now + 0.05;
+    src.start(this.rxPlayheadAt);
+    this.rxPlayheadAt += buffer.duration;
+  }
+
+  private teardownRx() {
+    this.decoder?.free();
+    this.decoder = null;
+    void this.rxCtx?.close();
+    this.rxCtx = null;
   }
 
   // ---- helpers -----------------------------------------------------------
@@ -248,20 +320,4 @@ export class ZelloService {
   private send(obj: unknown) {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
   }
-}
-
-/**
- * Load the Opus encoder. The concrete codec library is finalized during
- * on-device testing (the spec's `ogg-opus-encoder` is illustrative and not a
- * published package). Until then this returns a no-op encoder so the capture
- * pipeline runs end-to-end without producing packets — keeping the build and
- * the rest of the PTT flow (WS, logon, tx/rx state, SSE) fully functional.
- *
- * To finish: pick a WASM Opus encoder, lazy-import it here, and return
- * `{ encode(pcm: Int16Array): Uint8Array }`.
- */
-async function loadOpusEncoder(): Promise<{
-  encode: (pcm: Int16Array) => Uint8Array | null;
-}> {
-  return { encode: () => null };
 }
