@@ -2,10 +2,9 @@
  * GET /api/zello/token — returns the Zello auth token for the client logon.
  *
  * Resolution order:
- *   1. **Self-signed (recommended):** if ZELLO_ISSUER + ZELLO_PRIVATE_KEY are
- *      in the server env (.env.local, gitignored), sign a short-lived RS256
- *      JWT here. No 30-day expiry, no separate process, key never leaves the
- *      server. (Free developer keys from developers.zello.com.)
+ *   1. **Self-signed (recommended):** developer keys saved via Admin → Settings
+ *      (local creds file) or env (.env.local). Sign a short-lived RS256 JWT
+ *      here — key never leaves the server. (Free keys from developers.zello.com.)
  *   2. Saved 30-day development token from Admin → Settings.
  *   3. Optional self-hosted token-server.
  */
@@ -15,21 +14,21 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
 import { config } from "@/lib/config";
+import { effectiveZelloCredentials } from "@/lib/zello/credentials";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
-  // 1) Self-sign with developer keys from env.
-  const issuer = process.env.ZELLO_ISSUER;
-  // Private key may be stored with literal "\n" on one line.
-  const privateKey = process.env.ZELLO_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  if (issuer && privateKey) {
+  // 1) Self-sign with developer keys (saved file first, then env).
+  const creds = effectiveZelloCredentials();
+  if (creds) {
     try {
-      const token = jwt.sign({ iss: issuer, azp: "freedispatcher" }, privateKey, {
-        algorithm: "RS256",
-        expiresIn: "12h",
-      });
+      const token = jwt.sign(
+        { iss: creds.issuer, azp: "freedispatcher" },
+        creds.privateKey,
+        { algorithm: "RS256", expiresIn: "12h" },
+      );
       return NextResponse.json({ token, source: "self-signed" });
     } catch {
       /* fall through to other sources */

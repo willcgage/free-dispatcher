@@ -29,3 +29,6 @@ next-env.d.ts
 
 # Local PGlite data dir
 /.data/
+
+# Zello credentials (issuer + private key) — never commit
+zello-credentials.json
