@@ -10,8 +10,8 @@ import {
   getZelloCreds,
   setZelloCreds,
   clearZelloCreds,
-  CHANNEL_DEFAULTS,
 } from "@/lib/client/operator";
+import { useZello } from "@/hooks/useZello";
 
 interface WiThrottleStatus {
   enabled: boolean;
@@ -32,7 +32,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { state, connected } = useFdSession();
   const op = getOperator();
-  const channels = op ? CHANNEL_DEFAULTS[op.role] : null;
+  const { activeChannel } = useZello();
   const showWiThrottle = op?.role === "engineer" || op?.role === "yardmaster";
 
   const [wt, setWt] = useState<WiThrottleStatus | null>(null);
@@ -101,7 +101,7 @@ export default function SettingsScreen() {
             </span>
           }
         />
-        <Row label="Zello channel" value={channels?.default ?? "—"} />
+        <Row label="Zello channel" value={activeChannel ?? "—"} />
         {showWiThrottle && (
           <Row
             label="WiThrottle"

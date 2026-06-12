@@ -249,7 +249,18 @@ in browser" constraint.
 Listen-only playback works over plain HTTP, so the **default mode needs no
 domain/cert (Q2/Q5 become optional)** — HTTPS only for the opt-in talk upgrade.
 
-🟡 SCAFFOLDED 2026-06-12 (untested live — needs a real dev token + Opus codec)
+**Channels (Phase 5b, 2026-06-12):** free Zello has **no channel-creation API**
+(that's Zello Work Server API only). So channels are created by hand in the
+Zello app; Free Dispatcher **generates the names + access map** per session
+(Admin → Voice channels) and shows a create-in-Zello checklist. Kinds:
+opsall/dispatch/district/yard/tech → role access map in `lib/zello/channels.ts`.
+Stored in `app_settings.voiceChannels`; client resolves its channel list by
+role. **Auth:** `/api/zello/token` now self-signs RS256 from `ZELLO_ISSUER` +
+`ZELLO_PRIVATE_KEY` in `.env.local` (free developer keys — verified with a
+throwaway key: valid RS256 JWT). Dev token redacted from `/api/settings` GET.
+
+🟡 SCAFFOLDED 2026-06-12 (untested live — needs real dev keys in .env.local +
+Opus codec; channels created manually in Zello app)
 - [x] `token-server/` — local JWT issuer (`express` + `jsonwebtoken` + `dotenv`); `.env.example`,
       README, `/health` + `/token`.
 - [x] `app/api/zello/token` (proxy to token server, graceful 503) + `app/api/zello/tx`

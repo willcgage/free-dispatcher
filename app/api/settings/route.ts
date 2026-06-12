@@ -18,6 +18,12 @@ export async function GET() {
   const rows = await db.select().from(appSettings);
   const out: Record<string, unknown> = {};
   for (const r of rows) out[r.key] = r.value;
+  // Redact the Zello dev token — it is served (to those who need it) only via
+  // /api/zello/token, not in the general settings dump that clients read.
+  if (out.zello && typeof out.zello === "object") {
+    const { devToken, ...rest } = out.zello as Record<string, unknown>;
+    out.zello = { ...rest, hasDevToken: Boolean(devToken) };
+  }
   return NextResponse.json({ settings: out });
 }
 

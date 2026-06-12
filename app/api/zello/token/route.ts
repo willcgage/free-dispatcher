@@ -1,15 +1,16 @@
 /**
  * GET /api/zello/token — returns the Zello auth token for the client logon.
  *
- * Free consumer tier (default): returns the **30-day development token** the
- * admin pasted into settings (`app_settings.zello.devToken`). No signing, no
- * Enterprise account. Kept server-side so it isn't baked into the bundle and
- * can be rotated without a redeploy.
- *
- * Optional production path: if no dev token is saved but a local token-server
- * is running (self-signed RS256, see token-server/), proxy to it.
+ * Resolution order:
+ *   1. **Self-signed (recommended):** if ZELLO_ISSUER + ZELLO_PRIVATE_KEY are
+ *      in the server env (.env.local, gitignored), sign a short-lived RS256
+ *      JWT here. No 30-day expiry, no separate process, key never leaves the
+ *      server. (Free developer keys from developers.zello.com.)
+ *   2. Saved 30-day development token from Admin → Settings.
+ *   3. Optional self-hosted token-server.
  */
 import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { appSettings } from "@/lib/db/schema";
@@ -19,18 +20,34 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
-  // 1) Saved development token (free consumer tier).
+  // 1) Self-sign with developer keys from env.
+  const issuer = process.env.ZELLO_ISSUER;
+  // Private key may be stored with literal "\n" on one line.
+  const privateKey = process.env.ZELLO_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  if (issuer && privateKey) {
+    try {
+      const token = jwt.sign({ iss: issuer, azp: "freedispatcher" }, privateKey, {
+        algorithm: "RS256",
+        expiresIn: "12h",
+      });
+      return NextResponse.json({ token, source: "self-signed" });
+    } catch {
+      /* fall through to other sources */
+    }
+  }
+
+  // 2) Saved development token (free consumer tier).
   const [row] = await db
     .select()
     .from(appSettings)
     .where(eq(appSettings.key, "zello"))
     .limit(1);
   const zello = (row?.value ?? {}) as { devToken?: string };
-  if (zello.devToken && zello.devToken.trim()) {
+  if (zello.devToken?.trim()) {
     return NextResponse.json({ token: zello.devToken.trim(), source: "dev-token" });
   }
 
-  // 2) Optional self-hosted token-server fallback.
+  // 3) Optional self-hosted token-server.
   try {
     const res = await fetch(`${config.tokenServerUrl}/token`, {
       method: "POST",
@@ -43,7 +60,7 @@ export async function GET() {
       return NextResponse.json({ token: j.token, source: "token-server" });
     }
   } catch {
-    /* token server not running — fall through */
+    /* not running — fall through */
   }
 
   return NextResponse.json(

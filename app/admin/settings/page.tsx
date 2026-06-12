@@ -6,17 +6,6 @@ import { Panel } from "@/components/admin/ui";
 
 interface Settings {
   withrottle?: { host?: string; port?: number; enabled?: boolean };
-  zello?: {
-    devToken?: string;
-    tokenServerUrl?: string;
-    username?: string;
-    channels?: {
-      opsAll?: string;
-      mainLine?: string;
-      yard?: string;
-      dispatch?: string;
-    };
-  };
 }
 
 interface WtStatus {
@@ -30,11 +19,15 @@ export default function AdminSettings() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [wtStatus, setWtStatus] = useState<WtStatus | null>(null);
+  const [tokenSource, setTokenSource] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<{ settings: Settings }>("/api/settings")
       .then((r) => setSettings(r.settings ?? {}))
       .catch(() => {});
+    apiGet<{ source?: string }>("/api/zello/token")
+      .then((r) => setTokenSource(r.source ?? "none"))
+      .catch(() => setTokenSource("none"));
     const poll = () =>
       apiGet<WtStatus>("/api/withrottle").then(setWtStatus).catch(() => {});
     poll();
@@ -74,8 +67,6 @@ export default function AdminSettings() {
   }
 
   const wt = settings.withrottle ?? {};
-  const zello = settings.zello ?? {};
-  const ch = zello.channels ?? {};
   const input =
     "w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500";
   const label = "block text-xs uppercase text-slate-500 mb-1";
@@ -168,87 +159,49 @@ export default function AdminSettings() {
 
       <Panel title="Zello PTT">
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className={label}>Development token (30-day, free tier)</label>
-            <textarea
-              className={`${input} font-mono text-xs`}
-              rows={3}
-              placeholder="Paste the Sample Development Token from developers.zello.com"
-              value={zello.devToken ?? ""}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  zello: { ...zello, devToken: e.target.value },
-                })
-              }
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Free consumer tier — expires every 30 days; re-paste before each event.
-              Operators hear comms listen-only; talking uses each operator’s own Zello
-              login (Settings) or the standalone Zello app.
-            </p>
-          </div>
-          <div className="col-span-2">
-            <label className={label}>Token server URL (optional, self-hosted)</label>
-            <input
-              className={input}
-              placeholder="http://192.168.1.10:3001"
-              value={zello.tokenServerUrl ?? ""}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  zello: { ...zello, tokenServerUrl: e.target.value },
-                })
-              }
-            />
-          </div>
-          <div className="col-span-2">
-            <label className={label}>Zello username</label>
-            <input
-              className={input}
-              value={zello.username ?? ""}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  zello: { ...zello, username: e.target.value },
-                })
-              }
-            />
-          </div>
-          {(
-            [
-              ["opsAll", "FD-OpsAll"],
-              ["mainLine", "FD-MainLine"],
-              ["yard", "FD-Yard"],
-              ["dispatch", "FD-Dispatch"],
-            ] as const
-          ).map(([key, placeholder]) => (
-            <div key={key}>
-              <label className={label}>{placeholder}</label>
-              <input
-                className={input}
-                placeholder={placeholder}
-                value={ch[key] ?? ""}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    zello: {
-                      ...zello,
-                      channels: { ...ch, [key]: e.target.value },
-                    },
-                  })
-                }
+          <div className="col-span-2 rounded-md border border-slate-700 bg-slate-800/40 p-3">
+            <div className="flex items-center gap-2 text-sm">
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  tokenSource && tokenSource !== "none"
+                    ? "bg-emerald-400"
+                    : "bg-amber-400"
+                }`}
               />
+              <span className="font-medium">Auth token:</span>
+              <span className="text-slate-300">
+                {tokenSource === "self-signed"
+                  ? "self-signed from developer keys (env)"
+                  : tokenSource === "dev-token"
+                    ? "30-day development token"
+                    : tokenSource === "token-server"
+                      ? "self-hosted token server"
+                      : "not configured"}
+              </span>
             </div>
-          ))}
+            {(!tokenSource || tokenSource === "none") && (
+              <p className="mt-2 text-xs text-slate-500">
+                Set <code className="text-slate-300">ZELLO_ISSUER</code> and{" "}
+                <code className="text-slate-300">ZELLO_PRIVATE_KEY</code> in{" "}
+                <code className="text-slate-300">.env.local</code> (free developer
+                keys from developers.zello.com) and restart the server. Channels are
+                created in the Zello app — see{" "}
+                <a href="/admin/channels" className="text-sky-400 hover:underline">
+                  Voice channels
+                </a>
+                .
+              </p>
+            )}
+          </div>
+          <p className="col-span-2 text-xs text-slate-400">
+            Channels are defined per session and created by hand in the Zello app
+            (free tier). Manage them and get the create-in-Zello checklist on the{" "}
+            <a href="/admin/channels" className="text-sky-400 hover:underline">
+              Voice channels
+            </a>{" "}
+            page.
+          </p>
         </div>
-        <button
-          disabled={busy}
-          onClick={() => save({ zello: settings.zello ?? {} })}
-          className="mt-3 rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
-        >
-          Save Zello
-        </button>
       </Panel>
     </div>
   );

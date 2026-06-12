@@ -72,22 +72,10 @@ export function clearZelloCreds(): void {
   window.sessionStorage.removeItem(ZPASS_KEY);
 }
 
-/** Zello channel defaults per role (spec §7.2). Used by Comms/Settings + Phase 5. */
-export const CHANNEL_DEFAULTS: Record<
-  OperatorRole,
-  { default: string; available: string[] }
-> = {
-  admin: {
-    default: "FD-OpsAll",
-    available: ["FD-OpsAll", "FD-MainLine", "FD-Yard", "FD-Dispatch"],
-  },
-  dispatcher: {
-    default: "FD-Dispatch",
-    available: ["FD-OpsAll", "FD-MainLine", "FD-Dispatch"],
-  },
-  engineer: { default: "FD-MainLine", available: ["FD-OpsAll", "FD-MainLine"] },
-  yardmaster: { default: "FD-Yard", available: ["FD-OpsAll", "FD-Yard"] },
-};
+/**
+ * Zello channels are now defined per session (Admin → Voice channels) and
+ * resolved by role in lib/zello/channels.ts.
+ */
 
 /** Operator's default landing screen after join. */
 export const HOME_BY_ROLE: Record<OperatorRole, string> = {
