@@ -89,15 +89,6 @@ class SessionManager {
     }
   }
 
-  /**
-   * Broadcast a live-only event to every client WITHOUT persisting it to
-   * ops_log. For high-churn presence (e.g. PTT talk start/stop) that would
-   * otherwise flood the durable log with no audit value.
-   */
-  broadcastEphemeral(event: FdEvent): void {
-    for (const client of this.clients.values()) this.send(client, event);
-  }
-
   // ---- Session helpers ---------------------------------------------------
 
   /** The single active session, or null if none is active. */
