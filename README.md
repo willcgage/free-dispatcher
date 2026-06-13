@@ -65,6 +65,8 @@ read server-side; Next.js loads `.env.local` for both `dev` and `start`.
 | `npm run dev` | Dev server at `http://localhost:3000`. |
 | `npm run build` / `npm start` | Production build / serve. |
 | `npm run lint` | ESLint. |
+| `npm run electron:dev` | Build + launch the desktop **host app** (Electron) locally. |
+| `npm run dist` | Build cross-platform installers into `dist/` (electron-builder). |
 | `npm run db:generate` | Generate a Drizzle migration from schema changes. |
 | `npm run db:migrate` | Apply migrations to the local DB. |
 | `npm run db:seed` | Seed a demo session. |
@@ -81,6 +83,24 @@ read server-side; Next.js loads `.env.local` for both `dev` and `start`.
    so operators can scan to connect.
 
 ---
+
+## Desktop app (host)
+
+The host can run as a double-click desktop app instead of `npm` — an Electron
+shell (`electron/`) that bundles the standalone server, uses a per-user data
+directory, runs DB migrations on launch, and shows a control panel with the
+**join URL + QR**. Operators still just open a browser.
+
+- **Run locally:** `npm run electron:dev`
+- **Build installers:** `npm run dist` → `dist/` (NSIS for Windows, dmg for
+  macOS, AppImage/deb for Linux). Build on each target OS — macOS notarization
+  requires a Mac.
+- **Code signing:** macOS notarization uses your Apple Developer credentials —
+  set `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` in the
+  environment before `npm run dist`. Windows Authenticode signing isn't wired up
+  yet, so unsigned Windows builds show a SmartScreen warning until a cert is added.
+
+Packaging config is the `build` block in `package.json`.
 
 ## Documentation
 

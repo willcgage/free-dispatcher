@@ -19,13 +19,15 @@ __pycache__/
 /node_modules
 /.next/
 /out/
-/build
 *.tsbuildinfo
 next-env.d.ts
 .vercel
 .env*
 !.env.example
 *.pem
+
+# electron-builder installer output (build/ now holds buildResources)
+/dist/
 
 # Local PGlite data dir
 /.data/
