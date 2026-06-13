@@ -26,6 +26,10 @@ next-env.d.ts
 !.env.example
 *.pem
 
+# Code-signing keys / certs — NEVER commit (Apple .p8 API key, .p12 cert)
+*.p8
+*.p12
+
 # electron-builder installer output (build/ now holds buildResources)
 /dist/
 
