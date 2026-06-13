@@ -15,6 +15,7 @@
 import { voiceSignalHub, type VoiceSignal } from "@/lib/voice/signalHub";
 import { roleCanAccess, roomId } from "@/lib/voice/channels";
 import { verifyToken, tokenFromRequest } from "@/lib/server/sessionToken";
+import { sessionManager } from "@/lib/server/SessionManager";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,6 +37,26 @@ export async function GET(req: Request) {
 
   let registration: { remove: () => void } | null = null;
   let keepalive: ReturnType<typeof setInterval> | null = null;
+  let cleanedUp = false;
+
+  // Runs once when the operator's signaling connection drops (tab closed,
+  // navigated away, network died). Besides unregistering from the mesh, it
+  // clears any stuck talk indicator: if the tab dies mid-PTT the client never
+  // sends its talk-stop, so leaving the channel must implicitly stop talking.
+  // Idempotent on clients (clearing an already-clear entry is a no-op).
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (keepalive) clearInterval(keepalive);
+    registration?.remove();
+    sessionManager.broadcastEphemeral({
+      type: "voice_talk",
+      operatorId: id,
+      name,
+      channel,
+      talking: false,
+    });
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -52,8 +73,7 @@ export async function GET(req: Request) {
       }, KEEPALIVE_MS);
 
       req.signal.addEventListener("abort", () => {
-        if (keepalive) clearInterval(keepalive);
-        registration?.remove();
+        cleanup();
         try {
           controller.close();
         } catch {
@@ -62,8 +82,7 @@ export async function GET(req: Request) {
       });
     },
     cancel() {
-      if (keepalive) clearInterval(keepalive);
-      registration?.remove();
+      cleanup();
     },
   });
 
