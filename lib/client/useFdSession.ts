@@ -21,11 +21,16 @@ const REFETCH_EVENTS = new Set([
   "emergency_stop",
 ]);
 
+/** Who is currently talking on voice, keyed by operatorId. */
+export type TalkingMap = Record<string, { name: string; channel: string }>;
+
 export interface UseFdSession {
   state: FullState | null;
   opsLog: OpsLogEntry[];
   connected: boolean;
   lastEvent: string | null;
+  /** Operators currently transmitting on a voice channel (live, ephemeral). */
+  talking: TalkingMap;
   refresh: () => Promise<void>;
 }
 
@@ -34,6 +39,7 @@ export function useFdSession(): UseFdSession {
   const [opsLog, setOpsLog] = useState<OpsLogEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
+  const [talking, setTalking] = useState<TalkingMap>({});
   const esRef = useRef<EventSource | null>(null);
 
   const refresh = useCallback(async () => {
@@ -77,13 +83,36 @@ export function useFdSession(): UseFdSession {
       return [t, h] as const;
     });
 
+    // voice_talk is ephemeral presence — update the talking map, never refetch.
+    const onTalk = (e: MessageEvent) => {
+      setLastEvent("voice_talk");
+      try {
+        const d = JSON.parse(e.data) as {
+          operatorId: string;
+          name: string;
+          channel: string;
+          talking: boolean;
+        };
+        setTalking((prev) => {
+          const next = { ...prev };
+          if (d.talking) next[d.operatorId] = { name: d.name, channel: d.channel };
+          else delete next[d.operatorId];
+          return next;
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+    es.addEventListener("voice_talk", onTalk as EventListener);
+
     return () => {
       for (const [t, h] of handlers)
         es.removeEventListener(t, h as EventListener);
+      es.removeEventListener("voice_talk", onTalk as EventListener);
       es.close();
       esRef.current = null;
     };
   }, [refresh]);
 
-  return { state, opsLog, connected, lastEvent, refresh };
+  return { state, opsLog, connected, lastEvent, talking, refresh };
 }

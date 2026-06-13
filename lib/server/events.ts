@@ -18,6 +18,17 @@ export type FdEvent =
   | { type: "authority_granted"; trainId: string; segment: string | null; grantedBy: string | null }
   | { type: "authority_revoked"; trainId: string | null; segment: string | null }
   | { type: "emergency_stop" }
-  | { type: "session_message"; message: string };
+  | { type: "session_message"; message: string }
+  // Coarse voice presence for session-wide / admin visibility. The actual
+  // WebRTC negotiation rides a separate signaling hub (lib/voice/signalHub);
+  // this only says "operator X is/ isn't talking on channel Y". Ephemeral —
+  // broadcast live but not persisted to ops_log (see broadcastEphemeral).
+  | {
+      type: "voice_talk";
+      operatorId: string;
+      name: string;
+      channel: string;
+      talking: boolean;
+    };
 
 export type FdEventType = FdEvent["type"];
