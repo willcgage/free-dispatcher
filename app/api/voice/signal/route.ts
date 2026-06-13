@@ -93,10 +93,9 @@ export async function POST(req: Request) {
   if (!roleCanAccess(claims.role, body.channel)) {
     return new Response("forbidden channel", { status: 403 });
   }
-  // Pin `from` to the verified operator so peers can't be spoofed; drop the
-  // routing-only `channel` field from the relayed frame.
-  const { channel, ...rest } = body;
-  const msg = { ...rest, from: claims.operatorId } as VoiceSignal;
-  voiceSignalHub.relay(roomId(claims.sessionId, channel), msg);
+  // Pin `from` to the verified operator so peers can't be spoofed. (The
+  // routing-only `channel` field rides along in the frame; peers ignore it.)
+  const msg = { ...body, from: claims.operatorId } as VoiceSignal;
+  voiceSignalHub.relay(roomId(claims.sessionId, body.channel), msg);
   return new Response(null, { status: 204 });
 }

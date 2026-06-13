@@ -106,6 +106,7 @@ export function useVoiceChannel(opts: {
     if (!enabled) return;
     let cancelled = false;
     if (typeof window !== "undefined" && !window.isSecureContext) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError("Microphone needs HTTPS (works on localhost). LAN HTTPS is tracked in #23.");
       return;
     }

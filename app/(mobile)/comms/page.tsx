@@ -25,11 +25,14 @@ export default function CommsScreen() {
   const [enabled, setEnabled] = useState(false);
   const { talking } = useFdSession();
 
-  // Identity is in sessionStorage — read after mount (MobileShell gates entry).
+  // Identity is in sessionStorage — read after mount (not during SSR, which
+  // would hydration-mismatch). MobileShell already gates entry on a join.
   useEffect(() => {
     const op = getOperator();
+    if (!op) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOperator(op);
-    if (op) setChannel(defaultChannelForRole(op.role));
+    setChannel(defaultChannelForRole(op.role));
   }, []);
 
   const channels: VoiceChannel[] = operator ? channelsForRole(operator.role) : [];
