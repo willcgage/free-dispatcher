@@ -231,6 +231,18 @@ Each phase is independently testable before the next begins (spec §10). I've in
 
 ### Phase 5 — Voice / PTT
 
+> **STATUS (2026-06-13): voice is REMOVED from the app and deferred.**
+> The WebRTC PTT layer (built in #22 / PRs #20, #27, #28) was reverted and the
+> voice code, the Comms screen/tab, and the HTTPS-for-mic + device-verification
+> work were dropped. The blocker is practical: in-app mic needs a secure context,
+> so multi-device use requires LAN HTTPS (per-device cert trust or a domain +
+> DNS), which isn't worth carrying yet. Voice will be revisited when there's a
+> cleaner cross-device solution. The history below is kept for that future work;
+> everything in it is recoverable from git (PRs #20/#27/#28). Issues #19, #22,
+> #23, #24, #25 were closed as deferred.
+
+#### (Deferred history)
+
 > **DECISION (2026-06-12): voice transport = WebRTC built into the app (Option A).**
 > Zello free-tier is dropped as the foundation. Reasons: its consumer network uses
 > a single **global, searchable channel namespace** (names collide with anyone's

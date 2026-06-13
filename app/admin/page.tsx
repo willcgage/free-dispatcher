@@ -13,7 +13,7 @@ function elapsed(since: string): string {
 }
 
 export default function AdminDashboard() {
-  const { state, opsLog, connected, talking, refresh } = useFdSession();
+  const { state, opsLog, connected, refresh } = useFdSession();
   const [busy, setBusy] = useState(false);
 
   const session = state?.session ?? null;
@@ -163,27 +163,14 @@ export default function AdminDashboard() {
               <p className="text-sm text-slate-400">No operators connected.</p>
             ) : (
               <ul className="space-y-1.5 text-sm">
-                {operators.map((o) => {
-                  const speaking = talking[o.id];
-                  return (
-                    <li key={o.id} className="flex items-center justify-between">
-                      <span
-                        className={speaking ? "font-medium text-green-300" : undefined}
-                      >
-                        {speaking ? "🔊 " : ""}
-                        {o.name}
-                        {speaking && (
-                          <span className="ml-1 text-xs text-green-500">
-                            on {speaking.channel}
-                          </span>
-                        )}
-                      </span>
-                      <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs capitalize text-slate-300">
-                        {o.role}
-                      </span>
-                    </li>
-                  );
-                })}
+                {operators.map((o) => (
+                  <li key={o.id} className="flex items-center justify-between">
+                    <span>{o.name}</span>
+                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs capitalize text-slate-300">
+                      {o.role}
+                    </span>
+                  </li>
+                ))}
               </ul>
             )}
           </Panel>

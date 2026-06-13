@@ -11,8 +11,10 @@ dispatch).
   auto-discovery, QR code, or a typed URL.
 - **Realtime:** Server-Sent Events. **RBAC:** Admin / Dispatcher / Engineer /
   Yardmaster, enforced server-side.
-- **Voice:** in-app WebRTC push-to-talk with session-local channels (see
-  [Comms / voice](#comms--voice-push-to-talk)).
+
+> **Voice / push-to-talk is not part of the app right now.** An earlier WebRTC
+> PTT feature was removed pending a better cross-device solution; see Phase 5 in
+> [`docs/V2_BUILD_PLAN.md`](docs/V2_BUILD_PLAN.md).
 
 The full design rationale and phase history is in
 [`docs/V2_BUILD_PLAN.md`](docs/V2_BUILD_PLAN.md).
@@ -36,8 +38,7 @@ Open <http://localhost:3000>:
 - **Admin console** → `/admin` (host only — needs `SERVER_MODE=true`)
 - **Join as operator** → `/join`
 
-On `localhost` everything works, **including the microphone** (it's a secure
-context). To use voice from another device you need HTTPS — see
+To test with other devices on the LAN, see
 [Multi-device testing](docs/MULTI_DEVICE_TESTING.md).
 
 ---
@@ -61,8 +62,7 @@ read server-side; Next.js loads `.env.local` for both `dev` and `start`.
 
 | Command | Does |
 | --- | --- |
-| `npm run dev` | Dev server (HTTP) at `http://localhost:3000`. |
-| `npm run dev:https` | Dev server over **HTTPS** with a Next-generated self-signed cert — needed to test the microphone from another device. See the testing guide. |
+| `npm run dev` | Dev server at `http://localhost:3000`. |
 | `npm run build` / `npm start` | Production build / serve. |
 | `npm run lint` | ESLint. |
 | `npm run db:generate` | Generate a Drizzle migration from schema changes. |
@@ -80,22 +80,11 @@ read server-side; Next.js loads `.env.local` for both `dev` and `start`.
 3. The host's Admin header shows the **join URL + QR code** (`/api/server-info`)
    so operators can scan to connect.
 
-### Comms / voice (push-to-talk)
-
-- Channels are **session-local** and filtered by role (Dispatch, Yard, All
-  Operators, Tech) — no external account, no global namespace.
-- On the Comms screen: tap **Enable voice**, pick a channel, then **hold to
-  talk** (or hold `Space` on a laptop). Other operators on the channel — and the
-  Admin dashboard — see who's transmitting live.
-- **The mic requires a secure context.** It works on `localhost`; on any other
-  device it needs HTTPS. See
-  [`docs/MULTI_DEVICE_TESTING.md`](docs/MULTI_DEVICE_TESTING.md).
-
 ---
 
 ## Documentation
 
-- [Multi-device testing guide](docs/MULTI_DEVICE_TESTING.md) — run the host,
-  join phones, and the HTTPS options for testing voice across devices.
+- [Multi-device testing guide](docs/MULTI_DEVICE_TESTING.md) — run the host and
+  join phones/tablets over the LAN.
 - [v2 build plan](docs/V2_BUILD_PLAN.md) — architecture, decisions, phase log.
 - [Git LFS guide](docs/GIT_LFS_GUIDE.md).

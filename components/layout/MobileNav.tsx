@@ -8,7 +8,6 @@ const ITEMS: { href: string; label: string; icon: string; roles?: OperatorRole[]
   { href: "/dispatch", label: "Dispatch", icon: "🎛", roles: ["dispatcher", "admin"] },
   { href: "/trains", label: "Trains", icon: "🚂" },
   { href: "/modules", label: "Modules", icon: "🧩" },
-  { href: "/comms", label: "Comms", icon: "🎙" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
