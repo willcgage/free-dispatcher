@@ -141,7 +141,6 @@ export const operators = pgTable(
     name: text("name").notNull(),
     role: text("role").$type<OperatorRole>().notNull(),
     deviceId: text("device_id"),
-    zelloChannel: text("zello_channel"),
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -205,8 +204,8 @@ export const stagingTracks = pgTable(
 );
 
 // ---- app_settings --------------------------------------------------------
-// Singleton-ish key/value store for Admin configuration (WiThrottle, Zello,
-// server). Not in spec §9 but required by the §3.3 settings screens; persisted
+// Singleton-ish key/value store for Admin configuration (WiThrottle, server).
+// Not in spec §9 but required by the §3.3 settings screens; persisted
 // so all clients load it on connect.
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),

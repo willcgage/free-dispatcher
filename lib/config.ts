@@ -25,13 +25,6 @@ export const config = {
   /** Local PGlite data directory (embedded Postgres, fully offline). */
   dbDataDir: process.env.FD_DB_DIR ?? "./.data/freedispatcher",
 
-  /** Local file holding the Zello issuer + private key (gitignored, host-only). */
-  zelloCredsFile: process.env.FD_ZELLO_CREDS ?? "./.data/zello-credentials.json",
-
-  /** Zello token server (local Node process). */
-  tokenServerUrl:
-    process.env.NEXT_PUBLIC_TOKEN_SERVER_URL ?? "http://localhost:3001",
-
   /** Optional WiThrottle monitor target (JMRI / DCC-EX). */
   withrottle: {
     host: process.env.NEXT_PUBLIC_WITHROTTLE_HOST ?? "",

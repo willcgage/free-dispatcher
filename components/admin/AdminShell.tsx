@@ -10,7 +10,6 @@ const NAV = [
   { href: "/admin/session", label: "Session" },
   { href: "/admin/trains", label: "Trains" },
   { href: "/admin/modules", label: "Modules" },
-  { href: "/admin/channels", label: "Voice channels" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

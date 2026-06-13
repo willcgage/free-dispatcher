@@ -22,7 +22,7 @@ function authHeaders(): Record<string, string> {
 
 export async function apiGet<T>(path: string): Promise<T> {
   // Carry the token on GETs too — public routes ignore it, admin-gated ones
-  // (e.g. /api/zello/credentials) require it.
+  // require it.
   const res = await fetch(path, { cache: "no-store", headers: authHeaders() });
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
   return res.json() as Promise<T>;

@@ -1,0 +1,1 @@
+ALTER TABLE "operators" DROP COLUMN "zello_channel";

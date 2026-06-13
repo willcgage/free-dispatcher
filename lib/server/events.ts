@@ -18,8 +18,6 @@ export type FdEvent =
   | { type: "authority_granted"; trainId: string; segment: string | null; grantedBy: string | null }
   | { type: "authority_revoked"; trainId: string | null; segment: string | null }
   | { type: "emergency_stop" }
-  | { type: "session_message"; message: string }
-  | { type: "zello_tx_start"; operatorName: string; channel: string }
-  | { type: "zello_tx_stop"; operatorName: string; channel: string };
+  | { type: "session_message"; message: string };
 
 export type FdEventType = FdEvent["type"];
