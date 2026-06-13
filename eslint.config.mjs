@@ -12,10 +12,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Archived v0.7 Electron/FastAPI app — not part of the v2 lint scope.
-    "legacy/**",
-    // Standalone CommonJS Node process, linted separately if at all.
-    "token-server/**",
   ]),
 ]);
 
