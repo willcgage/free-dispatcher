@@ -95,10 +95,10 @@ directory, runs DB migrations on launch, and shows a control panel with the
 - **Build installers:** `npm run dist` → `dist/` (NSIS for Windows, dmg for
   macOS, AppImage/deb for Linux). Build on each target OS — macOS notarization
   requires a Mac.
-- **Code signing:** macOS notarization uses your Apple Developer credentials —
-  set `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` in the
-  environment before `npm run dist`. Windows Authenticode signing isn't wired up
-  yet, so unsigned Windows builds show a SmartScreen warning until a cert is added.
+- **Code signing:** macOS builds are signed + notarized via an App Store Connect
+  API key (`APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER`); Windows is
+  unsigned for now (SmartScreen click-through). Full setup in
+  [docs/SIGNING.md](docs/SIGNING.md).
 
 Packaging config is the `build` block in `package.json`.
 
