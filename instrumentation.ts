@@ -1,11 +1,15 @@
 /**
  * Next.js instrumentation hook — runs once when the server process starts.
- * On the host (SERVER_MODE=true) we begin mDNS advertisement so mobile
- * clients can auto-discover this server (spec §3.1).
+ * Brings the local DB schema up to date, then (on the host, SERVER_MODE=true)
+ * begins mDNS advertisement so mobile clients can auto-discover it (spec §3.1).
  */
 export async function register() {
-  // Only the Node.js server runtime, and only on the host machine.
+  // Only the Node.js server runtime.
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // Apply pending migrations on boot so a packaged host (#32) needs no CLI step.
+  const { runMigrations } = await import("@/lib/db/runMigrations");
+  await runMigrations();
 
   const { config } = await import("@/lib/config");
   if (!config.serverMode) return;
