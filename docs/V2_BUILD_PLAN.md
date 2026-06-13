@@ -229,7 +229,46 @@ Each phase is independently testable before the next begins (spec §10). I've in
       (in ops_log), and Admin UI showed "connected · 1 loco(s)". Stop works; no server =
       quiet retry (graceful degrade). 8/8 parser unit tests. Build + tsc + ESLint clean.
 
-### Phase 5 — Zello PTT — FREE consumer tier (revised 2026-06-12)
+### Phase 5 — Voice / PTT
+
+> **DECISION (2026-06-12): voice transport = WebRTC built into the app (Option A).**
+> Zello free-tier is dropped as the foundation. Reasons: its consumer network uses
+> a single **global, searchable channel namespace** (names collide with anyone's
+> worldwide and must be manually deleted after each event), plus 30-day dev-token
+> expiry, listen-only default, and no channel-creation API. WebRTC keeps channels
+> **app-local**, preserves zero-install (operators already run the browser app),
+> works offline on the LAN, and reuses what we already built (SSE signaling + Opus).
+>
+> Evaluated alternatives: **Mumble** — rejected (browser client `mumble-web` is
+> unmaintained, needs a proxy + TLS terminator, and a native client breaks
+> zero-install); **stay on Zello** — rejected (namespace + cleanup + token churn).
+>
+> **Validation (issue [#19](https://github.com/willcgage/free-dispatcher/issues/19)):**
+> mobile-web works for active dispatching (app open, screen on) over HTTPS; the one
+> limit is iOS suspending WebRTC audio when the screen locks/backgrounds — native
+> (Capacitor wrapper + native voice module) is only needed if pocket-radio /
+> locked-screen listening becomes a hard requirement, and even then it reuses the
+> web UI + signaling + server. A **spike** (PR [#20](https://github.com/willcgage/free-dispatcher/pull/20),
+> `/spike/ptt`) proved the path end to end: signaling over the app's SSE+POST
+> pattern, WebRTC negotiating **`audio/opus`** automatically (no manual codec_header
+> work), real audio flowing browser-to-browser.
+>
+> **Next (re-targeted to WebRTC):**
+> - [ ] Promote the spike to a real voice layer: channel model by role, server
+>       **SFU/relay** media topology (PTT = one talker per channel → light load),
+>       talk indicators via the existing SSE events.
+> - [ ] **LAN HTTPS** (§4.1, Q2) — now required for *all* mic use (not just opt-in talk).
+> - [ ] Live verification on two physical devices.
+> - [ ] Decide later whether a native (Capacitor) wrapper is warranted for
+>       background/locked-screen audio.
+>
+> Everything below documents the **superseded Zello implementation** (kept for
+> history; `lib/zello/*`, `app/api/zello/*`, Admin → Voice channels). It is not the
+> path forward unless this decision is reversed.
+
+---
+
+#### (Superseded) Zello PTT — FREE consumer tier (revised 2026-06-12)
 
 **Auth correction:** the spec's issuer/private-key RS256 signing is the Zello
 Work / Enterprise path. The free consumer tier uses a **30-day Sample
