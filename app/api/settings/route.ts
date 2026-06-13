@@ -1,5 +1,5 @@
 /**
- * GET /api/settings        — all admin settings (WiThrottle, Zello, server).
+ * GET /api/settings        — all admin settings (WiThrottle, server).
  * PUT /api/settings         — upsert one or more settings keys (Admin).
  * Persisted to app_settings; loaded by clients on connect (spec §3.3).
  */
@@ -12,18 +12,12 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /** Known settings keys with shapes (documented; storage is generic jsonb). */
-const KNOWN_KEYS = ["withrottle", "zello", "server"] as const;
+const KNOWN_KEYS = ["withrottle", "server"] as const;
 
 export async function GET() {
   const rows = await db.select().from(appSettings);
   const out: Record<string, unknown> = {};
   for (const r of rows) out[r.key] = r.value;
-  // Redact the Zello dev token — it is served (to those who need it) only via
-  // /api/zello/token, not in the general settings dump that clients read.
-  if (out.zello && typeof out.zello === "object") {
-    const { devToken, ...rest } = out.zello as Record<string, unknown>;
-    out.zello = { ...rest, hasDevToken: Boolean(devToken) };
-  }
   return NextResponse.json({ settings: out });
 }
 

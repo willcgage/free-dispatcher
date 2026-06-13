@@ -15,6 +15,13 @@
       "when": 1781277313480,
       "tag": "0001_sharp_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781355032163,
+      "tag": "0002_drop_zello_channel",
+      "breakpoints": true
     }
   ]
 }

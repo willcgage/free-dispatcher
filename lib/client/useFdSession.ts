@@ -2,9 +2,8 @@
  * useFdSession — live session state for client screens.
  *
  * Loads the full state from /api/session, then subscribes to /api/events (SSE)
- * and re-fetches state on any relevant event. Keeps a small live ops-log feed
- * and a "speaking" indicator for Zello tx events. Returns a refresh() for
- * imperative reloads after mutations.
+ * and re-fetches state on any relevant event. Keeps a small live ops-log feed.
+ * Returns a refresh() for imperative reloads after mutations.
  */
 "use client";
 
@@ -26,7 +25,6 @@ export interface UseFdSession {
   state: FullState | null;
   opsLog: OpsLogEntry[];
   connected: boolean;
-  speaking: { operatorName: string; channel: string } | null;
   lastEvent: string | null;
   refresh: () => Promise<void>;
 }
@@ -35,7 +33,6 @@ export function useFdSession(): UseFdSession {
   const [state, setState] = useState<FullState | null>(null);
   const [opsLog, setOpsLog] = useState<OpsLogEntry[]>([]);
   const [connected, setConnected] = useState(false);
-  const [speaking, setSpeaking] = useState<UseFdSession["speaking"]>(null);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
@@ -59,22 +56,8 @@ export function useFdSession(): UseFdSession {
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
 
-    const onEvent = (type: string) => (ev: MessageEvent) => {
+    const onEvent = (type: string) => () => {
       setLastEvent(type);
-      let data: Record<string, unknown> = {};
-      try {
-        data = JSON.parse(ev.data);
-      } catch {
-        /* ignore */
-      }
-      if (type === "zello_tx_start") {
-        setSpeaking({
-          operatorName: String(data.operatorName ?? ""),
-          channel: String(data.channel ?? ""),
-        });
-      } else if (type === "zello_tx_stop") {
-        setSpeaking(null);
-      }
       if (REFETCH_EVENTS.has(type)) void refresh();
     };
 
@@ -87,8 +70,6 @@ export function useFdSession(): UseFdSession {
       "authority_revoked",
       "emergency_stop",
       "session_message",
-      "zello_tx_start",
-      "zello_tx_stop",
     ];
     const handlers = types.map((t) => {
       const h = onEvent(t);
@@ -104,5 +85,5 @@ export function useFdSession(): UseFdSession {
     };
   }, [refresh]);
 
-  return { state, opsLog, connected, speaking, lastEvent, refresh };
+  return { state, opsLog, connected, lastEvent, refresh };
 }

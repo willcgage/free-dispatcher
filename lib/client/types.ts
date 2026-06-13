@@ -49,7 +49,6 @@ export interface OperatorRow {
   name: string;
   role: OperatorRole;
   deviceId: string | null;
-  zelloChannel: string | null;
   joinedAt: string;
   leftAt: string | null;
 }

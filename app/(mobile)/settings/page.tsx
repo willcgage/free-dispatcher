@@ -4,14 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFdSession } from "@/lib/client/useFdSession";
 import { apiGet } from "@/lib/client/api";
-import {
-  getOperator,
-  clearOperator,
-  getZelloCreds,
-  setZelloCreds,
-  clearZelloCreds,
-} from "@/lib/client/operator";
-import { useZello } from "@/hooks/useZello";
+import { getOperator, clearOperator } from "@/lib/client/operator";
 
 interface WiThrottleStatus {
   enabled: boolean;
@@ -32,7 +25,6 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { state, connected } = useFdSession();
   const op = getOperator();
-  const { activeChannel } = useZello();
   const showWiThrottle = op?.role === "engineer" || op?.role === "yardmaster";
 
   const [wt, setWt] = useState<WiThrottleStatus | null>(null);
@@ -60,22 +52,6 @@ export default function SettingsScreen() {
         : "Disconnected";
   const myLoco = wt?.acquired[0];
 
-  // Optional Zello talk login (device-local) — enables in-app PTT.
-  const existingCreds = getZelloCreds();
-  const [zUser, setZUser] = useState(existingCreds?.username ?? "");
-  const [zPass, setZPass] = useState("");
-  const talkEnabled = Boolean(existingCreds);
-
-  function saveZello() {
-    if (!zUser.trim() || !zPass) return;
-    setZelloCreds({ username: zUser.trim(), password: zPass });
-    window.location.reload(); // reconnect Zello with the named account
-  }
-  function clearZello() {
-    clearZelloCreds();
-    window.location.reload();
-  }
-
   function leave() {
     if (!confirm("Leave the session on this device?")) return;
     clearOperator();
@@ -101,7 +77,6 @@ export default function SettingsScreen() {
             </span>
           }
         />
-        <Row label="Zello channel" value={activeChannel ?? "—"} />
         {showWiThrottle && (
           <Row
             label="WiThrottle"
@@ -143,48 +118,6 @@ export default function SettingsScreen() {
           WiThrottle server on the same Wi-Fi.
         </p>
       )}
-
-      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-        <h2 className="text-sm font-semibold text-slate-200">Zello voice</h2>
-        <p className="mt-1 text-xs text-slate-400">
-          {talkEnabled
-            ? `Talk enabled as ${existingCreds?.username}.`
-            : "Listen-only. Add your own Zello login to talk in-app (needs HTTPS + channel membership), or use the standalone Zello app."}
-        </p>
-        {talkEnabled ? (
-          <button
-            onClick={clearZello}
-            className="mt-3 w-full rounded-lg border border-slate-700 py-2 text-sm text-slate-200 active:bg-slate-800"
-          >
-            Switch to listen-only
-          </button>
-        ) : (
-          <div className="mt-3 space-y-2">
-            <input
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-              placeholder="Zello username"
-              autoComplete="off"
-              value={zUser}
-              onChange={(e) => setZUser(e.target.value)}
-            />
-            <input
-              type="password"
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
-              placeholder="Zello password (stored on this device only)"
-              autoComplete="off"
-              value={zPass}
-              onChange={(e) => setZPass(e.target.value)}
-            />
-            <button
-              onClick={saveZello}
-              disabled={!zUser.trim() || !zPass}
-              className="w-full rounded-lg bg-sky-600 py-2 text-sm font-semibold text-white active:bg-sky-700 disabled:opacity-40"
-            >
-              Enable in-app talk
-            </button>
-          </div>
-        )}
-      </section>
 
       <button
         onClick={() => router.refresh()}
