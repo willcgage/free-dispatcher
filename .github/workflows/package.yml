@@ -26,6 +26,8 @@ jobs:
         os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true # real icon binaries (*.ico/*.png) + image assets, not LFS pointers
 
       - uses: actions/setup-node@v4
         with:
