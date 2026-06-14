@@ -27,6 +27,11 @@ jobs:
         # npm install (not ci) tolerates platform-specific optional native deps
         # — e.g. @unrs/resolver-binding-* / @emnapi from eslint-config-next's
         # resolver, which differ between the macOS dev machine and Linux CI.
+        # CI only lints/types/builds the Next app — it never runs Electron, so
+        # skip the ~100 MB Electron binary download (installers are built
+        # separately via `npm run dist`).
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         run: npm install --no-audit --no-fund
 
       - name: Lint
