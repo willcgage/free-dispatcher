@@ -1,0 +1,54 @@
+name: Package installers
+
+# Builds the desktop host installers (#32) and uploads them as downloadable
+# artifacts. UNSIGNED for now — macOS signing is skipped (CSC_IDENTITY_AUTO_
+# DISCOVERY=false); Windows/Linux are unsigned by default.
+#
+# Triggers: manual (workflow_dispatch) + pushes to the desktop branch so the
+# installers can be downloaded and tested before merge. After this merges to
+# main, switch the push trigger to release tags (e.g. `v*`).
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/desktop-electron-host]
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build installer (unsigned)
+        env:
+          # Skip macOS code signing / notarization — unsigned test builds.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist -- --publish never
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb
