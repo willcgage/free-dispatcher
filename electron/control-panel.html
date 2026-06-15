@@ -11,7 +11,7 @@
         margin: 0; font-family: system-ui, sans-serif;
         background: #020617; color: #e2e8f0;
         display: flex; flex-direction: column; align-items: center;
-        padding: 28px 24px; gap: 18px; user-select: none;
+        padding: 28px 24px; gap: 16px; user-select: none;
       }
       h1 { font-size: 20px; margin: 0; }
       .sub { color: #64748b; font-size: 13px; margin-top: 2px; }
@@ -19,7 +19,7 @@
       .status.up { background: #052e1a; color: #4ade80; }
       .status.down { background: #3f1d1d; color: #f87171; }
       .qr { background: #fff; padding: 10px; border-radius: 12px; line-height: 0; }
-      .qr img { width: 240px; height: 240px; }
+      .qr img { width: 230px; height: 230px; }
       .url {
         font-size: 18px; font-weight: 600; color: #38bdf8;
         word-break: break-all; text-align: center; cursor: pointer;
@@ -32,6 +32,8 @@
       }
       .primary { background: #0284c7; }
       .ghost { background: #1e293b; color: #cbd5e1; }
+      #err { display: none; max-width: 380px; text-align: center; background: #3f1d1d; color: #fecaca; font-size: 12px; padding: 10px 12px; border-radius: 10px; }
+      #err pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; color: #fca5a5; font-size: 11px; max-height: 120px; overflow: auto; }
     </style>
   </head>
   <body>
@@ -47,10 +49,27 @@
       <button class="primary" id="admin">Open Admin console</button>
       <button class="ghost" id="copy">Copy address</button>
     </div>
+    <div id="err">
+      <span id="errmsg"></span>
+      <pre id="errdetail"></pre>
+      <div class="row" style="justify-content: center; margin-top: 8px;">
+        <button class="ghost" id="logs">Open log file</button>
+      </div>
+    </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
       let joinUrl = "";
+      let crashed = false;
+
+      function showError(msg, detail) {
+        crashed = true;
+        $("status").textContent = "Server stopped";
+        $("status").className = "status down";
+        $("errmsg").textContent = msg;
+        $("errdetail").textContent = detail || "";
+        $("err").style.display = "block";
+      }
 
       async function refresh() {
         try {
@@ -60,15 +79,29 @@
           $("qr").src = info.qrDataUrl;
           $("status").textContent = "Running · " + info.ip + ":" + info.port;
           $("status").className = "status up";
+          $("err").style.display = "none";
+          crashed = false;
         } catch {
-          $("status").textContent = "Server not responding";
-          $("status").className = "status down";
+          if (!crashed) {
+            $("status").textContent = "Server not responding";
+            $("status").className = "status down";
+          }
         }
       }
+
+      window.fd.onStatus((s) => {
+        if (s.state === "restarting") {
+          $("status").textContent = "Server restarting…";
+          $("status").className = "status down";
+        } else if (s.state === "crashed") {
+          showError("The host server stopped unexpectedly.", s.detail);
+        }
+      });
 
       $("admin").addEventListener("click", () => window.fd.openAdmin());
       $("url").addEventListener("click", () => joinUrl && window.fd.openUrl(joinUrl));
       $("copy").addEventListener("click", () => joinUrl && navigator.clipboard.writeText(joinUrl));
+      $("logs").addEventListener("click", () => window.fd.openLogs());
 
       refresh();
       setInterval(refresh, 4000);

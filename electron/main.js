@@ -10,7 +10,8 @@
  *      the join URL + QR so operators can connect from their phones.
  *
  * The dispatch UI itself runs in the browser (host + operators); this window is
- * just the host console.
+ * just the host console. All server output + lifecycle is written to
+ * userData/logs/host.log so failures in a packaged build are diagnosable.
  */
 const { app, BrowserWindow, ipcMain, shell, utilityProcess } = require("electron");
 const path = require("node:path");
@@ -21,9 +22,27 @@ const crypto = require("node:crypto");
 const PORT = Number(process.env.FD_PORT) || 3000;
 const HOST_BIND = "0.0.0.0"; // listen on all interfaces so LAN phones can join
 const LOOPBACK = `http://127.0.0.1:${PORT}`;
+const MAX_RESTARTS = 1;
 
 let serverProcess = null;
 let win = null;
+let quitting = false;
+let restarts = 0;
+let lastServerError = "";
+
+function logPath() {
+  return path.join(app.getPath("userData"), "logs", "host.log");
+}
+
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try {
+    fs.mkdirSync(path.dirname(logPath()), { recursive: true });
+    fs.appendFileSync(logPath(), line);
+  } catch {
+    /* logging is best-effort */
+  }
+}
 
 /** Standalone server dir — `next build` output, shipped in the package. */
 function standaloneDir() {
@@ -44,17 +63,31 @@ function tokenSecret() {
   }
 }
 
+function notifyStatus(status) {
+  win?.webContents?.send("server-status", status);
+}
+
 function startServer() {
   const dir = standaloneDir();
   const serverJs = path.join(dir, "server.js");
   const dataDir = path.join(app.getPath("userData"), "data");
   fs.mkdirSync(dataDir, { recursive: true });
 
+  if (!fs.existsSync(serverJs)) {
+    log(`FATAL: server bundle missing at ${serverJs}`);
+    notifyStatus({ state: "crashed", detail: `server bundle missing: ${serverJs}` });
+    return;
+  }
+
+  log(`starting server: ${serverJs} (cwd=${dir}, data=${dataDir}, port=${PORT})`);
+
   // cwd MUST be the standalone dir so the boot migrator resolves its bundled
-  // migrations folder (lib/db/migrations) via process.cwd().
+  // migrations folder (lib/db/migrations) via process.cwd(). stdio "pipe" (not
+  // "inherit") — a packaged Windows GUI app has no valid console to inherit, and
+  // we want the output in the log file.
   serverProcess = utilityProcess.fork(serverJs, [], {
     cwd: dir,
-    stdio: "inherit",
+    stdio: "pipe",
     env: {
       ...process.env,
       SERVER_MODE: "true",
@@ -64,6 +97,27 @@ function startServer() {
       FD_TOKEN_SECRET: tokenSecret(),
       NODE_ENV: "production",
     },
+  });
+
+  serverProcess.stdout?.on("data", (d) => log(`[server] ${d.toString().trimEnd()}`));
+  serverProcess.stderr?.on("data", (d) => {
+    const s = d.toString().trimEnd();
+    lastServerError = s;
+    log(`[server:err] ${s}`);
+  });
+  serverProcess.on("spawn", () => log("server process spawned"));
+  serverProcess.on("exit", (code) => {
+    serverProcess = null;
+    log(`server exited code=${code} quitting=${quitting} restarts=${restarts}`);
+    if (quitting) return;
+    if (restarts < MAX_RESTARTS) {
+      restarts += 1;
+      log("server exited unexpectedly — restarting once");
+      notifyStatus({ state: "restarting" });
+      setTimeout(startServer, 500);
+    } else {
+      notifyStatus({ state: "crashed", code, detail: lastServerError });
+    }
   });
 }
 
@@ -120,28 +174,39 @@ function createWindow() {
 }
 
 ipcMain.handle("get-info", () => fetchServerInfo());
+ipcMain.handle("log-path", () => logPath());
 ipcMain.on("open-admin", () => shell.openExternal(`${LOOPBACK}/admin`));
 ipcMain.on("open-url", (_e, url) => shell.openExternal(url));
+ipcMain.on("open-logs", () => shell.showItemInFolder(logPath()));
 
 app.whenReady().then(async () => {
+  log(`app ready — packaged=${app.isPackaged} userData=${app.getPath("userData")}`);
   startServer();
   try {
     await waitForServer();
+    log("server is ready");
   } catch (err) {
-    console.error("[freedispatcher] server failed to start:", err);
+    log(`server did not become ready: ${err && err.message}`);
+    notifyStatus({ state: "crashed", detail: lastServerError || String(err && err.message) });
   }
   createWindow();
 });
 
 function shutdown() {
+  quitting = true;
   if (serverProcess) {
+    log("shutting down server");
     serverProcess.kill();
     serverProcess = null;
   }
 }
 
 app.on("window-all-closed", () => {
+  log("all windows closed — quitting");
   shutdown();
   app.quit();
 });
-app.on("before-quit", shutdown);
+app.on("before-quit", () => {
+  quitting = true;
+  shutdown();
+});
