@@ -16,37 +16,72 @@ import QRCode from "qrcode";
 import { Bonjour, type Service } from "bonjour-service";
 import { config } from "@/lib/config";
 
-/** First non-internal IPv4 address, or 127.0.0.1 if none found. */
-export function detectLanIp(): string {
-  const ifaces = networkInterfaces();
-  for (const addrs of Object.values(ifaces)) {
-    for (const addr of addrs ?? []) {
-      if (addr.family === "IPv4" && !addr.internal) return addr.address;
-    }
-  }
-  return "127.0.0.1";
+export interface LanInterface {
+  name: string;
+  address: string;
 }
 
-export function serverUrl(scheme: "http" | "https" = "http"): string {
-  return `${scheme}://${detectLanIp()}:${config.port}`;
+/**
+ * Preference rank for the default address (lower = better). Real LAN ranges
+ * win; VPN/CGNAT (100.64/10, e.g. Tailscale) and link-local lose — they can
+ * auto-detect first on some machines but aren't reachable by LAN phones.
+ */
+function addressRank(ip: string): number {
+  if (ip.startsWith("192.168.")) return 0;
+  if (ip.startsWith("10.")) return 1;
+  const m = ip.match(/^172\.(\d+)\./);
+  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return 2;
+  if (ip.startsWith("169.254.")) return 8; // link-local
+  if (ip.startsWith("100.")) return 9; // CGNAT / Tailscale — last resort
+  return 5; // other / public / unknown VPN
+}
+
+/** All non-internal IPv4 interfaces, best LAN candidate first. */
+export function listLanIps(): LanInterface[] {
+  const out: LanInterface[] = [];
+  for (const [name, addrs] of Object.entries(networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (addr.family === "IPv4" && !addr.internal) {
+        out.push({ name, address: addr.address });
+      }
+    }
+  }
+  return out.sort((a, b) => addressRank(a.address) - addressRank(b.address));
+}
+
+/** Best-guess LAN IP (preferred private range), or 127.0.0.1 if none. */
+export function detectLanIp(): string {
+  return listLanIps()[0]?.address ?? "127.0.0.1";
+}
+
+/** URL for a specific host, or the auto-detected default. */
+export function serverUrl(scheme: "http" | "https" = "http", host?: string): string {
+  return `${scheme}://${host || detectLanIp()}:${config.port}`;
 }
 
 /** QR code as a PNG data URL encoding the server URL. */
 export async function serverQrDataUrl(
   scheme: "http" | "https" = "http",
+  host?: string,
 ): Promise<string> {
-  return QRCode.toDataURL(serverUrl(scheme), { width: 320, margin: 1 });
+  return QRCode.toDataURL(serverUrl(scheme, host), { width: 320, margin: 1 });
 }
 
-/** Snapshot of the info the Admin header needs (spec §3.1). */
-export async function serverInfo(scheme: "http" | "https" = "http") {
-  const ip = detectLanIp();
+/**
+ * Snapshot of the info the host console needs (spec §3.1). The server listens
+ * on all interfaces; `interfaces` lists the candidate addresses, and `host`
+ * (if a valid interface IP) selects which one `url`/`qrDataUrl` point at.
+ */
+export async function serverInfo(scheme: "http" | "https" = "http", host?: string) {
+  const interfaces = listLanIps();
+  const ip = host && interfaces.some((i) => i.address === host) ? host : detectLanIp();
   return {
     ip,
     port: config.port,
-    url: serverUrl(scheme),
-    qrDataUrl: await serverQrDataUrl(scheme),
+    url: serverUrl(scheme, ip),
+    qrDataUrl: await serverQrDataUrl(scheme, ip),
     serverMode: config.serverMode,
+    interfaces,
   };
 }
 

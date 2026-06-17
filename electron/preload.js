@@ -5,8 +5,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("fd", {
-  /** Latest server info: { ip, port, url, qrDataUrl, serverMode }. */
-  getInfo: () => ipcRenderer.invoke("get-info"),
+  /** Latest server info: { ip, port, url, qrDataUrl, serverMode, interfaces }.
+   *  Pass an interface IP to point the url/QR at a specific address. */
+  getInfo: (host) => ipcRenderer.invoke("get-info", host),
   /** Open the Admin console in the user's default browser. */
   openAdmin: () => ipcRenderer.send("open-admin"),
   /** Open an arbitrary URL (the join URL) in the default browser. */
