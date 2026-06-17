@@ -22,13 +22,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: [windows-2025, macos-latest, ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           lfs: true # real icon binaries (*.ico/*.png) + image assets, not LFS pointers
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -43,7 +43,7 @@ jobs:
         run: npm run dist -- --publish never
 
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: installer-${{ matrix.os }}
           if-no-files-found: warn
