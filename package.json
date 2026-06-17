@@ -2,11 +2,17 @@
   "name": "free-dispatcher",
   "version": "2.0.0-dev",
   "private": true,
+  "description": "Local-first train dispatch for modular Free-moN sessions",
+  "author": "Will Gage <willcgage@gmail.com>",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "prepare:standalone": "node scripts/prepare-standalone.mjs",
+    "electron:dev": "npm run build && npm run prepare:standalone && electron .",
+    "dist": "npm run build && npm run prepare:standalone && electron-builder",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx lib/db/migrate.ts",
     "db:seed": "tsx lib/db/seed.ts"
@@ -27,11 +33,35 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "org.freedispatcher.host",
+    "productName": "Free Dispatcher",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["electron/**/*", "package.json"],
+    "extraResources": [
+      { "from": ".next/standalone", "to": "standalone" },
+      { "from": ".next/standalone/node_modules", "to": "standalone/node_modules" }
+    ],
+    "win": { "target": ["nsis"], "icon": "build/icon.ico" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
+    },
+    "linux": { "target": ["AppImage", "deb"], "category": "Utility", "icon": "build/icon.png" }
   },
   "overrides": {
     "postcss": "^8.5.10"

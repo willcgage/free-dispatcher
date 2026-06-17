@@ -1,0 +1,55 @@
+name: Package installers
+
+# Builds the desktop host installers (#32) and uploads them as downloadable
+# artifacts. UNSIGNED for now — macOS signing is skipped (CSC_IDENTITY_AUTO_
+# DISCOVERY=false); Windows/Linux are unsigned by default.
+#
+# Triggers: manual (workflow_dispatch) or pushing a release tag (e.g. v2.0.0).
+# Installers build on demand / per release, not on every push to main.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true # real icon binaries (*.ico/*.png) + image assets, not LFS pointers
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build installer (unsigned)
+        env:
+          # Skip macOS code signing / notarization — unsigned test builds.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist -- --publish never
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.deb

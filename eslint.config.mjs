@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Desktop host glue + build scripts (Node CJS/ESM, not the Next app) and
+    // the electron-builder output dir.
+    "electron/**",
+    "scripts/**",
+    "dist/**",
   ]),
 ]);
 
