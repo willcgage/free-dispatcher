@@ -4,13 +4,12 @@ name: Package installers
 # artifacts. UNSIGNED for now — macOS signing is skipped (CSC_IDENTITY_AUTO_
 # DISCOVERY=false); Windows/Linux are unsigned by default.
 #
-# Triggers: manual (workflow_dispatch) + pushes to the desktop branch so the
-# installers can be downloaded and tested before merge. After this merges to
-# main, switch the push trigger to release tags (e.g. `v*`).
+# Triggers: manual (workflow_dispatch) or pushing a release tag (e.g. v2.0.0).
+# Installers build on demand / per release, not on every push to main.
 on:
   workflow_dispatch:
   push:
-    branches: [feat/desktop-electron-host]
+    tags: ["v*"]
 
 concurrency:
   group: package-${{ github.ref }}
