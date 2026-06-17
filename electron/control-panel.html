@@ -45,6 +45,7 @@
     <div class="qr"><img id="qr" alt="Join QR code" /></div>
     <div class="hint">Operators scan this or open the address below on their phone (same Wi-Fi):</div>
     <div id="url" class="url" title="Click to open">—</div>
+    <select id="iface" title="Choose which network address to show operators" style="display: none; max-width: 380px; background: #0b1220; color: #cbd5e1; border: 1px solid #1e293b; border-radius: 8px; padding: 6px 10px; font-size: 12px;"></select>
     <div class="row">
       <button class="primary" id="admin">Open Admin console</button>
       <button class="ghost" id="copy">Copy address</button>
@@ -62,6 +63,26 @@
       const $ = (id) => document.getElementById(id);
       let joinUrl = "";
       let crashed = false;
+      let selectedHost = null;
+      let ifaceSig = "";
+
+      function renderInterfaces(info) {
+        const list = info.interfaces || [];
+        const sel = $("iface");
+        sel.style.display = list.length > 1 ? "block" : "none";
+        const sig = list.map((i) => i.address).join(",");
+        if (sig !== ifaceSig) {
+          ifaceSig = sig;
+          sel.innerHTML = "";
+          for (const i of list) {
+            const o = document.createElement("option");
+            o.value = i.address;
+            o.textContent = i.address + "  (" + i.name + ")";
+            sel.appendChild(o);
+          }
+        }
+        sel.value = info.ip;
+      }
 
       function showError(msg, detail) {
         crashed = true;
@@ -74,10 +95,11 @@
 
       async function refresh() {
         try {
-          const info = await window.fd.getInfo();
+          const info = await window.fd.getInfo(selectedHost);
           joinUrl = info.url;
           $("url").textContent = info.url;
           $("qr").src = info.qrDataUrl;
+          renderInterfaces(info);
           $("status").textContent = "Running · " + info.ip + ":" + info.port;
           $("status").className = "status up";
           $("err").style.display = "none";
@@ -103,6 +125,7 @@
       $("url").addEventListener("click", () => joinUrl && window.fd.openUrl(joinUrl));
       $("copy").addEventListener("click", () => joinUrl && navigator.clipboard.writeText(joinUrl));
       $("logs").addEventListener("click", () => window.fd.openLogs());
+      $("iface").addEventListener("change", () => { selectedHost = $("iface").value; refresh(); });
 
       refresh();
       setInterval(refresh, 4000);

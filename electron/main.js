@@ -144,10 +144,11 @@ function waitForServer(timeoutMs = 30000) {
 }
 
 /** Proxy the server's /api/server-info to the renderer (avoids file:// CORS). */
-function fetchServerInfo() {
+function fetchServerInfo(host) {
+  const q = host ? `?host=${encodeURIComponent(host)}` : "";
   return new Promise((resolve, reject) => {
     http
-      .get(`${LOOPBACK}/api/server-info`, (res) => {
+      .get(`${LOOPBACK}/api/server-info${q}`, (res) => {
         let body = "";
         res.on("data", (c) => (body += c));
         res.on("end", () => {
@@ -214,7 +215,7 @@ function createTray() {
   tray.on("click", showWindow);
 }
 
-ipcMain.handle("get-info", () => fetchServerInfo());
+ipcMain.handle("get-info", (_e, host) => fetchServerInfo(host));
 ipcMain.handle("log-path", () => logPath());
 ipcMain.on("open-admin", () => shell.openExternal(`${LOOPBACK}/admin`));
 ipcMain.on("open-url", (_e, url) => shell.openExternal(url));
