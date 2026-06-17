@@ -61,7 +61,13 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": true
     },
-    "linux": { "target": ["AppImage", "deb"], "category": "Utility", "icon": "build/icon.png" }
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "icon": "build/icon.png",
+      "desktopName": "free-dispatcher.desktop",
+      "synopsis": "Train dispatch for modular Free-moN sessions"
+    }
   },
   "overrides": {
     "postcss": "^8.5.10"
