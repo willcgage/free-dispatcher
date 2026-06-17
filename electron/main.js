@@ -13,7 +13,7 @@
  * just the host console. All server output + lifecycle is written to
  * userData/logs/host.log so failures in a packaged build are diagnosable.
  */
-const { app, BrowserWindow, ipcMain, shell, utilityProcess } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, shell, utilityProcess } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -26,6 +26,7 @@ const MAX_RESTARTS = 1;
 
 let serverProcess = null;
 let win = null;
+let tray = null;
 let quitting = false;
 let restarts = 0;
 let lastServerError = "";
@@ -171,6 +172,46 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, "control-panel.html"));
+
+  // Closing the window hides it to the tray and keeps the server running —
+  // operators rely on it via the browser. Quit only via the tray menu.
+  win.on("close", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    win.hide();
+  });
+}
+
+function showWindow() {
+  if (!win || win.isDestroyed()) createWindow();
+  else {
+    win.show();
+    win.focus();
+  }
+}
+
+function createTray() {
+  const icon = nativeImage
+    .createFromPath(path.join(__dirname, "tray-icon.png"))
+    .resize({ width: 32, height: 32 });
+  tray = new Tray(icon);
+  tray.setToolTip("Free Dispatcher — host");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Show host window", click: showWindow },
+      { label: "Open Admin console", click: () => shell.openExternal(`${LOOPBACK}/admin`) },
+      { type: "separator" },
+      {
+        label: "Quit Free Dispatcher",
+        click: () => {
+          quitting = true;
+          shutdown();
+          app.quit();
+        },
+      },
+    ]),
+  );
+  tray.on("click", showWindow);
 }
 
 ipcMain.handle("get-info", () => fetchServerInfo());
@@ -181,6 +222,7 @@ ipcMain.on("open-logs", () => shell.showItemInFolder(logPath()));
 
 app.whenReady().then(async () => {
   log(`app ready — packaged=${app.isPackaged} userData=${app.getPath("userData")}`);
+  createTray();
   startServer();
   try {
     await waitForServer();
@@ -201,10 +243,10 @@ function shutdown() {
   }
 }
 
+// Don't quit when the window is closed — the server keeps running in the tray.
+// Quit happens only via the tray "Quit" item (or before-quit).
 app.on("window-all-closed", () => {
-  log("all windows closed — quitting");
-  shutdown();
-  app.quit();
+  log("window hidden to tray — server still running");
 });
 app.on("before-quit", () => {
   quitting = true;
