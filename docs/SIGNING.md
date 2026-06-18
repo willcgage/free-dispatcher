@@ -59,6 +59,44 @@ spctl -a -vvv -t install "dist/mac/Free Dispatcher.app"   # → "accepted, sourc
 
 ---
 
+## Sign in CI (GitHub Actions — no Mac required)
+
+The Package workflow (`.github/workflows/package.yml`) signs + notarizes the
+macOS build automatically **when these repo secrets are set** (Settings →
+Secrets and variables → Actions). With the secrets absent it builds unsigned, so
+forks and pre-setup builds still work.
+
+| Secret | Value |
+| --- | --- |
+| `CSC_LINK` | base64 of your **Developer ID Application** `.p12` |
+| `CSC_KEY_PASSWORD` | the `.p12` export password |
+| `APPLE_API_KEY_B64` | base64 of your App Store Connect `.p8` |
+| `APPLE_API_KEY_ID` | the API **Key ID** |
+| `APPLE_API_ISSUER` | the **Issuer ID** |
+
+Base64-encode the two files on any machine:
+
+```bash
+# macOS / Linux
+base64 -i AuthKey_XXXXXXXXXX.p8        # → APPLE_API_KEY_B64
+base64 -i DeveloperID_Application.p12  # → CSC_LINK
+```
+```powershell
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("AuthKey_XXXXXXXXXX.p8"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("DeveloperID_Application.p12"))
+```
+
+Then run the Package workflow (push a `v*` tag or **Actions → Package installers
+→ Run workflow**) — the macOS runner produces a **signed + notarized** `.dmg`,
+no Mac of your own needed. Getting the `.p12` without a Mac: see step 1
+(`openssl` CSR → Apple portal → `.cer` → `.p12`).
+
+> ⚠️ Revoke the `.p8` that was shared in chat earlier and create a fresh App
+> Store Connect API key for `APPLE_API_KEY_B64`.
+
+---
+
 ## Windows — unsigned (for now)
 
 `npm run dist` on Windows produces an unsigned NSIS installer. On first run users
