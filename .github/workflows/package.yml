@@ -1,11 +1,12 @@
 name: Package installers
 
-# Builds the desktop host installers (#32) and uploads them as downloadable
-# artifacts. UNSIGNED for now — macOS signing is skipped (CSC_IDENTITY_AUTO_
-# DISCOVERY=false); Windows/Linux are unsigned by default.
+# Builds the desktop host installers (#32) with version-matched names across
+# platforms, uploads them as artifacts, and — on a release tag — publishes a
+# GitHub Release with all installers attached. Signing activates when the
+# per-platform secrets are set (docs/SIGNING.md); unsigned otherwise.
 #
 # Triggers: manual (workflow_dispatch) or pushing a release tag (e.g. v2.0.0).
-# Installers build on demand / per release, not on every push to main.
+# A tag drives the version (v2.0.0 -> 2.0.0) so filenames match the release.
 on:
   workflow_dispatch:
   push:
@@ -17,12 +18,15 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.os }}
+    name: ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, macos-latest, ubuntu-latest]
+        include:
+          - { os: windows-2025, platform: windows }
+          - { os: macos-latest, platform: macos }
+          - { os: ubuntu-latest, platform: linux }
     steps:
       - uses: actions/checkout@v5
         with:
@@ -35,6 +39,20 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      # On a tag push, set the package version from the tag (v2.0.0 -> 2.0.0) so
+      # installer filenames match the release; otherwise use package.json as-is.
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+          else
+            VERSION="$(node -p "require('./package.json').version")"
+          fi
+          echo "FD_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Building version $VERSION"
 
       # macOS only: if the signing secrets are configured, decode the App Store
       # Connect API key to a file and export the signing env so electron-builder
@@ -103,7 +121,7 @@ jobs:
       - name: Upload installers
         uses: actions/upload-artifact@v5
         with:
-          name: installer-${{ matrix.os }}
+          name: free-dispatcher-${{ env.FD_VERSION }}-${{ matrix.platform }}
           if-no-files-found: warn
           retention-days: 14
           path: |
@@ -111,3 +129,28 @@ jobs:
             dist/*.dmg
             dist/*.AppImage
             dist/*.deb
+
+  # On a release tag, gather every platform's installers and publish a GitHub
+  # Release with them attached (auto-generated notes).
+  release:
+    name: release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

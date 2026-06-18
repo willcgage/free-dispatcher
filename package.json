@@ -44,6 +44,7 @@
   "build": {
     "appId": "org.freedispatcher.host",
     "productName": "Free Dispatcher",
+    "artifactName": "${name}-${version}-${arch}.${ext}",
     "directories": { "output": "dist", "buildResources": "build" },
     "files": ["electron/**/*", "package.json"],
     "extraResources": [
