@@ -65,12 +65,40 @@ jobs:
             echo "No macOS signing secrets — building unsigned."
           fi
 
+      # Windows only: enable Azure Trusted Signing when its secrets are set.
+      # electron-builder signs via win.azureSignOptions (injected as -c.*
+      # config overrides) using AZURE_* service-principal auth. No secrets →
+      # unsigned. See docs/SIGNING.md for the secret + Azure setup.
+      - name: Prepare Windows signing
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZ_ENDPOINT: ${{ secrets.AZURE_TS_ENDPOINT }}
+          AZ_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
+          AZ_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
+        run: |
+          if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZ_ENDPOINT" ]; then
+            {
+              echo "AZURE_TENANT_ID=$AZURE_TENANT_ID"
+              echo "AZURE_CLIENT_ID=$AZURE_CLIENT_ID"
+              echo "AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET"
+              echo "FD_WIN_SIGN_ARGS=-c.win.azureSignOptions.endpoint=$AZ_ENDPOINT -c.win.azureSignOptions.codeSigningAccountName=$AZ_ACCOUNT -c.win.azureSignOptions.certificateProfileName=$AZ_PROFILE"
+            } >> "$GITHUB_ENV"
+            echo "Windows Azure Trusted Signing enabled."
+          else
+            echo "No Windows signing secrets — building unsigned."
+          fi
+
       - name: Build installer
         env:
-          # Sign on macOS only when the secrets were prepared above; otherwise
-          # skip signing (Windows/Linux are unsigned regardless for now).
+          # macOS signs only when its secrets were prepared above; Windows signs
+          # via the injected Azure args (FD_WIN_SIGN_ARGS). No secrets on either
+          # → unsigned (Linux is always unsigned for now).
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.FD_SIGN_MAC == '1' && 'true' || 'false' }}
-        run: npm run dist -- --publish never
+        run: npm run dist -- --publish never ${{ env.FD_WIN_SIGN_ARGS }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v5

@@ -97,19 +97,39 @@ no Mac of your own needed. Getting the `.p12` without a Mac: see step 1
 
 ---
 
-## Windows — unsigned (for now)
+## Windows — Azure Trusted Signing
 
-`npm run dist` on Windows produces an unsigned NSIS installer. On first run users
-see **SmartScreen → "Windows protected your PC"**; they click **More info → Run
-anyway**. Functional, just not friction-free.
+The Package workflow's Windows job signs via **Azure Trusted Signing** when its
+secrets are set (electron-builder `win.azureSignOptions`, injected as config
+overrides). Without them it builds **unsigned** — SmartScreen "unknown
+publisher" click-through. ~$9.99/month, no USB token, clears SmartScreen.
 
-**When you're ready to sign**, the cheapest modern path is **Azure Trusted
-Signing** (~$10/mo, cloud, no USB token, clears SmartScreen; US/Canada
-individuals/orgs). electron-builder supports it natively via `win.azureSignOptions`
-— set up a Trusted Signing account + app registration, then add that block and
-the auth env vars. (Alternatives: SSL.com eSigner / DigiCert KeyLocker cloud
-certs, or a hardware-token OV/EV cert.) Plain `.pfx` files are no longer issued —
-since 2023 the private key must live on an HSM or hardware token.
+### One-time Azure setup
+1. Create a **Trusted Signing account** (Azure portal → Trusted / Artifact
+   Signing) and complete **identity validation** — Microsoft verifies the
+   publisher; can take a few days.
+2. Create a **certificate profile** in that account (note its name).
+3. Create an **app registration** (Microsoft Entra) with a **client secret**,
+   and assign it the **Trusted Signing Certificate Profile Signer** role on the
+   account.
+4. Note the account's **endpoint** (region URL, e.g. `https://eus.codesigning.azure.net/`).
+
+### Repo secrets (Settings → Secrets and variables → Actions)
+| Secret | Value |
+| --- | --- |
+| `AZURE_TENANT_ID` | Entra tenant id |
+| `AZURE_CLIENT_ID` | app registration (client) id |
+| `AZURE_CLIENT_SECRET` | the client secret |
+| `AZURE_TS_ENDPOINT` | Trusted Signing endpoint URL |
+| `AZURE_TS_ACCOUNT` | Trusted Signing account name |
+| `AZURE_TS_PROFILE` | certificate profile name |
+
+Then run the Package workflow (`v*` tag or **Actions → Package installers → Run
+workflow**) — the Windows job produces a signed `.exe`.
+
+> Cheaper alternatives if you reconsider: **SignPath Foundation** (free for
+> open-source projects) or a **Certum** open-source cert (~$50). Plain `.pfx`
+> files are no longer issued — the private key must live on an HSM/token.
 
 ---
 
