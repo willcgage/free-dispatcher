@@ -111,12 +111,18 @@ jobs:
           fi
 
       - name: Build installer
+        shell: bash
         env:
           # macOS signs only when its secrets were prepared above; Windows signs
-          # via the injected Azure args (FD_WIN_SIGN_ARGS). No secrets on either
-          # → unsigned (Linux is always unsigned for now).
+          # via the injected Azure args ($FD_WIN_SIGN_ARGS). No secrets on either
+          # → unsigned (Linux is always unsigned for now). electron-builder is
+          # invoked directly (not through `npm run dist --`) so the `-c.*`
+          # config overrides aren't mangled by npm's argument forwarding.
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.FD_SIGN_MAC == '1' && 'true' || 'false' }}
-        run: npm run dist -- --publish never ${{ env.FD_WIN_SIGN_ARGS }}
+        run: |
+          npm run build
+          npm run prepare:standalone
+          npx electron-builder --publish never $FD_WIN_SIGN_ARGS
 
       - name: Upload installers
         uses: actions/upload-artifact@v5
