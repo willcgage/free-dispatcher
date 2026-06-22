@@ -12,7 +12,7 @@
     "lint": "eslint",
     "prepare:standalone": "node scripts/prepare-standalone.mjs",
     "electron:dev": "npm run build && npm run prepare:standalone && electron .",
-    "dist": "npm run build && npm run prepare:standalone && electron-builder",
+    "dist": "npm run build && npm run prepare:standalone && electron-builder --config electron-builder.config.cjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx lib/db/migrate.ts",
     "db:seed": "tsx lib/db/seed.ts"
@@ -40,29 +40,6 @@
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5"
-  },
-  "build": {
-    "appId": "org.freedispatcher.host",
-    "productName": "Free Dispatcher",
-    "artifactName": "${name}-${version}-${arch}.${ext}",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["electron/**/*", "package.json"],
-    "extraResources": [
-      { "from": ".next/standalone", "to": "standalone" },
-      { "from": ".next/standalone/node_modules", "to": "standalone/node_modules" }
-    ],
-    "win": { "target": ["nsis"], "icon": "build/icon.ico" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false },
-    "mac": {
-      "target": ["dmg"],
-      "icon": "build/icon.icns",
-      "category": "public.app-category.utilities",
-      "hardenedRuntime": true,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": true
-    },
-    "linux": { "target": ["AppImage", "deb"], "category": "Utility", "icon": "build/icon.png" }
   },
   "overrides": {
     "postcss": "^8.5.10"
