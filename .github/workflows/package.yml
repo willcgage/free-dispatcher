@@ -83,10 +83,10 @@ jobs:
             echo "No macOS signing secrets — building unsigned."
           fi
 
-      # Windows only: enable Azure Trusted Signing when its secrets are set.
-      # electron-builder signs via win.azureSignOptions (injected as -c.*
-      # config overrides) using AZURE_* service-principal auth. No secrets →
-      # unsigned. See docs/SIGNING.md for the secret + Azure setup.
+      # Windows only: export the Azure Trusted Signing env when the secrets are
+      # set. electron-builder.config.cjs reads these and adds win.azureSignOptions
+      # (auth = the AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET service principal).
+      # No secrets → unsigned. See docs/SIGNING.md for the Azure setup.
       - name: Prepare Windows signing
         if: runner.os == 'Windows'
         shell: bash
@@ -94,35 +94,33 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZ_ENDPOINT: ${{ secrets.AZURE_TS_ENDPOINT }}
-          AZ_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
-          AZ_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
+          AZURE_TS_ENDPOINT: ${{ secrets.AZURE_TS_ENDPOINT }}
+          AZURE_TS_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
+          AZURE_TS_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
+          AZURE_TS_PUBLISHER: ${{ secrets.AZURE_TS_PUBLISHER }}
         run: |
-          if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZ_ENDPOINT" ]; then
+          if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_TS_ENDPOINT" ] && [ -n "$AZURE_TS_PUBLISHER" ]; then
             {
               echo "AZURE_TENANT_ID=$AZURE_TENANT_ID"
               echo "AZURE_CLIENT_ID=$AZURE_CLIENT_ID"
               echo "AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET"
-              echo "FD_WIN_SIGN_ARGS=-c.win.azureSignOptions.endpoint=$AZ_ENDPOINT -c.win.azureSignOptions.codeSigningAccountName=$AZ_ACCOUNT -c.win.azureSignOptions.certificateProfileName=$AZ_PROFILE"
+              echo "AZURE_TS_ENDPOINT=$AZURE_TS_ENDPOINT"
+              echo "AZURE_TS_ACCOUNT=$AZURE_TS_ACCOUNT"
+              echo "AZURE_TS_PROFILE=$AZURE_TS_PROFILE"
+              echo "AZURE_TS_PUBLISHER=$AZURE_TS_PUBLISHER"
             } >> "$GITHUB_ENV"
             echo "Windows Azure Trusted Signing enabled."
           else
-            echo "No Windows signing secrets — building unsigned."
+            echo "Windows signing secrets incomplete — building unsigned."
           fi
 
       - name: Build installer
-        shell: bash
         env:
-          # macOS signs only when its secrets were prepared above; Windows signs
-          # via the injected Azure args ($FD_WIN_SIGN_ARGS). No secrets on either
-          # → unsigned (Linux is always unsigned for now). electron-builder is
-          # invoked directly (not through `npm run dist --`) so the `-c.*`
-          # config overrides aren't mangled by npm's argument forwarding.
+          # macOS signs when its secrets are present (CSC_IDENTITY_AUTO_DISCOVERY);
+          # Windows signs via Azure when the AZURE_TS_* env is present (set above,
+          # read by electron-builder.config.cjs). Unsigned otherwise.
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.FD_SIGN_MAC == '1' && 'true' || 'false' }}
-        run: |
-          npm run build
-          npm run prepare:standalone
-          npx electron-builder --publish never $FD_WIN_SIGN_ARGS
+        run: npm run dist
 
       - name: Upload installers
         uses: actions/upload-artifact@v5

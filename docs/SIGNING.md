@@ -123,6 +123,7 @@ publisher" click-through. ~$9.99/month, no USB token, clears SmartScreen.
 | `AZURE_TS_ENDPOINT` | Trusted Signing endpoint URL |
 | `AZURE_TS_ACCOUNT` | Trusted Signing account name |
 | `AZURE_TS_PROFILE` | certificate profile name |
+| `AZURE_TS_PUBLISHER` | publisher/subject name on the cert profile (your validated identity name) — required by electron-builder's schema |
 
 Then run the Package workflow (`v*` tag or **Actions → Package installers → Run
 workflow**) — the Windows job produces a signed `.exe`.
