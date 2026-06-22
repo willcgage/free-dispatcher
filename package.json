@@ -12,7 +12,7 @@
     "lint": "eslint",
     "prepare:standalone": "node scripts/prepare-standalone.mjs",
     "electron:dev": "npm run build && npm run prepare:standalone && electron .",
-    "dist": "npm run build && npm run prepare:standalone && electron-builder --config electron-builder.config.cjs",
+    "dist": "npm run build && npm run prepare:standalone && electron-builder --config electron-builder.config.cjs --publish never",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx lib/db/migrate.ts",
     "db:seed": "tsx lib/db/seed.ts"
