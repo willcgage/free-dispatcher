@@ -4,6 +4,7 @@ import { appSettings } from "@/lib/db/schema";
 import { config } from "@/lib/config";
 
 const AUTH_KEY = "module_repo_auth";
+const EXPIRED_KEY = "module_repo_session_expired";
 
 export class ReauthRequired extends Error {
   constructor() {
@@ -35,6 +36,20 @@ async function writeAuth(record: AuthRecord): Promise<void> {
       target: appSettings.key,
       set: { value: record as unknown as object, updatedAt: new Date() },
     });
+}
+
+async function setSessionExpired(expired: boolean): Promise<void> {
+  if (expired) {
+    await db
+      .insert(appSettings)
+      .values({ key: EXPIRED_KEY, value: true as unknown as object })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value: true as unknown as object, updatedAt: new Date() },
+      });
+  } else {
+    await db.delete(appSettings).where(eq(appSettings.key, EXPIRED_KEY));
+  }
 }
 
 export async function clearAuth(): Promise<void> {
@@ -79,10 +94,12 @@ export async function signIn(email: string, password: string): Promise<void> {
     refresh_token: data.refresh_token,
     expires_at: expiresAt(data.expires_in ?? 3600),
   });
+  await setSessionExpired(false);
 }
 
 export async function signOut(): Promise<void> {
   await clearAuth();
+  await setSessionExpired(false);
 }
 
 export async function getValidToken(): Promise<string> {
@@ -109,6 +126,7 @@ export async function getValidToken(): Promise<string> {
   if (!res.ok) {
     // Refresh token expired or revoked — force re-sign-in.
     await clearAuth();
+    await setSessionExpired(true);
     throw new ReauthRequired();
   }
 
@@ -130,10 +148,16 @@ export async function getValidToken(): Promise<string> {
 
 export async function getAuthStatus(): Promise<{
   authenticated: boolean;
+  sessionExpired: boolean;
   email?: string;
   tokenExpiresAt?: string;
 }> {
-  const auth = await readAuth();
-  if (!auth) return { authenticated: false };
-  return { authenticated: true, email: auth.email, tokenExpiresAt: auth.expires_at };
+  const [authRow, expiredRow] = await Promise.all([
+    db.select().from(appSettings).where(eq(appSettings.key, AUTH_KEY)),
+    db.select().from(appSettings).where(eq(appSettings.key, EXPIRED_KEY)),
+  ]);
+  const auth = authRow[0] ? (authRow[0].value as AuthRecord) : null;
+  const sessionExpired = expiredRow.length > 0;
+  if (!auth) return { authenticated: false, sessionExpired };
+  return { authenticated: true, sessionExpired: false, email: auth.email, tokenExpiresAt: auth.expires_at };
 }

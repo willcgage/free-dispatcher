@@ -5,10 +5,18 @@
  */
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/server/guard";
-import { syncModules } from "@/lib/server/ModuleRepoSync";
+import { syncModules, getSyncMeta } from "@/lib/server/ModuleRepoSync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+export async function GET(req: Request) {
+  const guard = requireRole(req, ["admin"]);
+  if (!guard.ok) return guard.response;
+
+  const meta = await getSyncMeta();
+  return NextResponse.json(meta ?? { last_synced_at: null, module_count: 0 });
+}
 
 export async function POST(req: Request) {
   const guard = requireRole(req, ["admin"]);
