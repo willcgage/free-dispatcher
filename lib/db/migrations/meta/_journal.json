@@ -22,6 +22,13 @@
       "when": 1781355032163,
       "tag": "0002_drop_zello_channel",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782334077244,
+      "tag": "0003_unusual_selene",
+      "breakpoints": true
     }
   ]
 }

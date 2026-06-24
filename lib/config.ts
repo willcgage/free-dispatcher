@@ -34,6 +34,15 @@ export const config = {
 
   /** mDNS advertisement service type. */
   mdnsServiceType: "freedispatcher",
+
+  /** Module Repository (modulerepo) integration — read-only per ADR-001. */
+  moduleRepo: {
+    // Supabase project URL for the Module Repository.
+    url: process.env.MODULE_REPO_URL ?? "https://dpifxkipqfaxujidgjyg.supabase.co",
+    // Public anon key — required as `apikey` header on Supabase auth calls.
+    // This is a client-side public key; safe to bundle.
+    anonKey: process.env.MODULE_REPO_ANON_KEY ?? "",
+  },
 } as const;
 
 export type AppConfig = typeof config;
