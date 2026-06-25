@@ -186,6 +186,29 @@ export const moduleLayouts = pgTable(
   (t) => [index("module_layouts_session_idx").on(t.sessionId)],
 );
 
+// ---- repo_modules --------------------------------------------------------
+// Local cache of the Module Repository catalog, synced via GET /api/v1/modules/full
+// (ADR-001: read-only, one-directional). Nested endplates/tracks/industries
+// stored as jsonb to avoid join tables for read-only upstream data.
+export const repoModules = pgTable("repo_modules", {
+  recordNumber: text("record_number").primaryKey(), // e.g. "FMN-0001"
+  moduleName: text("module_name").notNull(),
+  description: text("description"),
+  category: text("category"),
+  geometryType: text("geometry_type"),
+  lengthFeet: integer("length_feet"),
+  lengthInches: integer("length_inches"),
+  endplateCount: integer("endplate_count"),
+  hasMss: boolean("has_mss"),
+  mssType: text("mss_type"),
+  status: text("status"),
+  endplates: jsonb("endplates"),
+  tracks: jsonb("tracks"),
+  industries: jsonb("industries"),
+  upstreamUpdatedAt: timestamp("upstream_updated_at", { withTimezone: true }),
+  syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---- staging_tracks ------------------------------------------------------
 export const stagingTracks = pgTable(
   "staging_tracks",
@@ -225,4 +248,5 @@ export const schema = {
   moduleLayouts,
   stagingTracks,
   appSettings,
+  repoModules,
 };

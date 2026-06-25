@@ -59,6 +59,7 @@ export interface ModuleLayoutRow {
   moduleId: string;
   positionIndex: number;
   stagingEnd: "A" | "B" | null;
+  moduleName?: string | null;
 }
 
 export interface FullState {

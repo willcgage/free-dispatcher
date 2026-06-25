@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { moduleLayouts } from "@/lib/db/schema";
+import { moduleLayouts, repoModules } from "@/lib/db/schema";
 import { sessionManager } from "@/lib/server/SessionManager";
 import { requireRole } from "@/lib/server/guard";
 import type { StagingEnd } from "@/lib/db/schema";
@@ -19,8 +19,16 @@ export async function GET() {
   const session = await sessionManager.getActiveSession();
   if (!session) return NextResponse.json({ modules: [] });
   const modules = await db
-    .select()
+    .select({
+      id: moduleLayouts.id,
+      sessionId: moduleLayouts.sessionId,
+      moduleId: moduleLayouts.moduleId,
+      positionIndex: moduleLayouts.positionIndex,
+      stagingEnd: moduleLayouts.stagingEnd,
+      moduleName: repoModules.moduleName,
+    })
     .from(moduleLayouts)
+    .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))
     .where(eq(moduleLayouts.sessionId, session.id))
     .orderBy(asc(moduleLayouts.positionIndex));
   return NextResponse.json({ modules });
