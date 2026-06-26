@@ -13,6 +13,18 @@ export class ReauthRequired extends Error {
   }
 }
 
+// The anon key ships as a default (lib/config.ts), but a misconfigured env
+// override could blank it. Guard before calling Supabase so we surface a clear,
+// app-level message instead of leaking Supabase's raw "No API key found in
+// request".
+function assertConfigured(): void {
+  if (!config.moduleRepo.anonKey) {
+    throw new Error(
+      "Module Repository is not configured (MODULE_REPO_ANON_KEY is empty).",
+    );
+  }
+}
+
 interface AuthRecord {
   email: string;
   access_token: string;
@@ -63,6 +75,7 @@ function expiresAt(expiresIn: number): string {
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
+  assertConfigured();
   const res = await fetch(
     `${config.moduleRepo.url}/auth/v1/token?grant_type=password`,
     {
@@ -111,6 +124,7 @@ export async function getValidToken(): Promise<string> {
   }
 
   // Access token expired — try to refresh.
+  assertConfigured();
   const res = await fetch(
     `${config.moduleRepo.url}/auth/v1/token?grant_type=refresh_token`,
     {
