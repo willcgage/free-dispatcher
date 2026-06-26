@@ -150,11 +150,18 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # A tag with a hyphen is a SemVer pre-release (v0.8.0-beta.1, v0.8.0-rc.1):
+      # publish it as a GitHub pre-release so it never becomes "latest" and
+      # stable users aren't offered it. Plain tags (v0.8.0) publish as latest.
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          PRERELEASE_FLAG=""
+          case "$GITHUB_REF_NAME" in
+            *-*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes
+            --generate-notes $PRERELEASE_FLAG
