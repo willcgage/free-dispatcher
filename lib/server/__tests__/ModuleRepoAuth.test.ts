@@ -29,6 +29,7 @@ vi.mock("@/lib/config", () => ({
 }));
 
 // Import after mocks are established
+import { config } from "@/lib/config";
 import {
   signIn,
   signOut,
@@ -124,6 +125,19 @@ describe("signIn", () => {
     );
 
     await expect(signIn("u@e.com", "p")).rejects.toThrow("Sign-in failed (500)");
+  });
+
+  it("fails with a clear message (no fetch) when the anon key is empty", async () => {
+    const original = config.moduleRepo.anonKey;
+    (config.moduleRepo as { anonKey: string }).anonKey = "";
+    try {
+      await expect(signIn("u@e.com", "p")).rejects.toThrow(
+        "Module Repository is not configured",
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      (config.moduleRepo as { anonKey: string }).anonKey = original;
+    }
   });
 });
 

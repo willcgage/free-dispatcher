@@ -39,9 +39,15 @@ export const config = {
   moduleRepo: {
     // Supabase project URL for the Module Repository.
     url: process.env.MODULE_REPO_URL ?? "https://dpifxkipqfaxujidgjyg.supabase.co",
-    // Public anon key — required as `apikey` header on Supabase auth calls.
-    // This is a client-side public key; safe to bundle.
-    anonKey: process.env.MODULE_REPO_ANON_KEY ?? "",
+    // Public anon key — required as the `apikey` header on Supabase auth calls.
+    // This is a client-side public key (exposed to browsers by design), so it
+    // ships as the default for the production project, mirroring `url` above —
+    // a packaged build has no .env, and without a default every admin login
+    // fails with Supabase's "No API key found in request". Override via env
+    // only when pointing at a local / staging instance.
+    anonKey:
+      process.env.MODULE_REPO_ANON_KEY ??
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRwaWZ4a2lwcWZheHVqaWRnanlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NzU2NjYsImV4cCI6MjA5NjM1MTY2Nn0.W91jEVB9GtIN3DViIgtW2ki2t1MyDGR18fIFG3UJ030",
   },
 } as const;
 
