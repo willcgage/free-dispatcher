@@ -11,6 +11,14 @@ Targeting **0.8.0**. Add entries here under Added / Changed / Fixed / Removed as
 ### Added
 - Electron desktop shell packaging across Windows, macOS, and Linux, with code signing wired up (Azure Trusted Signing on Windows, Developer ID + notarization on macOS).
 - Tag-driven release pipeline: pushing a `v*` tag builds installers and publishes a GitHub Release; pre-release tags publish as GitHub pre-releases.
+- Module Repository integration — catalog sync fetches the full module list and caches it locally in `repo_modules`; module picker in the session layout screen lets dispatchers assign modules from the synced catalog.
+- Module Repository anon key shipped in the app config so admin login works after first launch.
+
+### Changed
+- `repo_modules` cache table: `length_feet` (integer) and `length_inches` (integer) replaced by `length_total_inches` (real) and `mainline_length_inches` (real) to match the Module Repository schema. Migration `0004` converts existing rows automatically (`feet × 12 + inches → length_total_inches`).
+
+### Fixed
+- Aligned `@vitest/coverage-v8` to vitest 3.x to resolve peer-dependency conflict.
 
 ## 0.7.0 - 2025-12-26
 - Added Electron shell and IPC-based backend URL resolution for the React frontend.
