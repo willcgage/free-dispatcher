@@ -22,8 +22,8 @@ export async function GET(req: Request) {
       moduleName: repoModules.moduleName,
       category: repoModules.category,
       geometryType: repoModules.geometryType,
-      lengthFeet: repoModules.lengthFeet,
-      lengthInches: repoModules.lengthInches,
+      lengthTotalInches: repoModules.lengthTotalInches,
+      mainlineLengthInches: repoModules.mainlineLengthInches,
       endplateCount: repoModules.endplateCount,
       hasMss: repoModules.hasMss,
     })
