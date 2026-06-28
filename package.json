@@ -4,6 +4,7 @@
   "private": true,
   "description": "Local-first train dispatch for modular Free-moN sessions",
   "author": "Will Gage <willcgage@gmail.com>",
+  "license": "MIT",
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
