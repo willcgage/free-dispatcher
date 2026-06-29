@@ -10,7 +10,7 @@
  * fan-out layer on top of it. A single instance is reused across HMR via
  * globalThis, mirroring the db client.
  */
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   sessions,
@@ -319,6 +319,69 @@ class SessionManager {
     });
 
     await this.broadcast({ type: "emergency_stop" }, session.id);
+  }
+
+  // ---- Session lifecycle (archive / list / reactivate) -------------------
+
+  /** All sessions, newest first (Admin management view). */
+  async listSessions() {
+    return db.select().from(sessions).orderBy(desc(sessions.createdAt));
+  }
+
+  /**
+   * Archive the active session without starting a new one (spec §3.3). Returns
+   * the archived session, or null if there was nothing active to archive.
+   */
+  async archiveActiveSession(byOperator: string | null): Promise<typeof sessions.$inferSelect | null> {
+    const session = await this.getActiveSession();
+    if (!session) return null;
+
+    const [archived] = await db
+      .update(sessions)
+      .set({ status: "archived" })
+      .where(eq(sessions.id, session.id))
+      .returning();
+
+    await this.broadcast(
+      { type: "session_archived", sessionId: session.id },
+      session.id,
+    );
+    void byOperator; // reserved for future audit attribution
+    return archived;
+  }
+
+  /**
+   * Reactivate an archived session, restoring it as the singleton active one.
+   * Refuses if another session is already active (the one-active invariant).
+   */
+  async reactivateSession(id: string): Promise<typeof sessions.$inferSelect> {
+    const active = await this.getActiveSession();
+    if (active && active.id !== id) {
+      throw new Error("another session is already active — archive it first");
+    }
+
+    const [row] = await db
+      .update(sessions)
+      .set({ status: "active" })
+      .where(eq(sessions.id, id))
+      .returning();
+    if (!row) throw new Error("session not found");
+
+    await this.broadcast({ type: "session_start", sessionId: row.id }, row.id);
+    return row;
+  }
+
+  /**
+   * Permanently delete an archived session and its cascade. Refuses to delete
+   * the active session — archive it first.
+   */
+  async deleteSession(id: string): Promise<"deleted" | "not_found" | "active"> {
+    const [row] = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
+    if (!row) return "not_found";
+    if (row.status === "active") return "active";
+
+    await db.delete(sessions).where(eq(sessions.id, id));
+    return "deleted";
   }
 }
 
