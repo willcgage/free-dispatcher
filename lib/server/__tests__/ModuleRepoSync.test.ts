@@ -126,7 +126,7 @@ describe("syncModules — happy path", () => {
     await syncModules();
 
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/functions/v1/api/v1/modules/full"),
+      expect.stringContaining("/functions/v1/modules-full"),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer bearer-token",
@@ -230,6 +230,27 @@ describe("syncModules — error handling", () => {
     const result = await syncModules();
 
     expect(result).toMatchObject({ error: "api_error" });
+  });
+
+  it("names a 404 endpoint problem instead of a bare api_error", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    const result = await syncModules();
+
+    expect(result).toMatchObject({ error: "api_error" });
+    expect((result as { message: string }).message).toContain("404");
+  });
+
+  it("includes the upstream message in the error", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "query_failed", message: "boom" }), {
+        status: 500,
+      }),
+    );
+
+    const result = await syncModules();
+
+    expect((result as { message: string }).message).toContain("boom");
   });
 });
 
