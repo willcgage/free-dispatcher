@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ensureAdminToken } from "@/lib/client/api";
+import { ensureAdminToken, apiGet } from "@/lib/client/api";
 
 const NAV = [
   { href: "/admin", label: "Dashboard" },
@@ -17,11 +17,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
     ensureAdminToken()
       .then(() => setReady(true))
       .catch((e) => setError(e instanceof Error ? e.message : "auth failed"));
+    apiGet<{ version?: string }>("/api/server-info")
+      .then((info) => setVersion(info.version ?? null))
+      .catch(() => {});
   }, []);
 
   return (
@@ -30,6 +34,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="mb-6">
           <div className="text-lg font-bold tracking-tight">Free Dispatcher</div>
           <div className="text-xs text-slate-400">Admin · host console</div>
+          {version && (
+            <div className="mt-0.5 text-xs text-slate-600">v{version}</div>
+          )}
         </div>
         <nav className="space-y-1">
           {NAV.map((item) => {

@@ -18,4 +18,19 @@ contextBridge.exposeInMainWorld("fd", {
   logPath: () => ipcRenderer.invoke("log-path"),
   /** Subscribe to server lifecycle status: { state: 'restarting'|'crashed', ... }. */
   onStatus: (cb) => ipcRenderer.on("server-status", (_e, s) => cb(s)),
+
+  // ---- Auto-update -------------------------------------------------------
+  /** { version, beta, enabled } — current version + updater availability. */
+  updaterState: () => ipcRenderer.invoke("updater-state"),
+  /** Trigger a check now (results arrive via onUpdater). */
+  updaterCheck: () => ipcRenderer.invoke("updater-check"),
+  /** Download the available update (progress arrives via onUpdater). */
+  updaterDownload: () => ipcRenderer.invoke("updater-download"),
+  /** Quit and install a downloaded update. */
+  updaterInstall: () => ipcRenderer.send("updater-install"),
+  /** Toggle whether beta (pre-release) updates are offered; re-checks. */
+  updaterSetBeta: (on) => ipcRenderer.invoke("updater-set-beta", on),
+  /** Subscribe to updater status:
+   *  { state: 'checking'|'current'|'available'|'downloading'|'downloaded'|'error', ... }. */
+  onUpdater: (cb) => ipcRenderer.on("updater", (_e, s) => cb(s)),
 });

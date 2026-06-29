@@ -14,6 +14,11 @@ const config = {
   appId: "org.freedispatcher.host",
   productName: "Free Dispatcher",
   artifactName: "${name}-${version}-${arch}.${ext}",
+  // Auto-update feed (electron-updater). Public repo, so clients download
+  // updates with no token. CI builds with `--publish never`, which still emits
+  // the updater metadata (latest.yml / *.blockmap) into dist/; the release job
+  // attaches those to the GitHub Release for the updater to read.
+  publish: [{ provider: "github", owner: "willcgage", repo: "free-dispatcher" }],
   directories: { output: "dist", buildResources: "build" },
   files: ["electron/**/*", "package.json"],
   extraResources: [

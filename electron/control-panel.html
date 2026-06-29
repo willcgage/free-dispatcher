@@ -32,6 +32,17 @@
       }
       .primary { background: #0284c7; }
       .ghost { background: #1e293b; color: #cbd5e1; }
+      .update {
+        width: 100%; max-width: 380px; background: #0b1220;
+        border: 1px solid #1e293b; border-radius: 10px; padding: 10px 12px;
+        font-size: 13px; color: #cbd5e1; display: none;
+        flex-direction: column; gap: 8px; align-items: center;
+      }
+      .update .row { justify-content: center; }
+      .update button { padding: 6px 12px; font-size: 13px; }
+      .progress { display: none; width: 100%; height: 6px; background: #1e293b; border-radius: 999px; overflow: hidden; }
+      .progress > div { height: 100%; width: 0%; background: #0284c7; transition: width 0.2s; }
+      .beta { font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 6px; cursor: pointer; }
       #err { display: none; max-width: 380px; text-align: center; background: #3f1d1d; color: #fecaca; font-size: 12px; padding: 10px 12px; border-radius: 10px; }
       #err pre { white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; color: #fca5a5; font-size: 11px; max-height: 120px; overflow: auto; }
     </style>
@@ -39,7 +50,7 @@
   <body>
     <div style="text-align: center">
       <h1>Free Dispatcher</h1>
-      <div class="sub">Host console</div>
+      <div class="sub">Host console · <span id="version">—</span></div>
     </div>
     <div id="status" class="status down">Starting…</div>
     <div class="qr"><img id="qr" alt="Join QR code" /></div>
@@ -51,6 +62,12 @@
       <button class="ghost" id="copy">Copy address</button>
     </div>
     <div class="hint">Closing this window keeps the host running in the tray — quit from the tray icon to stop the server.</div>
+    <div id="update" class="update">
+      <span id="upd-text">Checking for updates…</span>
+      <div class="progress" id="upd-progress"><div id="upd-bar"></div></div>
+      <div class="row" id="upd-actions"></div>
+      <label class="beta"><input type="checkbox" id="beta" /> Include beta updates</label>
+    </div>
     <div id="err">
       <span id="errmsg"></span>
       <pre id="errdetail"></pre>
@@ -126,6 +143,60 @@
       $("copy").addEventListener("click", () => joinUrl && navigator.clipboard.writeText(joinUrl));
       $("logs").addEventListener("click", () => window.fd.openLogs());
       $("iface").addEventListener("change", () => { selectedHost = $("iface").value; refresh(); });
+
+      // ---- Auto-update -----------------------------------------------------
+      function addUpdBtn(label, fn, cls) {
+        const b = document.createElement("button");
+        b.className = cls || "primary";
+        b.textContent = label;
+        b.addEventListener("click", fn);
+        $("upd-actions").appendChild(b);
+      }
+
+      function renderUpdate(s) {
+        $("upd-actions").innerHTML = "";
+        $("upd-progress").style.display = "none";
+        switch (s.state) {
+          case "checking":
+            $("upd-text").textContent = "Checking for updates…";
+            break;
+          case "current":
+            $("upd-text").textContent = "Up to date";
+            break;
+          case "available":
+            $("upd-text").textContent = "Update available: v" + s.version;
+            addUpdBtn("Download", () => window.fd.updaterDownload());
+            break;
+          case "downloading":
+            $("upd-text").textContent = "Downloading… " + (s.percent || 0) + "%";
+            $("upd-progress").style.display = "block";
+            $("upd-bar").style.width = (s.percent || 0) + "%";
+            break;
+          case "downloaded":
+            $("upd-text").textContent = "Update ready: v" + s.version;
+            addUpdBtn("Restart & install", () => window.fd.updaterInstall());
+            break;
+          case "error":
+            $("upd-text").textContent = "Update check failed";
+            addUpdBtn("Retry", () => window.fd.updaterCheck(), "ghost");
+            break;
+        }
+      }
+
+      async function initUpdater() {
+        const st = await window.fd.updaterState();
+        $("version").textContent = "v" + st.version;
+        if (!st.enabled) return; // dev build: show version, hide update UI
+        $("beta").checked = st.beta;
+        $("update").style.display = "flex";
+        renderUpdate({ state: "checking" });
+      }
+
+      window.fd.onUpdater(renderUpdate);
+      $("beta").addEventListener("change", () =>
+        window.fd.updaterSetBeta($("beta").checked),
+      );
+      initUpdater();
 
       refresh();
       setInterval(refresh, 4000);
