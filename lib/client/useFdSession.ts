@@ -13,6 +13,7 @@ import type { FullState, OpsLogEntry } from "./types";
 
 const REFETCH_EVENTS = new Set([
   "session_start",
+  "session_archived",
   "train_status_changed",
   "operator_joined",
   "operator_left",
@@ -63,6 +64,7 @@ export function useFdSession(): UseFdSession {
 
     const types = [
       "session_start",
+      "session_archived",
       "train_status_changed",
       "operator_joined",
       "operator_left",

@@ -6,6 +6,7 @@ import type { OperatorRole, TrainStatus } from "@/lib/db/schema";
 
 export type FdEvent =
   | { type: "session_start"; sessionId: string }
+  | { type: "session_archived"; sessionId: string }
   | {
       type: "train_status_changed";
       trainId: string;
