@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseChangelog, isReleased } from "../parse";
+import { parseChangelog, isReleased, compareVersions } from "../parse";
 
 const SAMPLE = `# Changelog
 
@@ -58,5 +58,12 @@ describe("parseChangelog", () => {
     expect(isReleased("0.7.0")).toBe(true);
     expect(isReleased("Unreleased")).toBe(false);
     expect(isReleased("[Unreleased]")).toBe(false);
+  });
+
+  it("compareVersions orders releases and ignores pre-release tags", () => {
+    expect(compareVersions("0.7.0", "0.8.0")).toBeLessThan(0);
+    expect(compareVersions("0.10.0", "0.9.0")).toBeGreaterThan(0);
+    expect(compareVersions("1.2.3", "1.2.3")).toBe(0);
+    expect(compareVersions("0.8.0-beta.2", "0.8.0")).toBe(0);
   });
 });

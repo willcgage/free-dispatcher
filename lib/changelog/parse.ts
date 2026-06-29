@@ -27,6 +27,19 @@ export function isReleased(version: string): boolean {
   return /^\d+\.\d+\.\d+/.test(version.trim());
 }
 
+/** Compare dotted numeric versions (major.minor.patch); pre-release tags
+ *  ignored. Returns negative / 0 / positive like a sort comparator. */
+export function compareVersions(a: string, b: string): number {
+  const nums = (v: string) =>
+    v.split("-")[0].split(".").map((n) => parseInt(n, 10) || 0);
+  const pa = nums(a);
+  const pb = nums(b);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  }
+  return 0;
+}
+
 /** Strip markdown links to their label and drop bare commit-sha refs. */
 function cleanItem(text: string): string {
   return text
