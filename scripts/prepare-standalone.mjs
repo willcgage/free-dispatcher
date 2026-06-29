@@ -27,6 +27,9 @@ if (!existsSync(join(standalone, "server.js"))) {
 const copies = [
   [join(root, ".next", "static"), join(standalone, ".next", "static")],
   [join(root, "public"), join(standalone, "public")],
+  // Ship the changelog so the in-app Release Notes page works offline; the
+  // server reads it from its cwd (the standalone dir) at runtime.
+  [join(root, "CHANGELOG.md"), join(standalone, "CHANGELOG.md")],
 ];
 
 for (const [from, to] of copies) {
