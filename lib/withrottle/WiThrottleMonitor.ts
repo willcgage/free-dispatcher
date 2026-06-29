@@ -69,6 +69,16 @@ export class WiThrottleMonitor extends EventEmitter {
     this.setState("disconnected");
   }
 
+  /**
+   * Send a raw WiThrottle command line over the live connection (a newline is
+   * appended). Returns false if not currently connected. Used by the JMRI
+   * command-station adapter to drive track power (`PPA0`/`PPA1`).
+   */
+  send(command: string): boolean {
+    if (!this.socket || this._state !== "connected") return false;
+    return this.socket.write(`${command}\n`);
+  }
+
   private connect(): void {
     if (this.closed) return;
     this.setState("connecting");

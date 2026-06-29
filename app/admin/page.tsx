@@ -1,9 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFdSession } from "@/lib/client/useFdSession";
-import { apiSend } from "@/lib/client/api";
+import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel, StatusBadge, Dot } from "@/components/admin/ui";
+
+interface CommandStationStatus {
+  type: string;
+  label: string;
+  connected: boolean;
+  capabilities: { emergencyStop: boolean; emergencyOff: boolean };
+  target: string | null;
+}
+
+type EmergencyMode = "stop" | "off" | "on";
 
 function elapsed(since: string): string {
   const ms = Date.now() - new Date(since).getTime();
@@ -15,17 +25,49 @@ function elapsed(since: string): string {
 export default function AdminDashboard() {
   const { state, opsLog, connected, refresh } = useFdSession();
   const [busy, setBusy] = useState(false);
+  const [cmd, setCmd] = useState<CommandStationStatus | null>(null);
 
   const session = state?.session ?? null;
   const trains = state?.trains ?? [];
   const operators = state?.operators ?? [];
 
-  async function emergencyStop() {
-    if (!confirm("Emergency Stop All — revoke authority for every train?")) return;
+  const loadCmd = useCallback(async () => {
+    try {
+      setCmd(await apiGet<CommandStationStatus>("/api/command-station"));
+    } catch {
+      /* status is best-effort */
+    }
+  }, []);
+
+  useEffect(() => {
+    // loadCmd setStates after an await, not synchronously here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadCmd();
+  }, [loadCmd]);
+
+  async function emergencyStop(mode: EmergencyMode) {
+    const prompts: Record<EmergencyMode, string> = {
+      stop: "Emergency Stop — revoke authority and halt trains?",
+      off: "Emergency Off — revoke authority and CUT TRACK POWER?",
+      on: "Restore track power?",
+    };
+    if (!confirm(prompts[mode])) return;
     setBusy(true);
     try {
-      await apiSend("POST", "/api/admin/emergency-stop");
-      await refresh();
+      const res = await apiSend<{ physical?: { applied: boolean; detail?: string; reason?: string } }>(
+        "POST",
+        "/api/admin/emergency-stop",
+        { mode },
+      );
+      const p = res.physical;
+      if (p) {
+        alert(
+          p.applied
+            ? `Done — ${p.detail}.`
+            : `Authority ${mode === "on" ? "unchanged" : "revoked"}. No physical action: ${p.reason}.`,
+        );
+      }
+      await Promise.all([refresh(), loadCmd()]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "E-stop failed");
     } finally {
@@ -149,13 +191,65 @@ export default function AdminDashboard() {
         {/* Quick actions + devices */}
         <div className="space-y-5">
           <Panel title="Quick actions">
-            <button
-              disabled={busy}
-              onClick={emergencyStop}
-              className="w-full rounded-md bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50"
-            >
-              ⏹ Emergency Stop All
-            </button>
+            <div className="space-y-2">
+              <button
+                disabled={busy}
+                onClick={() => emergencyStop("stop")}
+                title={
+                  cmd?.capabilities.emergencyStop
+                    ? "Halt all trains, keep track power"
+                    : "Revokes authority; this connection can't halt locos while keeping power"
+                }
+                className="w-full rounded-md bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50"
+              >
+                ⏹ Emergency Stop
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => emergencyStop("off")}
+                title={
+                  cmd?.capabilities.emergencyOff
+                    ? "Revoke authority and cut track power"
+                    : "Revokes authority; no command station connected to cut power"
+                }
+                className="w-full rounded-md border border-red-700/60 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-900/30 disabled:opacity-50"
+              >
+                ⚡ Emergency Off (cut power)
+              </button>
+              {cmd?.connected && cmd.capabilities.emergencyOff && (
+                <button
+                  disabled={busy}
+                  onClick={() => emergencyStop("on")}
+                  className="w-full rounded-md border border-slate-700 px-4 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Restore power
+                </button>
+              )}
+              <p className="pt-1 text-xs text-slate-500">
+                {cmd ? (
+                  <>
+                    Command station:{" "}
+                    <span className="text-slate-300">{cmd.label}</span>
+                    {cmd.type !== "null" && (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span
+                          className={
+                            cmd.connected ? "text-emerald-400" : "text-amber-400"
+                          }
+                        >
+                          {cmd.connected ? "connected" : "not connected"}
+                        </span>
+                        {cmd.target ? ` (${cmd.target})` : ""}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  "Checking command station…"
+                )}
+              </p>
+            </div>
           </Panel>
 
           <Panel title={`Connected devices (${operators.length})`}>
