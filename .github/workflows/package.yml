@@ -1,24 +1,67 @@
 name: Package installers
 
 # Builds the desktop host installers (#32) with version-matched names across
-# platforms, uploads them as artifacts, and — on a release tag — publishes a
-# GitHub Release with all installers attached. Signing activates when the
-# per-platform secrets are set (docs/SIGNING.md); unsigned otherwise.
+# platforms, uploads them as artifacts, and — for a release tag — publishes (or
+# updates) a GitHub Release with all installers + updater metadata attached.
+# Signing activates when the per-platform secrets are set (docs/SIGNING.md);
+# unsigned otherwise.
 #
-# Triggers: manual (workflow_dispatch) or pushing a release tag (e.g. v2.0.0).
-# A tag drives the version (v2.0.0 -> 2.0.0) so filenames match the release.
+# Triggers:
+#   - push of a release tag (e.g. v0.8.0-beta.1) — the manual beta path.
+#   - workflow_dispatch — with a `tag` input it builds + publishes that tag
+#     (this is how release-please.yml ships a stable release: it dispatches us
+#     with the tag it just created); with no `tag` it builds artifacts only.
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and publish (e.g. v0.8.0). Leave empty to build artifacts only."
+        type: string
+        required: false
+        default: ""
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+
 concurrency:
-  group: package-${{ github.ref }}
+  group: package-${{ github.event.inputs.tag || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Resolve the release tag (and derived version / pre-release flag) once, from
+  # either the pushed tag or the dispatch input, so build + release agree.
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+      version: ${{ steps.t.outputs.version }}
+      prerelease: ${{ steps.t.outputs.prerelease }}
+    steps:
+      - id: t
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [ -n "$TAG" ]; then
+            echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+            # A hyphenated tag (v0.8.0-beta.1, -rc.1) is a SemVer pre-release.
+            case "$TAG" in
+              *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+              *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+            esac
+          else
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: ${{ matrix.platform }}
+    needs: meta
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -30,6 +73,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # Build the resolved tag's commit when one is set (dispatch/tag),
+          # otherwise the triggering ref.
+          ref: ${{ needs.meta.outputs.tag || github.ref }}
           lfs: true # real icon binaries (*.ico/*.png) + image assets, not LFS pointers
 
       - uses: actions/setup-node@v5
@@ -40,13 +86,13 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      # On a tag push, set the package version from the tag (v2.0.0 -> 2.0.0) so
+      # When releasing, set the package version from the tag (v0.8.0 -> 0.8.0) so
       # installer filenames match the release; otherwise use package.json as-is.
       - name: Resolve version
         shell: bash
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ needs.meta.outputs.version }}"
+          if [ -n "$VERSION" ]; then
             npm version "$VERSION" --no-git-tag-version --allow-same-version
           else
             VERSION="$(node -p "require('./package.json').version")"
@@ -136,12 +182,14 @@ jobs:
             dist/*.yml
             dist/*.blockmap
 
-  # On a release tag, gather every platform's installers and publish a GitHub
-  # Release with them attached (auto-generated notes).
+  # Gather every platform's installers and publish them on the release tag. If
+  # the release already exists (release-please creates it for stable cuts), just
+  # attach the assets; otherwise create it (manual beta tags) with generated
+  # notes, marking hyphenated tags as pre-releases.
   release:
     name: release
-    needs: build
-    if: github.ref_type == 'tag'
+    needs: [meta, build]
+    if: ${{ needs.meta.outputs.tag != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -152,18 +200,22 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # A tag with a hyphen is a SemVer pre-release (v0.8.0-beta.1, v0.8.0-rc.1):
-      # publish it as a GitHub pre-release so it never becomes "latest" and
-      # stable users aren't offered it. Plain tags (v0.8.0) publish as latest.
-      - name: Publish GitHub Release
+      - name: Publish / update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          PRERELEASE: ${{ needs.meta.outputs.prerelease }}
         run: |
-          PRERELEASE_FLAG=""
-          case "$GITHUB_REF_NAME" in
-            *-*) PRERELEASE_FLAG="--prerelease" ;;
-          esac
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes $PRERELEASE_FLAG
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG exists — attaching installers."
+            gh release upload "$TAG" dist/* --repo "$REPO" --clobber
+          else
+            echo "Creating release $TAG."
+            FLAG=""
+            [ "$PRERELEASE" = "true" ] && FLAG="--prerelease"
+            gh release create "$TAG" dist/* \
+              --repo "$REPO" \
+              --title "$TAG" \
+              --generate-notes $FLAG
+          fi

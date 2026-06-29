@@ -1,0 +1,51 @@
+name: Release Please
+
+# Automated stable releases (#53). On every push to main, release-please reads
+# the Conventional Commits since the last release and maintains a "release PR"
+# that bumps the version + updates CHANGELOG.md. Merging that PR creates the
+# vX.Y.Z tag and a GitHub Release.
+#
+# release-please creates the tag with GITHUB_TOKEN, and a GITHUB_TOKEN-pushed
+# tag does NOT trigger other workflows — so we explicitly dispatch package.yml
+# (workflow_dispatch IS allowed from GITHUB_TOKEN) to build the installers and
+# attach them to the release it just created.
+#
+# Betas remain manual: push a v*-beta.N tag and package.yml handles it directly.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          token: ${{ github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # When a release was just created, build installers for that tag and attach
+  # them by dispatching package.yml.
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch installer build for ${{ needs.release-please.outputs.tag_name }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run package.yml \
+            --repo "${{ github.repository }}" \
+            -f tag="${{ needs.release-please.outputs.tag_name }}"
