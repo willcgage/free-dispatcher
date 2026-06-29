@@ -70,7 +70,10 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
   }
 
   const meta = await readSyncMeta();
-  const url = new URL(`${config.moduleRepo.url}/functions/v1/api/v1/modules/full`);
+  // Supabase routes /functions/v1/<slug> by the first path segment, so the
+  // endpoint is the function's own slug. (The earlier `/api/v1/modules/full`
+  // path resolved to a non-existent `api` function and 404'd — issue #70.)
+  const url = new URL(`${config.moduleRepo.url}/functions/v1/modules-full`);
   if (meta?.last_synced_at) {
     url.searchParams.set("updated_since", meta.last_synced_at);
   }
@@ -103,7 +106,17 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
   }
 
   if (!res.ok) {
-    return { error: "api_error", message: `Module Repository returned ${res.status}.` };
+    // Surface the real status + any upstream message, so the next endpoint
+    // problem is self-diagnosing instead of a bare "api_error" (#70).
+    const body = (await res.json().catch(() => null)) as
+      | { error?: string; message?: string }
+      | null;
+    const base =
+      res.status === 404
+        ? "Module Repository sync endpoint not found (404) — check the function path/config."
+        : `Module Repository returned ${res.status}.`;
+    const detail = body?.message ?? body?.error;
+    return { error: "api_error", message: detail ? `${base} ${detail}` : base };
   }
 
   const modules = (await res.json()) as ModuleFull[];
