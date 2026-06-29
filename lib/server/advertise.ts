@@ -82,6 +82,9 @@ export async function serverInfo(scheme: "http" | "https" = "http", host?: strin
     qrDataUrl: await serverQrDataUrl(scheme, ip),
     serverMode: config.serverMode,
     interfaces,
+    // App version: set by the Electron host (FD_APP_VERSION) in a packaged
+    // build; falls back to the npm package version in dev.
+    version: process.env.FD_APP_VERSION ?? process.env.npm_package_version ?? "dev",
   };
 }
 

@@ -133,6 +133,8 @@ jobs:
             dist/*.dmg
             dist/*.AppImage
             dist/*.deb
+            dist/*.yml
+            dist/*.blockmap
 
   # On a release tag, gather every platform's installers and publish a GitHub
   # Release with them attached (auto-generated notes).

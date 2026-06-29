@@ -14,12 +14,16 @@
  * userData/logs/host.log so failures in a packaged build are diagnosable.
  */
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, shell, utilityProcess } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("node:path");
 const fs = require("node:fs");
 const http = require("node:http");
 const crypto = require("node:crypto");
 
 const PORT = Number(process.env.FD_PORT) || 3000;
+// Re-check for updates while the host stays open (long-running event sessions
+// rarely restart). The launch check covers the common case.
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const HOST_BIND = "0.0.0.0"; // listen on all interfaces so LAN phones can join
 const LOOPBACK = `http://127.0.0.1:${PORT}`;
 const MAX_RESTARTS = 1;
@@ -96,6 +100,7 @@ function startServer() {
       HOSTNAME: HOST_BIND,
       FD_DB_DIR: dataDir,
       FD_TOKEN_SECRET: tokenSecret(),
+      FD_APP_VERSION: app.getVersion(),
       NODE_ENV: "production",
     },
   });
@@ -215,11 +220,108 @@ function createTray() {
   tray.on("click", showWindow);
 }
 
+// ---- Auto-update (electron-updater) -------------------------------------
+
+/** Persisted "include beta releases" preference. Defaults on while pre-1.0 so
+ *  testers receive pre-release builds; toggled from the host window. */
+function betaPrefPath() {
+  return path.join(app.getPath("userData"), "update-include-beta");
+}
+function getBetaPref() {
+  try {
+    return fs.readFileSync(betaPrefPath(), "utf8").trim() !== "0";
+  } catch {
+    return true;
+  }
+}
+function setBetaPref(on) {
+  try {
+    fs.writeFileSync(betaPrefPath(), on ? "1" : "0");
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Push an updater status object to the control-panel renderer (if open). */
+function sendUpdate(payload) {
+  win?.webContents?.send("updater", payload);
+}
+
+let updaterStarted = false;
+
+function setupAutoUpdater() {
+  // electron-updater needs a packaged app (real version + update feed). In dev
+  // it errors with "No published versions"; skip and report disabled instead.
+  if (!app.isPackaged) {
+    log("updater: disabled in dev (app not packaged)");
+    return;
+  }
+  if (updaterStarted) return;
+  updaterStarted = true;
+
+  autoUpdater.autoDownload = false; // opt-in: the user chooses to download
+  autoUpdater.autoInstallOnAppQuit = true; // apply a downloaded update on quit
+  autoUpdater.allowPrerelease = getBetaPref();
+  autoUpdater.logger = {
+    info: (m) => log(`[updater] ${m}`),
+    warn: (m) => log(`[updater:warn] ${m}`),
+    error: (m) => log(`[updater:err] ${m}`),
+    debug: () => {},
+  };
+
+  autoUpdater.on("checking-for-update", () => sendUpdate({ state: "checking" }));
+  autoUpdater.on("update-available", (info) =>
+    sendUpdate({ state: "available", version: info.version }),
+  );
+  autoUpdater.on("update-not-available", () => sendUpdate({ state: "current" }));
+  autoUpdater.on("download-progress", (p) =>
+    sendUpdate({ state: "downloading", percent: Math.round(p.percent) }),
+  );
+  autoUpdater.on("update-downloaded", (info) =>
+    sendUpdate({ state: "downloaded", version: info.version }),
+  );
+  autoUpdater.on("error", (err) =>
+    sendUpdate({ state: "error", message: String((err && err.message) || err) }),
+  );
+
+  const check = () =>
+    autoUpdater
+      .checkForUpdates()
+      .catch((e) => log(`updater check failed: ${e && e.message}`));
+  check(); // on launch
+  setInterval(check, UPDATE_CHECK_INTERVAL_MS); // on interval
+}
+
 ipcMain.handle("get-info", (_e, host) => fetchServerInfo(host));
 ipcMain.handle("log-path", () => logPath());
 ipcMain.on("open-admin", () => shell.openExternal(`${LOOPBACK}/admin`));
 ipcMain.on("open-url", (_e, url) => shell.openExternal(url));
 ipcMain.on("open-logs", () => shell.showItemInFolder(logPath()));
+
+// Updater IPC. The renderer drives the opt-in flow; results stream back via the
+// "updater" channel wired in setupAutoUpdater.
+ipcMain.handle("updater-state", () => ({
+  version: app.getVersion(),
+  beta: getBetaPref(),
+  enabled: app.isPackaged,
+}));
+ipcMain.handle("updater-check", () =>
+  autoUpdater.checkForUpdates().catch((e) => ({ error: String(e && e.message) })),
+);
+ipcMain.handle("updater-download", () =>
+  autoUpdater.downloadUpdate().catch((e) => ({ error: String(e && e.message) })),
+);
+ipcMain.on("updater-install", () => {
+  quitting = true;
+  autoUpdater.quitAndInstall();
+});
+ipcMain.handle("updater-set-beta", (_e, on) => {
+  setBetaPref(!!on);
+  autoUpdater.allowPrerelease = !!on;
+  return autoUpdater
+    .checkForUpdates()
+    .catch((e) => ({ error: String(e && e.message) }));
+});
 
 app.whenReady().then(async () => {
   log(`app ready — packaged=${app.isPackaged} userData=${app.getPath("userData")}`);
@@ -233,6 +335,7 @@ app.whenReady().then(async () => {
     notifyStatus({ state: "crashed", detail: lastServerError || String(err && err.message) });
   }
   createWindow();
+  setupAutoUpdater();
 });
 
 function shutdown() {
