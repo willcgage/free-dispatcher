@@ -68,6 +68,24 @@ class WiThrottleService {
     this.current = null;
   }
 
+  get connected(): boolean {
+    return this._state === "connected";
+  }
+
+  get target(): { host: string; port: number } | null {
+    return this.current;
+  }
+
+  /** Cut track power on the connected WiThrottle server (`PPA0`). */
+  powerOff(): boolean {
+    return this.monitor?.send("PPA0") ?? false;
+  }
+
+  /** Restore track power (`PPA1`). */
+  powerOn(): boolean {
+    return this.monitor?.send("PPA1") ?? false;
+  }
+
   /** Broadcast a train_status_changed if the address maps to a roster train. */
   private async notifyTrain(address: number): Promise<void> {
     const session = await sessionManager.getActiveSession();
