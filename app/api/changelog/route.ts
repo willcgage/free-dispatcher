@@ -9,7 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NextResponse } from "next/server";
-import { parseChangelog } from "@/lib/changelog/parse";
+import { parseChangelog, isReleased } from "@/lib/changelog/parse";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,7 +20,9 @@ const VERSION =
 export async function GET() {
   try {
     const md = await readFile(join(process.cwd(), "CHANGELOG.md"), "utf8");
-    return NextResponse.json({ version: VERSION, entries: parseChangelog(md) });
+    // Released versions only — the in-progress "Unreleased" section is internal.
+    const entries = parseChangelog(md).filter((e) => isReleased(e.version));
+    return NextResponse.json({ version: VERSION, entries });
   } catch {
     return NextResponse.json({ version: VERSION, entries: [] });
   }

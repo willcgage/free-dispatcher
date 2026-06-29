@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseChangelog } from "../parse";
+import { parseChangelog, isReleased } from "../parse";
 
 const SAMPLE = `# Changelog
 
@@ -51,5 +51,12 @@ describe("parseChangelog", () => {
     expect(v7.date).toBe("2025-12-26");
     expect(v7.sections[0].heading).toBeNull();
     expect(v7.sections[0].items).toHaveLength(2);
+  });
+
+  it("isReleased keeps semver versions and rejects Unreleased", () => {
+    expect(isReleased("0.8.0")).toBe(true);
+    expect(isReleased("0.7.0")).toBe(true);
+    expect(isReleased("Unreleased")).toBe(false);
+    expect(isReleased("[Unreleased]")).toBe(false);
   });
 });

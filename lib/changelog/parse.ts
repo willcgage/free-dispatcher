@@ -22,6 +22,11 @@ export interface ChangelogEntry {
   sections: ChangelogSection[];
 }
 
+/** A released entry has a semver-number heading (excludes "Unreleased"). */
+export function isReleased(version: string): boolean {
+  return /^\d+\.\d+\.\d+/.test(version.trim());
+}
+
 /** Strip markdown links to their label and drop bare commit-sha refs. */
 function cleanItem(text: string): string {
   return text
