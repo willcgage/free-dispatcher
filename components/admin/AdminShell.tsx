@@ -11,6 +11,7 @@ const NAV = [
   { href: "/admin/trains", label: "Trains" },
   { href: "/admin/modules", label: "Modules" },
   { href: "/admin/settings", label: "Settings" },
+  { href: "/admin/release-notes", label: "Release notes" },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -35,7 +36,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <div className="text-lg font-bold tracking-tight">Free Dispatcher</div>
           <div className="text-xs text-slate-400">Admin · host console</div>
           {version && (
-            <div className="mt-0.5 text-xs text-slate-600">v{version}</div>
+            <Link
+              href="/admin/release-notes"
+              className="mt-0.5 block text-xs text-slate-600 hover:text-slate-400"
+            >
+              v{version}
+            </Link>
           )}
         </div>
         <nav className="space-y-1">
