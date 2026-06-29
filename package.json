@@ -49,6 +49,12 @@
     "vitest": "^3.2.6"
   },
   "overrides": {
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.4"
+    },
+    "vite": {
+      "esbuild": "^0.28.0"
+    }
   }
 }
