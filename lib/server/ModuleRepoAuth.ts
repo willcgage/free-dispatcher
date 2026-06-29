@@ -25,6 +25,41 @@ function assertConfigured(): void {
   }
 }
 
+interface AuthErrorBody {
+  error_code?: string;
+  msg?: string;
+  error_description?: string;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Turn a Supabase GoTrue error into a clear, actionable message. GoTrue reports
+ * the reason in `error_code` + `msg` (not `error_description`), so reading only
+ * the latter hid the real cause behind a generic "Sign-in failed (400)".
+ * Note: sign-in is plain email/password auth — it is unrelated to show-master
+ * grants (those are per-event permissions for an already-signed-in account).
+ */
+function describeAuthError(status: number, body: AuthErrorBody): string {
+  switch (body.error_code) {
+    case "invalid_credentials":
+      return "Invalid email or password for the Module Repository. Check your credentials (it's the account you use on the Module Repository site).";
+    case "email_not_confirmed":
+      return "Your Module Repository email isn't confirmed yet — open the confirmation link in your inbox, then try again.";
+    case "user_not_found":
+      return "No Module Repository account found for that email — register on the Module Repository site first.";
+    case "over_request_rate_limit":
+      return "Too many sign-in attempts — wait a moment and try again.";
+  }
+  return (
+    body.msg ??
+    body.error_description ??
+    body.message ??
+    body.error ??
+    `Sign-in failed (${status})`
+  );
+}
+
 interface AuthRecord {
   email: string;
   access_token: string;
@@ -89,10 +124,8 @@ export async function signIn(email: string, password: string): Promise<void> {
   );
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, string>;
-    throw new Error(
-      body.error_description ?? body.message ?? `Sign-in failed (${res.status})`,
-    );
+    const body = (await res.json().catch(() => ({}))) as AuthErrorBody;
+    throw new Error(describeAuthError(res.status, body));
   }
 
   const data = await res.json() as {

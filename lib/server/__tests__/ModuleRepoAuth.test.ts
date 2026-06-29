@@ -127,6 +127,39 @@ describe("signIn", () => {
     await expect(signIn("u@e.com", "p")).rejects.toThrow("Sign-in failed (500)");
   });
 
+  it("maps GoTrue invalid_credentials to a clear message", async () => {
+    // Supabase returns the reason in error_code + msg, not error_description.
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error_code: "invalid_credentials", msg: "Invalid login credentials" }),
+        { status: 400 },
+      ),
+    );
+
+    await expect(signIn("u@e.com", "wrong")).rejects.toThrow(
+      "Invalid email or password",
+    );
+  });
+
+  it("maps email_not_confirmed to actionable guidance", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error_code: "email_not_confirmed", msg: "Email not confirmed" }),
+        { status: 400 },
+      ),
+    );
+
+    await expect(signIn("u@e.com", "p")).rejects.toThrow("isn't confirmed");
+  });
+
+  it("falls back to GoTrue msg when error_code is unknown", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ msg: "Signups not allowed" }), { status: 422 }),
+    );
+
+    await expect(signIn("u@e.com", "p")).rejects.toThrow("Signups not allowed");
+  });
+
   it("fails with a clear message (no fetch) when the anon key is empty", async () => {
     const original = config.moduleRepo.anonKey;
     (config.moduleRepo as { anonKey: string }).anonKey = "";
