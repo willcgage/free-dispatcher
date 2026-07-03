@@ -2,11 +2,34 @@
  * Server-Sent Event contract (spec §5.1). These are the events the server
  * pushes to all connected clients over `/api/events`.
  */
-import type { OperatorRole, TrainStatus } from "@/lib/db/schema";
+import type {
+  OperatorRole,
+  TrainStatus,
+  SectionDirection,
+} from "@/lib/db/schema";
 
 export type FdEvent =
   | { type: "session_start"; sessionId: string }
   | { type: "session_archived"; sessionId: string }
+  | {
+      type: "block_occupancy_changed";
+      blockId: string;
+      occupied: boolean;
+      trainId: string | null;
+    }
+  | {
+      type: "section_allocated";
+      allocationId: string;
+      sectionId: string;
+      trainId: string;
+      direction: SectionDirection;
+    }
+  | {
+      type: "section_released";
+      allocationId: string;
+      sectionId: string;
+      trainId: string;
+    }
   | {
       type: "train_status_changed";
       trainId: string;
