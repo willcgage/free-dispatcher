@@ -8,6 +8,7 @@ import { ensureAdminToken, apiGet } from "@/lib/client/api";
 const NAV = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/session", label: "Session" },
+  { href: "/admin/layouts", label: "Layouts" },
   { href: "/admin/trains", label: "Trains" },
   { href: "/admin/modules", label: "Modules" },
   { href: "/admin/settings", label: "Settings" },
