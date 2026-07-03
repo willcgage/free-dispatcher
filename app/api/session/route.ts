@@ -60,3 +60,31 @@ export async function POST(req: Request) {
   );
   return NextResponse.json({ session }, { status: 201 });
 }
+
+/**
+ * PATCH /api/session — attach (or clear) the layout the active session runs on
+ * (Admin, #80). Body: { layoutId: string | null }.
+ */
+export async function PATCH(req: Request) {
+  const guard = requireRole(req, ["admin"]);
+  if (!guard.ok) return guard.response;
+
+  let body: { layoutId?: string | null };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+
+  const session = await sessionManager.getActiveSession();
+  if (!session) {
+    return NextResponse.json({ error: "no active session" }, { status: 409 });
+  }
+
+  const [updated] = await db
+    .update(sessions)
+    .set({ layoutId: body.layoutId ?? null })
+    .where(eq(sessions.id, session.id))
+    .returning();
+  return NextResponse.json({ session: updated });
+}
