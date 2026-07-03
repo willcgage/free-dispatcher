@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFdSession } from "@/lib/client/useFdSession";
 import { apiSend } from "@/lib/client/api";
+import { TrackBoard } from "@/components/track/TrackBoard";
 import type { TrainRow } from "@/lib/client/types";
 
 function Metric({ label, value }: { label: string; value: number }) {
@@ -85,6 +86,11 @@ export default function DispatchScreen() {
             );
           })}
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-slate-300">Track</h2>
+        <TrackBoard trains={trains} canControl />
       </section>
 
       <section>

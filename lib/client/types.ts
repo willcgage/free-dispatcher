@@ -12,6 +12,7 @@ export interface SessionRow {
   name: string;
   date: string | null;
   venue: string | null;
+  layoutId: string | null;
   layoutConfigId: string | null;
   status: SessionStatus;
   createdAt: string;
