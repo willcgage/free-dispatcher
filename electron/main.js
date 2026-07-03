@@ -174,8 +174,10 @@ function fetchServerInfo(host) {
 function createWindow() {
   win = new BrowserWindow({
     width: 520,
-    height: 640,
-    resizable: false,
+    height: 720,
+    minWidth: 420,
+    minHeight: 480,
+    resizable: true,
     title: "Free Dispatcher — Host",
     webPreferences: { preload: path.join(__dirname, "preload.js") },
   });
