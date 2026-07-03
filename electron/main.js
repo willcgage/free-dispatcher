@@ -21,9 +21,11 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 
 const PORT = Number(process.env.FD_PORT) || 3000;
-// Re-check for updates while the host stays open (long-running event sessions
-// rarely restart). The launch check covers the common case.
-const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+// Re-check for updates while the host stays open. The interval (minutes) is
+// user-configurable from the host window; 0 disables automatic checks (leaving
+// the on-demand "Check now" button). The launch check always runs.
+const DEFAULT_UPDATE_INTERVAL_MIN = 360; // 6 hours
+const MAX_UPDATE_INTERVAL_MIN = 10080; // 1 week
 const HOST_BIND = "0.0.0.0"; // listen on all interfaces so LAN phones can join
 const LOOPBACK = `http://127.0.0.1:${PORT}`;
 const MAX_RESTARTS = 1;
@@ -34,6 +36,7 @@ let tray = null;
 let quitting = false;
 let restarts = 0;
 let lastServerError = "";
+let updateTimer = null;
 
 function logPath() {
   return path.join(app.getPath("userData"), "logs", "host.log");
@@ -242,6 +245,31 @@ function setBetaPref(on) {
   }
 }
 
+/** Persisted automatic update-check interval, in minutes. 0 = off (manual only). */
+function intervalPrefPath() {
+  return path.join(app.getPath("userData"), "update-check-interval-minutes");
+}
+function getIntervalMinutes() {
+  try {
+    const raw = parseInt(fs.readFileSync(intervalPrefPath(), "utf8").trim(), 10);
+    if (!Number.isFinite(raw) || raw < 0) return DEFAULT_UPDATE_INTERVAL_MIN;
+    return Math.min(raw, MAX_UPDATE_INTERVAL_MIN);
+  } catch {
+    return DEFAULT_UPDATE_INTERVAL_MIN;
+  }
+}
+function setIntervalMinutes(minutes) {
+  const n = Number.isFinite(minutes)
+    ? Math.max(0, Math.min(Math.round(minutes), MAX_UPDATE_INTERVAL_MIN))
+    : DEFAULT_UPDATE_INTERVAL_MIN;
+  try {
+    fs.writeFileSync(intervalPrefPath(), String(n));
+  } catch {
+    /* best-effort */
+  }
+  return n;
+}
+
 /** Push an updater status object to the control-panel renderer (if open). */
 function sendUpdate(payload) {
   win?.webContents?.send("updater", payload);
@@ -284,12 +312,31 @@ function setupAutoUpdater() {
     sendUpdate({ state: "error", message: String((err && err.message) || err) }),
   );
 
-  const check = () =>
-    autoUpdater
-      .checkForUpdates()
-      .catch((e) => log(`updater check failed: ${e && e.message}`));
-  check(); // on launch
-  setInterval(check, UPDATE_CHECK_INTERVAL_MS); // on interval
+  runUpdateCheck(); // on launch
+  rescheduleUpdateChecks(); // on the user-defined interval
+}
+
+/** Trigger a single update check (no-op until the app is packaged). */
+function runUpdateCheck() {
+  if (!app.isPackaged) return;
+  return autoUpdater
+    .checkForUpdates()
+    .catch((e) => log(`updater check failed: ${e && e.message}`));
+}
+
+/** (Re)arm the automatic update-check timer from the saved interval (0 = off). */
+function rescheduleUpdateChecks() {
+  if (updateTimer) {
+    clearInterval(updateTimer);
+    updateTimer = null;
+  }
+  const mins = getIntervalMinutes();
+  if (mins > 0) {
+    updateTimer = setInterval(runUpdateCheck, mins * 60 * 1000);
+    log(`updater: auto-check every ${mins} min`);
+  } else {
+    log("updater: auto-check disabled (manual only)");
+  }
 }
 
 ipcMain.handle("get-info", (_e, host) => fetchServerInfo(host));
@@ -304,6 +351,7 @@ ipcMain.handle("updater-state", () => ({
   version: app.getVersion(),
   beta: getBetaPref(),
   enabled: app.isPackaged,
+  intervalMinutes: getIntervalMinutes(),
 }));
 ipcMain.handle("updater-check", () =>
   autoUpdater.checkForUpdates().catch((e) => ({ error: String(e && e.message) })),
@@ -321,6 +369,13 @@ ipcMain.handle("updater-set-beta", (_e, on) => {
   return autoUpdater
     .checkForUpdates()
     .catch((e) => ({ error: String(e && e.message) }));
+});
+// Set the automatic-check interval (minutes; 0 = off) and re-arm the timer.
+// Returns the clamped value actually applied.
+ipcMain.handle("updater-set-interval", (_e, minutes) => {
+  const applied = setIntervalMinutes(Number(minutes));
+  rescheduleUpdateChecks();
+  return applied;
 });
 
 app.whenReady().then(async () => {

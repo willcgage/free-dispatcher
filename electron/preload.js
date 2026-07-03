@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld("fd", {
   updaterInstall: () => ipcRenderer.send("updater-install"),
   /** Toggle whether beta (pre-release) updates are offered; re-checks. */
   updaterSetBeta: (on) => ipcRenderer.invoke("updater-set-beta", on),
+  /** Set the automatic-check interval in minutes (0 = off). Returns the applied value. */
+  updaterSetInterval: (minutes) =>
+    ipcRenderer.invoke("updater-set-interval", minutes),
   /** Subscribe to updater status:
    *  { state: 'checking'|'current'|'available'|'downloading'|'downloaded'|'error', ... }. */
   onUpdater: (cb) => ipcRenderer.on("updater", (_e, s) => cb(s)),
