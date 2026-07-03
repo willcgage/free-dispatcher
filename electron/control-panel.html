@@ -66,7 +66,19 @@
       <span id="upd-text">Checking for updates…</span>
       <div class="progress" id="upd-progress"><div id="upd-bar"></div></div>
       <div class="row" id="upd-actions"></div>
+      <div class="row"><button class="ghost" id="upd-check">Check now</button></div>
       <label class="beta"><input type="checkbox" id="beta" /> Include beta updates</label>
+      <label class="beta"
+        >Check automatically every
+        <input
+          id="upd-interval"
+          type="number"
+          min="0"
+          max="10080"
+          style="width: 56px; background: #0b1220; color: #cbd5e1; border: 1px solid #1e293b; border-radius: 6px; padding: 2px 6px; font-size: 11px;"
+        />
+        min <span style="color: #475569">(0 = off)</span></label
+      >
     </div>
     <div id="err">
       <span id="errmsg"></span>
@@ -188,6 +200,7 @@
         $("version").textContent = "v" + st.version;
         if (!st.enabled) return; // dev build: show version, hide update UI
         $("beta").checked = st.beta;
+        $("upd-interval").value = st.intervalMinutes;
         $("update").style.display = "flex";
         renderUpdate({ state: "checking" });
       }
@@ -196,6 +209,17 @@
       $("beta").addEventListener("change", () =>
         window.fd.updaterSetBeta($("beta").checked),
       );
+      $("upd-check").addEventListener("click", () => {
+        $("upd-text").textContent = "Checking for updates…";
+        window.fd.updaterCheck();
+      });
+      $("upd-interval").addEventListener("change", async () => {
+        const v = parseInt($("upd-interval").value, 10);
+        const applied = await window.fd.updaterSetInterval(
+          Number.isFinite(v) ? v : 0,
+        );
+        $("upd-interval").value = applied;
+      });
       initUpdater();
 
       refresh();
