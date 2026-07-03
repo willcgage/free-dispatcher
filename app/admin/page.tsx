@@ -13,7 +13,7 @@ interface CommandStationStatus {
   target: string | null;
 }
 
-type EmergencyMode = "stop" | "off" | "on";
+type EmergencyMode = "off" | "on";
 
 function elapsed(since: string): string {
   const ms = Date.now() - new Date(since).getTime();
@@ -47,8 +47,7 @@ export default function AdminDashboard() {
 
   async function emergencyStop(mode: EmergencyMode) {
     const prompts: Record<EmergencyMode, string> = {
-      stop: "Emergency Stop — revoke authority and halt trains?",
-      off: "Emergency Off — revoke authority and CUT TRACK POWER?",
+      off: "Emergency Stop — revoke authority and CUT TRACK POWER? This halts every train.",
       on: "Restore track power?",
     };
     if (!confirm(prompts[mode])) return;
@@ -194,28 +193,21 @@ export default function AdminDashboard() {
             <div className="space-y-2">
               <button
                 disabled={busy}
-                onClick={() => emergencyStop("stop")}
+                onClick={() => emergencyStop("off")}
                 title={
-                  cmd?.capabilities.emergencyStop
-                    ? "Halt all trains, keep track power"
-                    : "Revokes authority; this connection can't halt locos while keeping power"
+                  cmd?.capabilities.emergencyOff
+                    ? "Revoke authority and cut track power — stops every train"
+                    : "Revokes authority; no command station connected to cut power"
                 }
                 className="w-full rounded-md bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50"
               >
                 ⏹ Emergency Stop
               </button>
-              <button
-                disabled={busy}
-                onClick={() => emergencyStop("off")}
-                title={
-                  cmd?.capabilities.emergencyOff
-                    ? "Revoke authority and cut track power"
-                    : "Revokes authority; no command station connected to cut power"
-                }
-                className="w-full rounded-md border border-red-700/60 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-900/30 disabled:opacity-50"
-              >
-                ⚡ Emergency Off (cut power)
-              </button>
+              <p className="text-xs text-slate-500">
+                Cuts track power — the stop that halts every train, whatever
+                throttle it&apos;s on. Authority is always revoked; power is cut
+                when a command station is connected.
+              </p>
               {cmd?.connected && cmd.capabilities.emergencyOff && (
                 <button
                   disabled={busy}
