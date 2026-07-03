@@ -36,6 +36,24 @@ export type TrainStatus = "running" | "holding" | "yard" | "staging";
 export type AuthorityAction = "granted" | "revoked";
 export type OperatorRole = "admin" | "dispatcher" | "engineer" | "yardmaster";
 export type StagingEnd = "A" | "B";
+// Direction a Section is allocated in, along its own block order (end A → end B
+// or reverse). Set per allocation (#80) so single-track sections work both ways
+// for meets and double-track mains carry parallel chains.
+export type SectionDirection = "AtoB" | "BtoA";
+
+// ---- layouts -------------------------------------------------------------
+// A layout is the reusable, static definition of a physical layout: its track
+// model (districts → sections → blocks) lives here and is authored once, then a
+// session runs *on* a layout (#80). Runtime state (occupancy, allocations) is
+// session-scoped, not here. Folding module_layouts under a layout is #84.
+export const layouts = pgTable("layouts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 // ---- sessions ------------------------------------------------------------
 export const sessions = pgTable(
@@ -45,6 +63,11 @@ export const sessions = pgTable(
     name: text("name").notNull(),
     date: text("date"), // event date (ISO yyyy-mm-dd)
     venue: text("venue"),
+    // The layout this session runs on (its track model). Nullable so existing
+    // sessions and the legacy module-only flow keep working (#84 consolidates).
+    layoutId: uuid("layout_id").references(() => layouts.id, {
+      onDelete: "set null",
+    }),
     layoutConfigId: text("layout_config_id"),
     status: text("status").$type<SessionStatus>().notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -227,6 +250,137 @@ export const stagingTracks = pgTable(
   (t) => [index("staging_tracks_layout_idx").on(t.layoutId)],
 );
 
+// ==== Track model (#80) ===================================================
+// Static, layout-scoped hierarchy: District → Section → Block (largest → holds
+// smallest). Authored once per layout and reused across sessions.
+
+// ---- districts -----------------------------------------------------------
+// A dispatcher's territory: a group of Sections. Dispatcher assignment is a
+// per-session concern (operators are session-scoped) handled in #76/#85.
+export const districts = pgTable(
+  "districts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    layoutId: uuid("layout_id")
+      .notNull()
+      .references(() => layouts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("districts_layout_idx").on(t.layoutId)],
+);
+
+// ---- sections ------------------------------------------------------------
+// The unit a dispatcher allocates: an ordered group of connected Blocks within
+// one District. `track` optionally names a parallel main (e.g. "Main 1") for
+// double-track; direction is chosen per allocation, not stored here.
+export const sections = pgTable(
+  "sections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    districtId: uuid("district_id")
+      .notNull()
+      .references(() => districts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    track: text("track"),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("sections_district_idx").on(t.districtId)],
+);
+
+// ---- blocks --------------------------------------------------------------
+// Smallest unit; occupancy is marked per Block. Authored explicitly and ordered
+// within its Section; `moduleRecordNumber` optionally maps it to a Free-moN
+// module (repo_modules) for display — kept as loose text, not an FK, since the
+// module cache is volatile (#80 decision: authored, optional module link).
+export const blocks = pgTable(
+  "blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => sections.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    moduleRecordNumber: text("module_record_number"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("blocks_section_idx").on(t.sectionId)],
+);
+
+// ==== Track runtime state (session-scoped) ================================
+
+// ---- block_occupancy -----------------------------------------------------
+// This session's live occupancy of a Block (manually marked in v1). One row per
+// (session, block); `trainId` optionally records who occupies it.
+export const blockOccupancy = pgTable(
+  "block_occupancy",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    blockId: uuid("block_id")
+      .notNull()
+      .references(() => blocks.id, { onDelete: "cascade" }),
+    occupied: boolean("occupied").notNull().default(false),
+    trainId: uuid("train_id").references(() => trains.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: text("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("block_occupancy_session_block").on(t.sessionId, t.blockId),
+    index("block_occupancy_session_idx").on(t.sessionId),
+  ],
+);
+
+// ---- section_allocations -------------------------------------------------
+// A Section granted to a train for this session, in a direction. A train may
+// hold several (a route); all must share a District (enforced in the app). The
+// partial unique index guarantees at most one *active* allocation per Section
+// per session — the DB-level backstop for conflicting authority (#90).
+export const sectionAllocations = pgTable(
+  "section_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => sections.id, { onDelete: "cascade" }),
+    trainId: uuid("train_id")
+      .notNull()
+      .references(() => trains.id, { onDelete: "cascade" }),
+    direction: text("direction").$type<SectionDirection>().notNull(),
+    active: boolean("active").notNull().default(true),
+    allocatedBy: text("allocated_by"),
+    allocatedAt: timestamp("allocated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("section_allocations_session_idx").on(t.sessionId),
+    index("section_allocations_train_idx").on(t.trainId),
+    uniqueIndex("section_allocations_active_section")
+      .on(t.sessionId, t.sectionId)
+      .where(sql`${t.active}`),
+  ],
+);
+
 // ---- app_settings --------------------------------------------------------
 // Singleton-ish key/value store for Admin configuration (WiThrottle, server).
 // Not in spec §9 but required by the §3.3 settings screens; persisted
@@ -240,6 +394,7 @@ export const appSettings = pgTable("app_settings", {
 });
 
 export const schema = {
+  layouts,
   sessions,
   trains,
   trainStatuses,
@@ -248,6 +403,11 @@ export const schema = {
   opsLog,
   moduleLayouts,
   stagingTracks,
+  districts,
+  sections,
+  blocks,
+  blockOccupancy,
+  sectionAllocations,
   appSettings,
   repoModules,
 };
