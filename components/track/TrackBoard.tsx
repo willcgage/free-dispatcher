@@ -3,12 +3,17 @@
  * and the mobile dispatch screen. Renders the session's layout (District →
  * Section → Block) with manual Block occupancy and Section allocation, kept live
  * via useTrackBoard's SSE subscription.
+ *
+ * Allocation is selection-based: tick one or more Sections, then grant them to a
+ * train + direction as a single route. The server allocates atomically and
+ * rejects a route that spans more than one District or hits an already-allocated
+ * Section.
  */
 "use client";
 
 import { useState } from "react";
 import { apiSend } from "@/lib/client/api";
-import { useTrackBoard, type SectionNode } from "@/lib/client/useTrackBoard";
+import { useTrackBoard } from "@/lib/client/useTrackBoard";
 import type { TrainRow } from "@/lib/client/types";
 
 type Direction = "AtoB" | "BtoA";
@@ -23,10 +28,9 @@ export function TrackBoard({
 }) {
   const { layout, occupancy, allocations, loading, refresh } = useTrackBoard();
   const [busy, setBusy] = useState(false);
-  // Per-section pending allocation selection (train + direction).
-  const [sel, setSel] = useState<
-    Record<string, { trainId?: string; direction: Direction }>
-  >({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [routeTrainId, setRouteTrainId] = useState("");
+  const [routeDir, setRouteDir] = useState<Direction>("AtoB");
 
   const trainLabel = (id: string) => {
     const t = trains.find((x) => x.id === id);
@@ -50,16 +54,25 @@ export function TrackBoard({
       apiSend("POST", "/api/track/occupancy", { blockId, occupied: !occupied }),
     );
 
-  const allocate = (section: SectionNode) => {
-    const s = sel[section.id];
-    if (!s?.trainId) return;
-    return act(() =>
-      apiSend("POST", "/api/track/allocate", {
-        sectionIds: [section.id],
-        trainId: s.trainId,
-        direction: s.direction,
-      }),
-    );
+  const toggleSelect = (sectionId: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+
+  const allocateRoute = () => {
+    if (!routeTrainId || selected.size === 0) return;
+    return act(async () => {
+      await apiSend("POST", "/api/track/allocate", {
+        sectionIds: [...selected],
+        trainId: routeTrainId,
+        direction: routeDir,
+      });
+      setSelected(new Set());
+      setRouteTrainId("");
+    });
   };
 
   const release = (sectionId: string) =>
@@ -82,6 +95,49 @@ export function TrackBoard({
 
   return (
     <div className="space-y-4">
+      {/* Route allocation bar — appears once sections are selected. */}
+      {canControl && selected.size > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-sky-800/60 bg-slate-900 p-2.5 shadow-lg">
+          <span className="text-sm font-medium text-slate-200">
+            {selected.size} section{selected.size > 1 ? "s" : ""} →
+          </span>
+          <select
+            value={routeTrainId}
+            onChange={(e) => setRouteTrainId(e.target.value)}
+            className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
+          >
+            <option value="">Train…</option>
+            {trains.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.number}
+                {t.name ? ` · ${t.name}` : ""}
+              </option>
+            ))}
+          </select>
+          <select
+            value={routeDir}
+            onChange={(e) => setRouteDir(e.target.value as Direction)}
+            className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-100"
+          >
+            <option value="AtoB">A→B</option>
+            <option value="BtoA">B→A</option>
+          </select>
+          <button
+            disabled={busy || !routeTrainId}
+            onClick={allocateRoute}
+            className="rounded-md bg-sky-600 px-3 py-1 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-40"
+          >
+            Allocate route
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="rounded-md border border-slate-700 px-2.5 py-1 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {layout.districts.map((d) => (
         <section key={d.id}>
           <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -90,13 +146,24 @@ export function TrackBoard({
           <div className="space-y-2">
             {d.sections.map((section) => {
               const alloc = allocations[section.id];
-              const pending = sel[section.id] ?? { direction: "AtoB" as Direction };
+              const isSelected = selected.has(section.id);
               return (
                 <div
                   key={section.id}
-                  className="rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+                  className={`rounded-lg border bg-slate-900/40 p-3 ${
+                    isSelected ? "border-sky-600" : "border-slate-800"
+                  }`}
                 >
                   <div className="mb-2 flex items-center gap-2">
+                    {canControl && !alloc && (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(section.id)}
+                        title="Select for a route"
+                        className="h-4 w-4 accent-sky-500"
+                      />
+                    )}
                     <span className="font-medium text-slate-200">
                       {section.name}
                     </span>
@@ -106,8 +173,19 @@ export function TrackBoard({
                       </span>
                     )}
                     {alloc && (
-                      <span className="ml-auto rounded bg-indigo-600/20 px-2 py-0.5 text-xs font-medium text-indigo-300">
-                        {trainLabel(alloc.trainId)} · {DIR_LABEL[alloc.direction]}
+                      <span className="ml-auto flex items-center gap-2">
+                        <span className="rounded bg-indigo-600/20 px-2 py-0.5 text-xs font-medium text-indigo-300">
+                          {trainLabel(alloc.trainId)} · {DIR_LABEL[alloc.direction]}
+                        </span>
+                        {canControl && (
+                          <button
+                            disabled={busy}
+                            onClick={() => release(section.id)}
+                            className="rounded-md border border-slate-700 px-2 py-0.5 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            Release
+                          </button>
+                        )}
                       </span>
                     )}
                   </div>
@@ -124,9 +202,7 @@ export function TrackBoard({
                             key={b.id}
                             disabled={!canControl || busy}
                             onClick={() => toggleBlock(b.id, occ)}
-                            title={
-                              canControl ? "Toggle occupancy" : "Occupancy"
-                            }
+                            title={canControl ? "Toggle occupancy" : "Occupancy"}
                             className={`rounded px-2 py-1 text-xs font-medium transition ${
                               occ
                                 ? "bg-red-600/30 text-red-200 ring-1 ring-red-600/50"
@@ -139,68 +215,6 @@ export function TrackBoard({
                       })
                     )}
                   </div>
-
-                  {/* Allocation control */}
-                  {canControl && (
-                    <div className="mt-2 flex items-center gap-2">
-                      {alloc ? (
-                        <button
-                          disabled={busy}
-                          onClick={() => release(section.id)}
-                          className="rounded-md border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                        >
-                          Release
-                        </button>
-                      ) : (
-                        <>
-                          <select
-                            value={pending.trainId ?? ""}
-                            onChange={(e) =>
-                              setSel((p) => ({
-                                ...p,
-                                [section.id]: {
-                                  ...pending,
-                                  trainId: e.target.value || undefined,
-                                },
-                              }))
-                            }
-                            className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-100"
-                          >
-                            <option value="">Train…</option>
-                            {trains.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.number}
-                                {t.name ? ` · ${t.name}` : ""}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            value={pending.direction}
-                            onChange={(e) =>
-                              setSel((p) => ({
-                                ...p,
-                                [section.id]: {
-                                  ...pending,
-                                  direction: e.target.value as Direction,
-                                },
-                              }))
-                            }
-                            className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-100"
-                          >
-                            <option value="AtoB">A→B</option>
-                            <option value="BtoA">B→A</option>
-                          </select>
-                          <button
-                            disabled={busy || !pending.trainId}
-                            onClick={() => allocate(section)}
-                            className="rounded-md bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-40"
-                          >
-                            Allocate
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })}
