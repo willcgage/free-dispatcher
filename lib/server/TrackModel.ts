@@ -79,6 +79,7 @@ export interface LayoutModule {
   geometryType: string | null;
   geometryDegrees: number | null;
   flipped: boolean;
+  endplates: unknown;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -252,6 +253,7 @@ class TrackModel {
         hasMss: repoModules.hasMss,
         geometryType: repoModules.geometryType,
         geometryDegrees: repoModules.geometryDegrees,
+        endplates: repoModules.endplates,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))

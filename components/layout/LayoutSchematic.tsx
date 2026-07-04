@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import { buildSchematic, type SchematicInput } from "@/lib/track/schematic";
+import { endplateConnections } from "@/lib/track/endplates";
 
 /** Drag payload MIME for dropping a catalog module onto the schematic. */
 export const MODULE_DRAG_MIME = "application/x-fd-module";
@@ -57,6 +58,11 @@ export function LayoutSchematic({
 
   const schem = buildSchematic(modules);
   const { bbox, totalInches } = schem;
+  // Endplate connection checks (#115): the join before segment i is
+  // connections[i-1]. Mismatches (e.g. single↔double) are flagged.
+  const connections = endplateConnections(modules);
+  const mismatches = connections.filter((c) => c.status === "mismatch");
+  const label = (i: number) => modules[i]?.moduleName ?? modules[i]?.moduleId;
   const w = Math.max(bbox.maxX - bbox.minX, 1);
   const h = Math.max(bbox.maxY - bbox.minY, 1);
   const pad = Math.max(w, h) * 0.06 + 6;
@@ -106,23 +112,50 @@ export function LayoutSchematic({
             </polyline>
           );
         })}
-        {/* Endplate boundaries. */}
-        {schem.segments.map((seg) => (
-          <circle
-            key={`${seg.input.id}-c`}
-            cx={seg.points[0].x}
-            cy={seg.points[0].y}
-            r={stroke * 1.1}
-            fill="#0f172a"
-            stroke="#475569"
-            strokeWidth={stroke * 0.3}
-          />
-        ))}
+        {/* Endplate boundaries; joins tinted red on a track-config mismatch. */}
+        {schem.segments.map((seg, i) => {
+          const conn = i > 0 ? connections[i - 1] : undefined;
+          const bad = conn?.status === "mismatch";
+          return (
+            <circle
+              key={`${seg.input.id}-c`}
+              cx={seg.points[0].x}
+              cy={seg.points[0].y}
+              r={stroke * (bad ? 1.5 : 1.1)}
+              fill={bad ? "#7f1d1d" : "#0f172a"}
+              stroke={bad ? "#ef4444" : "#475569"}
+              strokeWidth={stroke * (bad ? 0.5 : 0.3)}
+            >
+              {conn && (
+                <title>
+                  {`${label(conn.fromIndex)} (${conn.fromConfig ?? "?"}) ↔ ${label(
+                    conn.toIndex,
+                  )} (${conn.toConfig ?? "?"})${bad ? " — mismatch" : ""}`}
+                </title>
+              )}
+            </circle>
+          );
+        })}
       </svg>
+      {mismatches.length > 0 && (
+        <div className="mt-1 rounded-md border border-red-900/60 bg-red-950/30 px-2 py-1 text-[11px] text-red-300">
+          <span className="font-semibold">
+            {mismatches.length} endplate{" "}
+            {mismatches.length === 1 ? "mismatch" : "mismatches"}:
+          </span>{" "}
+          {mismatches.map((c, i) => (
+            <span key={`${c.fromId}-${c.toId}`}>
+              {i > 0 && "; "}
+              {label(c.fromIndex)} ({c.fromConfig}) ↔ {label(c.toIndex)} (
+              {c.toConfig})
+            </span>
+          ))}
+        </div>
+      )}
       <p className="mt-1 text-[10px] text-slate-600">
         To scale, following each module&rsquo;s geometry (straights, curves, 90°
-        corners). Staging tinted, unknown-length amber; curve orientation is
-        approximate.
+        corners). Staging tinted, unknown-length amber; red joins flag an endplate
+        track-config mismatch; curve orientation is approximate.
       </p>
     </div>
   );

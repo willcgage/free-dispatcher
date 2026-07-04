@@ -20,6 +20,8 @@ export interface SchematicInput {
   geometryDegrees: number | null;
   /** Mirror the placement so the curve bends the other way. */
   flipped?: boolean | null;
+  /** Endplate track configs, used for connection checks (#115). */
+  endplates?: { label?: string | null; track_config?: string | null }[] | null;
 }
 
 export interface Pt {

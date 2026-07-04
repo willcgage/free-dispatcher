@@ -57,6 +57,7 @@ interface LayoutModuleNode {
   geometryType: string | null;
   geometryDegrees: number | null;
   flipped: boolean;
+  endplates: { label?: string | null; track_config?: string | null }[] | null;
 }
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
