@@ -45,7 +45,12 @@ export async function POST(req: Request) {
   const guard = requireRole(req, ["admin"]);
   if (!guard.ok) return guard.response;
 
-  let body: { layoutId?: string; moduleId?: string; stagingEnd?: StagingEnd };
+  let body: {
+    layoutId?: string;
+    moduleId?: string;
+    moduleIds?: string[];
+    stagingEnd?: StagingEnd;
+  };
   try {
     body = await req.json();
   } catch {
@@ -54,8 +59,16 @@ export async function POST(req: Request) {
   if (!body.layoutId?.trim()) {
     return NextResponse.json({ error: "layoutId is required" }, { status: 400 });
   }
-  if (!body.moduleId?.trim()) {
-    return NextResponse.json({ error: "moduleId is required" }, { status: 400 });
+
+  // Accept a single moduleId or a batch (moduleIds), appended in order.
+  const ids = (body.moduleIds ?? (body.moduleId ? [body.moduleId] : []))
+    .map((m) => m.trim())
+    .filter(Boolean);
+  if (ids.length === 0) {
+    return NextResponse.json(
+      { error: "moduleId or moduleIds is required" },
+      { status: 400 },
+    );
   }
 
   const layoutId = body.layoutId.trim();
@@ -63,16 +76,18 @@ export async function POST(req: Request) {
     .select()
     .from(moduleLayouts)
     .where(eq(moduleLayouts.layoutId, layoutId));
-  const nextPos = existing.reduce((m, r) => Math.max(m, r.positionIndex), -1) + 1;
+  let pos = existing.reduce((m, r) => Math.max(m, r.positionIndex), -1) + 1;
 
-  const [row] = await db
+  const rows = await db
     .insert(moduleLayouts)
-    .values({
-      layoutId,
-      moduleId: body.moduleId.trim(),
-      positionIndex: nextPos,
-      stagingEnd: body.stagingEnd ?? null,
-    })
+    .values(
+      ids.map((moduleId) => ({
+        layoutId,
+        moduleId,
+        positionIndex: pos++,
+        stagingEnd: body.stagingEnd ?? null,
+      })),
+    )
     .returning();
-  return NextResponse.json({ module: row }, { status: 201 });
+  return NextResponse.json({ modules: rows }, { status: 201 });
 }

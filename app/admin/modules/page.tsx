@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel } from "@/components/admin/ui";
-import type { CatalogModule } from "@/components/modules/ModulePicker";
+import { moduleMatches } from "@/lib/client/moduleSearch";
+import type { CatalogModule } from "@/lib/client/types";
 
 interface SyncMeta {
   last_synced_at: string | null;
@@ -67,13 +68,7 @@ export default function AdminModules() {
     }
   }
 
-  const filtered = query.trim()
-    ? catalog.filter(
-        (m) =>
-          m.recordNumber.toLowerCase().includes(query.toLowerCase()) ||
-          m.moduleName.toLowerCase().includes(query.toLowerCase()),
-      )
-    : catalog;
+  const filtered = catalog.filter((m) => moduleMatches(m, query));
 
   return (
     <div className="max-w-3xl space-y-5">

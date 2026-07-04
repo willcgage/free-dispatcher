@@ -63,6 +63,18 @@ export interface ModuleLayoutRow {
   moduleName?: string | null;
 }
 
+/** A row from the local Module Repository catalog (GET /api/modules/catalog). */
+export interface CatalogModule {
+  recordNumber: string;
+  moduleName: string;
+  category: string | null;
+  geometryType: string | null;
+  lengthTotalInches?: number | null;
+  mainlineLengthInches?: number | null;
+  endplateCount: number | null;
+  hasMss: boolean | null;
+}
+
 export interface FullState {
   session: SessionRow | null;
   trains: TrainRow[];
