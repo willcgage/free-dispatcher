@@ -48,6 +48,8 @@ export interface SchematicSignal {
   kind?: string;
   name?: string | null;
   aspects?: string[];
+  /** Turnout this control point governs; absent = standalone block signal (#122). */
+  turnout?: string;
 }
 export interface SchematicBlock {
   id: string;
@@ -112,6 +114,13 @@ export interface ModuleFeatures {
  * fraction of the module length; endplate A = 0, B = length; turnouts sit at
  * their pos. Tracks may carry explicit fromPos/toPos (overriding node lookup).
  */
+/**
+ * Hold features off the endplates so a switch a few inches from the end of a
+ * very long module (e.g. the 396" "One Mile") still reads clearly — the panel
+ * stays to-scale in the middle but clamps the outer INSET fraction (#122).
+ */
+const INSET = 0.08;
+
 export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
   const len =
     doc.lengthInches && doc.lengthInches > 0
@@ -138,7 +147,8 @@ export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
     if (turnoutPos.has(nodeId)) return turnoutPos.get(nodeId)!;
     return null;
   };
-  const clampFrac = (p: number) => Math.min(1, Math.max(0, p / len));
+  const clampFrac = (p: number) =>
+    Math.min(1 - INSET, Math.max(INSET, p / len));
 
   const extraTracks: DrawTrack[] = [];
   for (const t of doc.tracks) {

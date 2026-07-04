@@ -60,6 +60,32 @@ describe("moduleFeatures", () => {
     expect(f.signals[0]).toMatchObject({ posFrac: 0.1, lane: 0, facing: "AtoB" });
   });
 
+  it("holds features off the endplates on a very long module (inset clamp)", () => {
+    // One Mile: 432\" module, switch 24\" from the West end would be at ~5.5%.
+    const oneMile: ModuleSchematicDoc = {
+      version: 1,
+      lengthInches: 432,
+      endplates: [
+        { id: "A", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+        { id: "B", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+      ],
+      tracks: [
+        { id: "main", role: "main", lane: 0, from: "A", to: "B" },
+        { id: "sid", role: "siding", lane: 1, from: "swW", to: "swE", fromPos: 24, toPos: 408 },
+      ],
+      turnouts: [
+        { id: "swW", pos: 24, onTrack: "main", divergeTrack: "sid", kind: "right" },
+        { id: "swE", pos: 408, onTrack: "main", divergeTrack: "sid", kind: "left" },
+      ],
+    };
+    const feat = moduleFeatures(oneMile);
+    // 24/432 = 0.056 → clamped up to the 0.08 inset (off the endplate).
+    expect(feat.turnouts[0].posFrac).toBeCloseTo(0.08);
+    expect(feat.turnouts[1].posFrac).toBeCloseTo(0.92);
+    expect(feat.extraTracks[0].fromFrac).toBeCloseTo(0.08);
+    expect(feat.extraTracks[0].toFrac).toBeCloseTo(0.92);
+  });
+
   it("skips a track whose endpoints can't be resolved", () => {
     const bad: ModuleSchematicDoc = {
       version: 1,
