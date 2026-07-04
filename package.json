@@ -1,6 +1,6 @@
 {
   "name": "free-dispatcher",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "description": "Local-first train dispatch for modular Free-moN sessions",
   "author": "Will Gage <willcgage@gmail.com>",
