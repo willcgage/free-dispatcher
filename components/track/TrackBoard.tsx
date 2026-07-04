@@ -31,7 +31,8 @@ export function TrackBoard({
   trains: TrainRow[];
   canControl: boolean;
 }) {
-  const { layout, occupancy, allocations, loading, refresh } = useTrackBoard();
+  const { layout, occupancy, allocations, turnoutPositions, loading, refresh } =
+    useTrackBoard();
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [routeTrainId, setRouteTrainId] = useState("");
@@ -82,6 +83,14 @@ export function TrackBoard({
 
   const release = (sectionId: string) =>
     act(() => apiSend("POST", "/api/track/release", { sectionId }));
+
+  const toggleTurnout = (turnoutId: string, current: "normal" | "reversed") =>
+    act(() =>
+      apiSend("POST", "/api/track/turnout", {
+        turnoutId,
+        position: current === "normal" ? "reversed" : "normal",
+      }),
+    );
 
   if (loading) {
     return <p className="text-sm text-slate-400">Loading track…</p>;
@@ -250,6 +259,34 @@ export function TrackBoard({
               );
             })}
           </div>
+
+          {/* Turnouts */}
+          {d.turnouts.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-slate-500">Turnouts:</span>
+              {d.turnouts.map((t) => {
+                const pos = turnoutPositions[t.id] ?? "normal";
+                const reversed = pos === "reversed";
+                return (
+                  <button
+                    key={t.id}
+                    disabled={!canControl || busy}
+                    onClick={() => toggleTurnout(t.id, pos)}
+                    title={`${t.name} — ${reversed ? "Reversed" : "Normal"}${
+                      canControl ? " (click to flip)" : ""
+                    }`}
+                    className={`rounded px-2 py-1 text-xs font-medium transition ${
+                      reversed
+                        ? "bg-amber-600/30 text-amber-200 ring-1 ring-amber-600/50"
+                        : "bg-slate-800 text-slate-300"
+                    } ${canControl ? "hover:brightness-125" : "cursor-default"} disabled:opacity-60`}
+                  >
+                    {t.name} · {reversed ? "R" : "N"}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </section>
       ))}
     </div>

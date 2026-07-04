@@ -22,10 +22,15 @@ interface SectionNode {
   track: string | null;
   blocks: BlockNode[];
 }
+interface TurnoutNode {
+  id: string;
+  name: string;
+}
 interface DistrictNode {
   id: string;
   name: string;
   sections: SectionNode[];
+  turnouts: TurnoutNode[];
 }
 interface LayoutTree extends LayoutRow {
   districts: DistrictNode[];
@@ -41,9 +46,13 @@ interface SectionDraft {
   track: string;
   blocks: BlockDraft[];
 }
+interface TurnoutDraft {
+  name: string;
+}
 interface DistrictDraft {
   name: string;
   sections: SectionDraft[];
+  turnouts: TurnoutDraft[];
 }
 interface LayoutDraft {
   name: string;
@@ -145,6 +154,9 @@ export default function AdminLayouts() {
                   moduleRecordNumber: b.moduleRecordNumber.trim() || undefined,
                 })),
             })),
+          turnouts: di.turnouts
+            .filter((t) => t.name.trim())
+            .map((t) => ({ name: t.name.trim() })),
         })),
     };
   }
@@ -247,6 +259,12 @@ export default function AdminLayouts() {
                                     </span>
                                   </li>
                                 ))}
+                                {d.turnouts.length > 0 && (
+                                  <li className="text-xs text-slate-500">
+                                    Turnouts:{" "}
+                                    {d.turnouts.map((t) => t.name).join(" · ")}
+                                  </li>
+                                )}
                               </ul>
                             </li>
                           ))}
@@ -440,13 +458,57 @@ export default function AdminLayouts() {
                     + Section
                   </button>
                 </div>
+
+                {/* Turnouts */}
+                <div className="mt-2 flex flex-wrap items-center gap-2 pl-4">
+                  <span className="text-xs uppercase text-slate-500">
+                    Turnouts
+                  </span>
+                  {district.turnouts.map((to, ti) => (
+                    <span key={ti} className="flex items-center gap-1">
+                      <input
+                        className={`${smInput} max-w-[8rem]`}
+                        placeholder="Name"
+                        value={to.name}
+                        onChange={(e) =>
+                          mutate(
+                            (d) =>
+                              (d.districts[di].turnouts[ti].name =
+                                e.target.value),
+                          )
+                        }
+                      />
+                      <button
+                        type="button"
+                        className={xBtn}
+                        onClick={() =>
+                          mutate((d) => d.districts[di].turnouts.splice(ti, 1))
+                        }
+                        title="Remove turnout"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    className={addBtn}
+                    onClick={() =>
+                      mutate((d) => d.districts[di].turnouts.push({ name: "" }))
+                    }
+                  >
+                    + Turnout
+                  </button>
+                </div>
               </div>
             ))}
             <button
               type="button"
               className={addBtn}
               onClick={() =>
-                mutate((d) => d.districts.push({ name: "", sections: [] }))
+                mutate((d) =>
+                  d.districts.push({ name: "", sections: [], turnouts: [] }),
+                )
               }
             >
               + District
