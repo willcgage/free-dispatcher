@@ -60,6 +60,7 @@ interface ModuleFull {
   endplates?: unknown;
   tracks?: unknown;
   industries?: unknown;
+  schematics?: unknown;
 }
 
 export async function syncModules(): Promise<SyncResult | SyncError> {
@@ -144,6 +145,7 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
       endplates: (m.endplates ?? null) as object | null,
       tracks: (m.tracks ?? null) as object | null,
       industries: (m.industries ?? null) as object | null,
+      schematics: (m.schematics ?? null) as object | null,
       upstreamUpdatedAt: m.updated_at ? new Date(m.updated_at) : null,
       syncedAt: new Date(),
     };

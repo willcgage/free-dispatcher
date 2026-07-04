@@ -68,6 +68,25 @@ export default function AdminModules() {
     }
   }
 
+  /**
+   * Open an owner-uploaded schematic. The bucket is private, so fetch a signed
+   * URL on demand; open a tab synchronously first so the async fetch doesn't
+   * trip the popup blocker.
+   */
+  async function openSchematic(path: string) {
+    const win = window.open("", "_blank");
+    try {
+      const { url } = await apiGet<{ url: string }>(
+        `/api/modules/schematic-url?path=${encodeURIComponent(path)}`,
+      );
+      if (win) win.location.href = url;
+      else window.location.assign(url);
+    } catch (err) {
+      if (win) win.close();
+      alert(err instanceof Error ? err.message : "could not open schematic");
+    }
+  }
+
   const filtered = catalog.filter((m) => moduleMatches(m, query));
 
   return (
@@ -132,28 +151,47 @@ export default function AdminModules() {
             />
             <ul className="max-h-96 divide-y divide-slate-800 overflow-y-auto">
               {filtered.slice(0, 200).map((m) => (
-                <li
-                  key={m.recordNumber}
-                  className="flex items-baseline gap-2 py-2 text-sm"
-                >
-                  <span className="shrink-0 font-mono text-slate-400">
-                    {m.recordNumber}
-                  </span>
-                  <span className="truncate text-slate-200">{m.moduleName}</span>
-                  {m.hasMss && (
-                    <span className="shrink-0 rounded bg-emerald-600/20 px-1.5 py-0.5 text-xs text-emerald-300">
-                      MSS
+                <li key={m.recordNumber} className="py-2 text-sm">
+                  <div className="flex items-baseline gap-2">
+                    <span className="shrink-0 font-mono text-slate-400">
+                      {m.recordNumber}
                     </span>
-                  )}
-                  {m.owner && (
-                    <span className="ml-auto shrink-0 text-xs text-slate-500">
-                      {m.owner}
+                    <span className="truncate text-slate-200">
+                      {m.moduleName}
                     </span>
-                  )}
-                  {m.category && (
-                    <span className={`${m.owner ? "" : "ml-auto"} shrink-0 text-xs text-slate-600`}>
-                      {m.category}
-                    </span>
+                    {m.hasMss && (
+                      <span className="shrink-0 rounded bg-emerald-600/20 px-1.5 py-0.5 text-xs text-emerald-300">
+                        MSS
+                      </span>
+                    )}
+                    {m.owner && (
+                      <span className="ml-auto shrink-0 text-xs text-slate-500">
+                        {m.owner}
+                      </span>
+                    )}
+                    {m.category && (
+                      <span className={`${m.owner ? "" : "ml-auto"} shrink-0 text-xs text-slate-600`}>
+                        {m.category}
+                      </span>
+                    )}
+                  </div>
+                  {m.schematics && m.schematics.length > 0 && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-slate-500">Schematic:</span>
+                      {m.schematics.map((s) => (
+                        <button
+                          key={s.storage_path}
+                          onClick={() => openSchematic(s.storage_path)}
+                          title={`Open ${s.file_name} (owner-provided)`}
+                          className="rounded border border-slate-700 px-1.5 py-0.5 text-xs text-sky-300 hover:bg-slate-800"
+                        >
+                          📄 {s.file_name}
+                          <span className="ml-1 text-slate-500">
+                            {s.file_format}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </li>
               ))}

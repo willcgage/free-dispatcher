@@ -28,6 +28,7 @@ export async function GET(req: Request) {
       mainlineLengthInches: repoModules.mainlineLengthInches,
       endplateCount: repoModules.endplateCount,
       hasMss: repoModules.hasMss,
+      schematics: repoModules.schematics,
     })
     .from(repoModules)
     .orderBy(asc(repoModules.recordNumber));
