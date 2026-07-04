@@ -94,6 +94,10 @@ export default function AdminLayouts() {
   const [drag, setDrag] = useState<{ layoutId: string; from: number } | null>(
     null,
   );
+  const [dragSection, setDragSection] = useState<{
+    layoutId: string;
+    sectionId: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -190,6 +194,41 @@ export default function AdminLayouts() {
       await Promise.all([reloadTree(layoutId), load()]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "remove failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Move a section to a district at an index; posts the full new arrangement. */
+  async function moveSection(
+    layoutId: string,
+    tree: LayoutTree,
+    sectionId: string,
+    toDistrictId: string,
+    toIndex: number,
+  ) {
+    const byDistrict = new Map<string, string[]>();
+    for (const d of tree.districts) byDistrict.set(d.id, d.sections.map((s) => s.id));
+    for (const ids of byDistrict.values()) {
+      const idx = ids.indexOf(sectionId);
+      if (idx >= 0) ids.splice(idx, 1);
+    }
+    const target = byDistrict.get(toDistrictId) ?? [];
+    target.splice(Math.min(Math.max(toIndex, 0), target.length), 0, sectionId);
+    byDistrict.set(toDistrictId, target);
+
+    const placements: { id: string; districtId: string; position: number }[] = [];
+    for (const [districtId, ids] of byDistrict)
+      ids.forEach((id, position) => placements.push({ id, districtId, position }));
+
+    setBusy(true);
+    try {
+      await apiSend("POST", "/api/track/sections/arrange", {
+        sections: placements,
+      });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "move failed");
     } finally {
       setBusy(false);
     }
@@ -534,28 +573,93 @@ export default function AdminLayouts() {
                             ) : (
                               <ul className="space-y-1.5">
                                 {tree.districts.map((d) => (
-                                  <li key={d.id}>
+                                  <li
+                                    key={d.id}
+                                    onDragOver={(e) => {
+                                      if (dragSection?.layoutId === l.id)
+                                        e.preventDefault();
+                                    }}
+                                    onDrop={() => {
+                                      if (dragSection?.layoutId === l.id)
+                                        moveSection(
+                                          l.id,
+                                          tree,
+                                          dragSection.sectionId,
+                                          d.id,
+                                          d.sections.length,
+                                        );
+                                      setDragSection(null);
+                                    }}
+                                    className={`rounded ${
+                                      dragSection?.layoutId === l.id
+                                        ? "ring-1 ring-slate-700"
+                                        : ""
+                                    }`}
+                                  >
                                     <div className="font-medium text-slate-300">
                                       {d.name}
                                     </div>
                                     <ul className="ml-3 space-y-0.5 text-slate-400">
-                                      {d.sections.map((s) => (
-                                        <li key={s.id}>
+                                      {d.sections.map((s, si) => (
+                                        <li
+                                          key={s.id}
+                                          draggable={!busy}
+                                          onDragStart={(e) => {
+                                            e.stopPropagation();
+                                            setDragSection({
+                                              layoutId: l.id,
+                                              sectionId: s.id,
+                                            });
+                                          }}
+                                          onDragOver={(e) => {
+                                            if (dragSection?.layoutId === l.id)
+                                              e.preventDefault();
+                                          }}
+                                          onDrop={(e) => {
+                                            e.stopPropagation();
+                                            if (
+                                              dragSection?.layoutId === l.id &&
+                                              dragSection.sectionId !== s.id
+                                            )
+                                              moveSection(
+                                                l.id,
+                                                tree,
+                                                dragSection.sectionId,
+                                                d.id,
+                                                si,
+                                              );
+                                            setDragSection(null);
+                                          }}
+                                          onDragEnd={() => setDragSection(null)}
+                                          className={`flex items-center gap-1.5 rounded px-1 ${
+                                            dragSection?.sectionId === s.id
+                                              ? "opacity-50"
+                                              : "hover:bg-slate-800/40"
+                                          }`}
+                                        >
+                                          <span className="cursor-grab select-none text-slate-600">
+                                            ⠿
+                                          </span>
                                           <span className="text-slate-300">
                                             {s.name}
                                           </span>
                                           {s.track && (
-                                            <span className="ml-1 text-xs text-slate-500">
+                                            <span className="text-xs text-slate-500">
                                               ({s.track})
                                             </span>
                                           )}
-                                          <span className="ml-2 text-xs text-slate-500">
+                                          <span className="text-xs text-slate-500">
                                             {s.blocks
                                               .map((b) => b.name)
                                               .join(" · ") || "no blocks"}
                                           </span>
                                         </li>
                                       ))}
+                                      {d.sections.length === 0 && (
+                                        <li className="text-xs italic text-slate-600">
+                                          (drop a section here)
+                                        </li>
+                                      )}
                                       {d.turnouts.length > 0 && (
                                         <li className="text-xs text-slate-500">
                                           Turnouts:{" "}
