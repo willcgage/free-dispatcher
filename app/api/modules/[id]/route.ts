@@ -20,7 +20,11 @@ export async function PATCH(
   if (!guard.ok) return guard.response;
   const { id } = await params;
 
-  let body: { positionIndex?: number; stagingEnd?: StagingEnd | null };
+  let body: {
+    positionIndex?: number;
+    stagingEnd?: StagingEnd | null;
+    flipped?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
@@ -30,6 +34,7 @@ export async function PATCH(
   const set: Record<string, unknown> = {};
   if (typeof body.positionIndex === "number") set.positionIndex = body.positionIndex;
   if (body.stagingEnd !== undefined) set.stagingEnd = body.stagingEnd;
+  if (typeof body.flipped === "boolean") set.flipped = body.flipped;
   if (Object.keys(set).length === 0) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }

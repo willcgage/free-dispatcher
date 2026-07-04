@@ -18,6 +18,8 @@ export interface SchematicInput {
   lengthTotalInches: number | null;
   geometryType: string | null;
   geometryDegrees: number | null;
+  /** Mirror the placement so the curve bends the other way. */
+  flipped?: boolean | null;
 }
 
 export interface Pt {
@@ -71,7 +73,9 @@ export function buildSchematic(modules: SchematicInput[]): Schematic {
         ? m.lengthTotalInches
         : DEFAULT_LEN;
     totalInches += L;
-    const turn = (turnDegrees(m.geometryType, m.geometryDegrees) * Math.PI) / 180;
+    const deg =
+      turnDegrees(m.geometryType, m.geometryDegrees) * (m.flipped ? -1 : 1);
+    const turn = (deg * Math.PI) / 180;
     const steps = turn === 0 ? 1 : 12;
     const points: Pt[] = [{ x, y }];
     for (let i = 0; i < steps; i++) {
