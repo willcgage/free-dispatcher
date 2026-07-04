@@ -85,6 +85,13 @@
       "when": 1783176728535,
       "tag": "0011_module_standard",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783182515005,
+      "tag": "0012_repo_module_schematics",
+      "breakpoints": true
     }
   ]
 }

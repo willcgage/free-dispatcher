@@ -75,6 +75,15 @@ export interface CatalogModule {
   mainlineLengthInches?: number | null;
   endplateCount: number | null;
   hasMss: boolean | null;
+  schematics?: ModuleSchematicFile[] | null;
+}
+
+/** Owner-uploaded schematic file metadata (the file is fetched via signed URL). */
+export interface ModuleSchematicFile {
+  storage_path: string;
+  file_name: string;
+  file_format: string;
+  caption?: string | null;
 }
 
 export interface FullState {

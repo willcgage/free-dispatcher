@@ -244,6 +244,10 @@ export const repoModules = pgTable("repo_modules", {
   endplates: jsonb("endplates"),
   tracks: jsonb("tracks"),
   industries: jsonb("industries"),
+  // Owner-uploaded schematic files (module outline / track plan). Metadata only
+  // (storage_path, file_name, file_format); the private file is fetched via a
+  // signed URL on demand (#122).
+  schematics: jsonb("schematics"),
   upstreamUpdatedAt: timestamp("upstream_updated_at", { withTimezone: true }),
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
 });
