@@ -91,6 +91,9 @@ export default function AdminLayouts() {
   const [catalog, setCatalog] = useState<CatalogModule[]>([]);
   const [modQuery, setModQuery] = useState<Record<string, string>>({});
   const [modChecked, setModChecked] = useState<Record<string, string[]>>({});
+  const [drag, setDrag] = useState<{ layoutId: string; from: number } | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -187,6 +190,28 @@ export default function AdminLayouts() {
       await Promise.all([reloadTree(layoutId), load()]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "remove failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Reorder the module sequence after a drag from index → to index. */
+  async function moveModule(
+    layoutId: string,
+    ids: string[],
+    from: number,
+    to: number,
+  ) {
+    if (from === to || from < 0 || to < 0) return;
+    const orderedIds = [...ids];
+    const [moved] = orderedIds.splice(from, 1);
+    orderedIds.splice(to, 0, moved);
+    setBusy(true);
+    try {
+      await apiSend("POST", "/api/modules/reorder", { layoutId, orderedIds });
+      await Promise.all([reloadTree(layoutId), load()]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "reorder failed");
     } finally {
       setBusy(false);
     }
@@ -336,8 +361,34 @@ export default function AdminLayouts() {
                                 {tree.modules.map((m, i) => (
                                   <li
                                     key={m.id}
-                                    className="flex items-center gap-2 rounded border border-slate-700 bg-slate-800/60 px-2 py-1"
+                                    draggable={!busy}
+                                    onDragStart={() =>
+                                      setDrag({ layoutId: l.id, from: i })
+                                    }
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={() => {
+                                      if (drag && drag.layoutId === l.id)
+                                        moveModule(
+                                          l.id,
+                                          tree.modules.map((x) => x.id),
+                                          drag.from,
+                                          i,
+                                        );
+                                      setDrag(null);
+                                    }}
+                                    onDragEnd={() => setDrag(null)}
+                                    className={`flex items-center gap-2 rounded border border-slate-700 bg-slate-800/60 px-2 py-1 ${
+                                      drag?.layoutId === l.id && drag.from === i
+                                        ? "opacity-50"
+                                        : ""
+                                    }`}
                                   >
+                                    <span
+                                      className="shrink-0 cursor-grab select-none text-slate-600"
+                                      title="Drag to reorder"
+                                    >
+                                      ⠿
+                                    </span>
                                     <span className="w-5 shrink-0 text-right text-xs text-slate-500">
                                       {i + 1}
                                     </span>
