@@ -58,6 +58,13 @@ export interface SchematicBlock {
   from: number;
   to: number;
 }
+/** An interlocking: a named group of signals and the turnout(s) it governs (#122). */
+export interface SchematicControlPoint {
+  id: string;
+  name?: string | null;
+  turnouts?: string[];
+  signals?: SchematicSignal[];
+}
 export interface ModuleSchematicDoc {
   version: number;
   module?: string;
@@ -65,8 +72,9 @@ export interface ModuleSchematicDoc {
   endplates: SchematicEndplate[];
   tracks: SchematicTrack[];
   turnouts?: SchematicTurnout[];
+  controlPoints?: SchematicControlPoint[];
+  /** @deprecated pre-grouping flat signals; read for back-compat. */
   signals?: SchematicSignal[];
-  blocks?: SchematicBlock[];
 }
 
 /** Parse a jsonb value into a schematic doc, or null if it isn't one. */
@@ -174,13 +182,20 @@ export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
     divergeLane: trackLane.get(t.divergeTrack) ?? 1,
   }));
 
-  const signals: DrawSignal[] = (doc.signals ?? []).map((s) => ({
+  const drawSignal = (s: SchematicSignal, name: string | null): DrawSignal => ({
     id: s.id,
-    name: s.name ?? null,
+    name,
     posFrac: clampFrac(s.pos),
     lane: s.track ? (trackLane.get(s.track) ?? 0) : 0,
     facing: s.facing ?? "AtoB",
-  }));
+  });
+  // Signals come from control-point groups; fall back to pre-grouping flat
+  // signals for modules authored before the model changed.
+  const signals: DrawSignal[] = Array.isArray(doc.controlPoints)
+    ? doc.controlPoints.flatMap((c) =>
+        (c.signals ?? []).map((s) => drawSignal(s, c.name ?? null)),
+      )
+    : (doc.signals ?? []).map((s) => drawSignal(s, s.name ?? null));
 
   return { extraTracks, turnouts, signals };
 }

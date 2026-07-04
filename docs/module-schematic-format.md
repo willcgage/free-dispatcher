@@ -59,7 +59,8 @@ values are `single` | `double`.
 | **endplate** | connection point to the neighbor | `id` (`A`/`B`/…), `label`, `tracks[]` = `{ trackId, lane, config }` |
 | **track** | a running track | `id`, `role` (`main`\|`siding`\|`spur`\|`yard`\|`crossover`), `lane`, `from`, `to` (endplate or node id), `fromPos?`/`toPos?` (explicit inches, overriding node lookup), `capacityFeet?`, `industryRef?` |
 | **turnout** | a switch diverging off a track | `id`, `pos`, `onTrack`, `divergeTrack`, `kind` (`left`\|`right`\|`wye`), `name`, `address?` |
-| **signal** | a mast/dwarf governing a track | `id`, `pos`, `track`, `facing` (`AtoB`\|`BtoA`), `kind` (`mast`\|`dwarf`), `name`, `aspects[]`, `address?` |
+| **control point** | an interlocking: a named group of signals + the turnout(s) it governs | `id`, `name`, `turnouts[]` (turnout ids), `signals[]` = `{ id, pos, track, facing, kind }` |
+| **signal** (within a control point) | a mast/dwarf governing a track | `id`, `pos`, `track`, `facing` (`AtoB`\|`BtoA`), `kind` (`mast`\|`dwarf`), `aspects?`, `address?` |
 | **block** | native detection segment | `id`, `name`, `tracks[]`, `from`, `to` (pos range) |
 | **mss** | signal-system interface | `type`, `interfaces[]` (endplate ids) |
 
