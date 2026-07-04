@@ -71,6 +71,9 @@ export interface LayoutModule {
   positionIndex: number;
   stagingEnd: StagingEnd | null;
   moduleName: string | null;
+  lengthTotalInches: number | null;
+  mainlineLengthInches: number | null;
+  hasMss: boolean | null;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -234,6 +237,9 @@ class TrackModel {
         positionIndex: moduleLayouts.positionIndex,
         stagingEnd: moduleLayouts.stagingEnd,
         moduleName: repoModules.moduleName,
+        lengthTotalInches: repoModules.lengthTotalInches,
+        mainlineLengthInches: repoModules.mainlineLengthInches,
+        hasMss: repoModules.hasMss,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))
