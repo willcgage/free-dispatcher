@@ -52,6 +52,10 @@ export const layouts = pgTable("layouts", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
+  // The modular standard this layout is built to (Module Repository is
+  // multi-standard). Its module catalog is filtered to this value (#123).
+  // Stored as the standard's `value` slug (e.g. "freemon", "ttrak").
+  standard: text("standard").notNull().default("freemon"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -222,6 +226,9 @@ export const moduleLayouts = pgTable(
 export const repoModules = pgTable("repo_modules", {
   recordNumber: text("record_number").primaryKey(), // e.g. "FMN-0001"
   moduleName: text("module_name").notNull(),
+  // Standard slug derived upstream from the record prefix (#123): FMN→freemon,
+  // TTK→ttrak, … Null for legacy rows synced before the column existed.
+  standard: text("standard"),
   owner: text("owner"),
   description: text("description"),
   category: text("category"),

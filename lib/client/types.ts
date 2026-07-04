@@ -67,6 +67,7 @@ export interface ModuleLayoutRow {
 export interface CatalogModule {
   recordNumber: string;
   moduleName: string;
+  standard: string | null;
   owner: string | null;
   category: string | null;
   geometryType: string | null;

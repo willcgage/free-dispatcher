@@ -56,6 +56,8 @@ export interface DistrictInput {
 export interface LayoutInput {
   name: string;
   description?: string | null;
+  /** Modular standard slug (e.g. "freemon", "ttrak"); defaults to "freemon". */
+  standard?: string | null;
   districts?: DistrictInput[];
 }
 
@@ -160,7 +162,11 @@ class TrackModel {
     const layoutId = await db.transaction(async (tx) => {
       const [layout] = await tx
         .insert(layouts)
-        .values({ name: input.name, description: input.description ?? null })
+        .values({
+          name: input.name,
+          description: input.description ?? null,
+          ...(input.standard ? { standard: input.standard } : {}),
+        })
         .returning();
 
       for (const [di, d] of (input.districts ?? []).entries()) {

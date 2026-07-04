@@ -78,6 +78,13 @@
       "when": 1783173966098,
       "tag": "0010_striped_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783176728535,
+      "tag": "0011_module_standard",
+      "breakpoints": true
     }
   ]
 }
