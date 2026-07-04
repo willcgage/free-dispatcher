@@ -7,11 +7,52 @@
  */
 "use client";
 
+import { useState } from "react";
 import { buildSchematic, type SchematicInput } from "@/lib/track/schematic";
 
-export function LayoutSchematic({ modules }: { modules: SchematicInput[] }) {
+/** Drag payload MIME for dropping a catalog module onto the schematic. */
+export const MODULE_DRAG_MIME = "application/x-fd-module";
+
+export function LayoutSchematic({
+  modules,
+  onDropModule,
+}: {
+  modules: SchematicInput[];
+  /** Called with a catalog record # when one is dropped onto the schematic. */
+  onDropModule?: (recordNumber: string) => void;
+}) {
+  const [over, setOver] = useState(false);
+
+  const dropProps = onDropModule
+    ? {
+        onDragOver: (e: React.DragEvent) => {
+          if (e.dataTransfer.types.includes(MODULE_DRAG_MIME)) {
+            e.preventDefault();
+            setOver(true);
+          }
+        },
+        onDragLeave: () => setOver(false),
+        onDrop: (e: React.DragEvent) => {
+          setOver(false);
+          const rec = e.dataTransfer.getData(MODULE_DRAG_MIME);
+          if (rec) onDropModule(rec);
+        },
+      }
+    : {};
+
+  const ring = over ? "ring-2 ring-sky-500" : "";
+
   if (modules.length === 0) {
-    return <p className="text-xs text-slate-600">No modules to draw yet.</p>;
+    return (
+      <div
+        {...dropProps}
+        className={`flex h-16 items-center justify-center rounded-md border border-dashed border-slate-700 text-xs text-slate-600 ${ring}`}
+      >
+        {onDropModule
+          ? "No modules yet — drag one from the list, or use Add."
+          : "No modules to draw yet."}
+      </div>
+    );
   }
 
   const schem = buildSchematic(modules);
@@ -34,11 +75,12 @@ export function LayoutSchematic({ modules }: { modules: SchematicInput[] }) {
         <span>{feet} ft total</span>
       </div>
       <svg
+        {...dropProps}
         viewBox={viewBox}
         width="100%"
         height="150"
         preserveAspectRatio="xMidYMid meet"
-        className="rounded-md border border-slate-700 bg-slate-900"
+        className={`rounded-md border border-slate-700 bg-slate-900 ${ring}`}
       >
         {schem.segments.map((seg) => {
           const noLen = !(

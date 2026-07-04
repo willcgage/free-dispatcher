@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel } from "@/components/admin/ui";
 import { moduleMatches } from "@/lib/client/moduleSearch";
-import { LayoutSchematic } from "@/components/layout/LayoutSchematic";
+import {
+  LayoutSchematic,
+  MODULE_DRAG_MIME,
+} from "@/components/layout/LayoutSchematic";
 import type { CatalogModule } from "@/lib/client/types";
 import type { StagingEnd } from "@/lib/db/schema";
 
@@ -189,6 +192,19 @@ export default function AdminLayouts() {
       await reloadTree(layoutId);
     } catch (e) {
       alert(e instanceof Error ? e.message : "update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function dropAddModule(layoutId: string, rec: string) {
+    if (trees[layoutId]?.modules.some((m) => m.moduleId === rec)) return;
+    setBusy(true);
+    try {
+      await apiSend("POST", "/api/modules", { layoutId, moduleIds: [rec] });
+      await Promise.all([reloadTree(layoutId), load()]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "add failed");
     } finally {
       setBusy(false);
     }
@@ -558,10 +574,24 @@ export default function AdminLayouts() {
                                       return (
                                         <li key={m.recordNumber}>
                                           <label
+                                            draggable={!isAssigned && !busy}
+                                            onDragStart={(e) => {
+                                              if (isAssigned) return;
+                                              e.dataTransfer.setData(
+                                                MODULE_DRAG_MIME,
+                                                m.recordNumber,
+                                              );
+                                              e.dataTransfer.effectAllowed = "copy";
+                                            }}
+                                            title={
+                                              isAssigned
+                                                ? undefined
+                                                : "Check to batch-add, or drag onto the schematic"
+                                            }
                                             className={`flex items-center gap-2 rounded px-1.5 py-1 text-sm ${
                                               isAssigned
                                                 ? "opacity-50"
-                                                : "cursor-pointer hover:bg-slate-800/60"
+                                                : "cursor-grab hover:bg-slate-800/60"
                                             }`}
                                           >
                                             <input
@@ -608,7 +638,10 @@ export default function AdminLayouts() {
                             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
                               Schematic
                             </div>
-                            <LayoutSchematic modules={tree.modules} />
+                            <LayoutSchematic
+                              modules={tree.modules}
+                              onDropModule={(rec) => dropAddModule(l.id, rec)}
+                            />
                           </div>
 
                           {/* Track */}
