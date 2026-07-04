@@ -74,6 +74,8 @@ export interface LayoutModule {
   lengthTotalInches: number | null;
   mainlineLengthInches: number | null;
   hasMss: boolean | null;
+  geometryType: string | null;
+  geometryDegrees: number | null;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -240,6 +242,8 @@ class TrackModel {
         lengthTotalInches: repoModules.lengthTotalInches,
         mainlineLengthInches: repoModules.mainlineLengthInches,
         hasMss: repoModules.hasMss,
+        geometryType: repoModules.geometryType,
+        geometryDegrees: repoModules.geometryDegrees,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))

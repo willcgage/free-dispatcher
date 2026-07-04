@@ -45,6 +45,8 @@ interface LayoutModuleNode {
   lengthTotalInches: number | null;
   mainlineLengthInches: number | null;
   hasMss: boolean | null;
+  geometryType: string | null;
+  geometryDegrees: number | null;
 }
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
