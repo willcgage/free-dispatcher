@@ -76,6 +76,7 @@ export interface LayoutModule {
   hasMss: boolean | null;
   geometryType: string | null;
   geometryDegrees: number | null;
+  flipped: boolean;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -238,6 +239,7 @@ class TrackModel {
         moduleId: moduleLayouts.moduleId,
         positionIndex: moduleLayouts.positionIndex,
         stagingEnd: moduleLayouts.stagingEnd,
+        flipped: moduleLayouts.flipped,
         moduleName: repoModules.moduleName,
         lengthTotalInches: repoModules.lengthTotalInches,
         mainlineLengthInches: repoModules.mainlineLengthInches,

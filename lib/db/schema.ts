@@ -209,6 +209,8 @@ export const moduleLayouts = pgTable(
     moduleId: text("module_id").notNull(),
     positionIndex: integer("position_index").notNull().default(0),
     stagingEnd: text("staging_end").$type<StagingEnd>(),
+    // Mirror this placement so curves bend the other way (#115 orientation).
+    flipped: boolean("flipped").notNull().default(false),
   },
   (t) => [index("module_layouts_layout_idx").on(t.layoutId)],
 );

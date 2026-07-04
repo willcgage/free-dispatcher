@@ -41,6 +41,20 @@ describe("buildSchematic", () => {
     expect(s.bbox.maxY - s.bbox.minY).toBeGreaterThan(5);
   });
 
+  it("flips the bend direction when a module is flipped", () => {
+    const corner = {
+      id: "c",
+      lengthTotalInches: 42,
+      geometryType: "corner_90",
+      geometryDegrees: null,
+    };
+    const base = buildSchematic([{ ...corner }]);
+    const flipped = buildSchematic([{ ...corner, flipped: true }]);
+    // Unflipped bends one way, flipped the other.
+    expect(base.bbox.maxY).toBeGreaterThan(0);
+    expect(flipped.bbox.minY).toBeLessThan(0);
+  });
+
   it("falls back to a default length when a module has none", () => {
     const s = buildSchematic([
       { id: "x", lengthTotalInches: null, geometryType: "other", geometryDegrees: null },

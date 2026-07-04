@@ -1,0 +1,1 @@
+ALTER TABLE "module_layouts" ADD COLUMN "flipped" boolean DEFAULT false NOT NULL;

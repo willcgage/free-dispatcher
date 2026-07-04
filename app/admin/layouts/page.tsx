@@ -47,6 +47,7 @@ interface LayoutModuleNode {
   hasMss: boolean | null;
   geometryType: string | null;
   geometryDegrees: number | null;
+  flipped: boolean;
 }
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
@@ -188,6 +189,18 @@ export default function AdminLayouts() {
       await reloadTree(layoutId);
     } catch (e) {
       alert(e instanceof Error ? e.message : "update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function flipModule(layoutId: string, id: string, flipped: boolean) {
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/modules/${id}`, { flipped: !flipped });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "flip failed");
     } finally {
       setBusy(false);
     }
@@ -459,6 +472,27 @@ export default function AdminLayouts() {
                                       <option value="A">Stg A</option>
                                       <option value="B">Stg B</option>
                                     </select>
+                                    {(m.geometryType === "curve" ||
+                                      m.geometryType === "corner_90") && (
+                                      <button
+                                        disabled={busy}
+                                        onClick={() =>
+                                          flipModule(l.id, m.id, m.flipped)
+                                        }
+                                        title={
+                                          m.flipped
+                                            ? "Flipped — click to un-flip"
+                                            : "Flip curve direction"
+                                        }
+                                        className={`shrink-0 rounded border px-1 py-0.5 text-xs ${
+                                          m.flipped
+                                            ? "border-amber-600/60 bg-amber-600/20 text-amber-300"
+                                            : "border-slate-700 text-slate-400 hover:bg-slate-800"
+                                        }`}
+                                      >
+                                        ⇄
+                                      </button>
+                                    )}
                                     <button
                                       disabled={busy}
                                       onClick={() => removeModule(l.id, m.id)}

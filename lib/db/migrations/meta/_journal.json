@@ -71,6 +71,13 @@
       "when": 1783173331685,
       "tag": "0009_sour_matthew_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783173966098,
+      "tag": "0010_striped_leader",
+      "breakpoints": true
     }
   ]
 }
