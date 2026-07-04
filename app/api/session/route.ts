@@ -81,10 +81,15 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "no active session" }, { status: 409 });
   }
 
+  // Pure attach/detach: the layout stays in the layouts list and the session's
+  // occupancy/allocations/turnouts are preserved, so re-attaching resumes them.
+  const layoutId = body.layoutId ?? null;
   const [updated] = await db
     .update(sessions)
-    .set({ layoutId: body.layoutId ?? null })
+    .set({ layoutId })
     .where(eq(sessions.id, session.id))
     .returning();
+
+  await sessionManager.broadcast({ type: "layout_changed", layoutId }, session.id);
   return NextResponse.json({ session: updated });
 }
