@@ -86,6 +86,33 @@ describe("moduleFeatures", () => {
     expect(feat.extraTracks[0].toFrac).toBeCloseTo(0.92);
   });
 
+  it("flattens control-point groups into signals (both directions per CP)", () => {
+    const withCps: ModuleSchematicDoc = {
+      version: 1,
+      lengthInches: 96,
+      endplates: [
+        { id: "A", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+        { id: "B", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+      ],
+      tracks: [{ id: "main", role: "main", lane: 0, from: "A", to: "B" }],
+      controlPoints: [
+        {
+          id: "cp1",
+          name: "West Siding",
+          turnouts: ["sw1"],
+          signals: [
+            { id: "cp1-AtoB", pos: 18, track: "main", facing: "AtoB" },
+            { id: "cp1-BtoA", pos: 18, track: "main", facing: "BtoA" },
+          ],
+        },
+      ],
+    };
+    const feat = moduleFeatures(withCps);
+    expect(feat.signals).toHaveLength(2);
+    expect(feat.signals.every((s) => s.name === "West Siding")).toBe(true);
+    expect(feat.signals.map((s) => s.facing).sort()).toEqual(["AtoB", "BtoA"]);
+  });
+
   it("skips a track whose endpoints can't be resolved", () => {
     const bad: ModuleSchematicDoc = {
       version: 1,
