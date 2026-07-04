@@ -116,6 +116,11 @@ export default function AdminLayouts() {
   const [drag, setDrag] = useState<{ layoutId: string; from: number } | null>(
     null,
   );
+  // Where a dragged catalog module would land in the sequence (drag-to-insert).
+  const [insertAt, setInsertAt] = useState<{
+    layoutId: string;
+    index: number;
+  } | null>(null);
   const [dragSection, setDragSection] = useState<{
     layoutId: string;
     sectionId: string;
@@ -217,6 +222,37 @@ export default function AdminLayouts() {
       await Promise.all([reloadTree(layoutId), load()]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "add failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Insert a catalog module into a layout's sequence at `index` (drag-to-insert).
+   * The add endpoint only appends, so add then reorder the new row into place.
+   */
+  async function insertModule(layoutId: string, rec: string, index: number) {
+    const tree = trees[layoutId];
+    if (!tree || tree.modules.some((m) => m.moduleId === rec)) return;
+    setBusy(true);
+    try {
+      const { modules: created } = await apiSend<{ modules: { id: string }[] }>(
+        "POST",
+        "/api/modules",
+        { layoutId, moduleIds: [rec] },
+      );
+      const newId = created?.[0]?.id;
+      if (newId) {
+        const ids = tree.modules.map((m) => m.id);
+        ids.splice(Math.min(Math.max(index, 0), ids.length), 0, newId);
+        await apiSend("POST", "/api/modules/reorder", {
+          layoutId,
+          orderedIds: ids,
+        });
+      }
+      await Promise.all([reloadTree(layoutId), load()]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "insert failed");
     } finally {
       setBusy(false);
     }
@@ -455,9 +491,24 @@ export default function AdminLayouts() {
                                     onDragStart={() =>
                                       setDrag({ layoutId: l.id, from: i })
                                     }
-                                    onDragOver={(e) => e.preventDefault()}
-                                    onDrop={() => {
-                                      if (drag && drag.layoutId === l.id)
+                                    onDragOver={(e) => {
+                                      if (
+                                        e.dataTransfer.types.includes(
+                                          MODULE_DRAG_MIME,
+                                        )
+                                      ) {
+                                        // Insert the catalog module before this one.
+                                        e.preventDefault();
+                                        setInsertAt({ layoutId: l.id, index: i });
+                                      } else if (drag?.layoutId === l.id) {
+                                        e.preventDefault();
+                                      }
+                                    }}
+                                    onDrop={(e) => {
+                                      const rec =
+                                        e.dataTransfer.getData(MODULE_DRAG_MIME);
+                                      if (rec) insertModule(l.id, rec, i);
+                                      else if (drag && drag.layoutId === l.id)
                                         moveModule(
                                           l.id,
                                           tree.modules.map((x) => x.id),
@@ -465,9 +516,18 @@ export default function AdminLayouts() {
                                           i,
                                         );
                                       setDrag(null);
+                                      setInsertAt(null);
                                     }}
-                                    onDragEnd={() => setDrag(null)}
-                                    className={`flex items-center gap-2 rounded border border-slate-700 bg-slate-800/60 px-2 py-1 ${
+                                    onDragEnd={() => {
+                                      setDrag(null);
+                                      setInsertAt(null);
+                                    }}
+                                    className={`flex items-center gap-2 rounded border bg-slate-800/60 px-2 py-1 ${
+                                      insertAt?.layoutId === l.id &&
+                                      insertAt.index === i
+                                        ? "border-t-2 border-t-sky-400 border-slate-700"
+                                        : "border-slate-700"
+                                    } ${
                                       drag?.layoutId === l.id && drag.from === i
                                         ? "opacity-50"
                                         : ""
@@ -535,6 +595,41 @@ export default function AdminLayouts() {
                                     </button>
                                   </li>
                                 ))}
+                                {/* Append zone — drop past the last module. */}
+                                <li
+                                  onDragOver={(e) => {
+                                    if (
+                                      e.dataTransfer.types.includes(
+                                        MODULE_DRAG_MIME,
+                                      )
+                                    ) {
+                                      e.preventDefault();
+                                      setInsertAt({
+                                        layoutId: l.id,
+                                        index: tree.modules.length,
+                                      });
+                                    }
+                                  }}
+                                  onDrop={(e) => {
+                                    const rec =
+                                      e.dataTransfer.getData(MODULE_DRAG_MIME);
+                                    if (rec)
+                                      insertModule(
+                                        l.id,
+                                        rec,
+                                        tree.modules.length,
+                                      );
+                                    setInsertAt(null);
+                                  }}
+                                  className={`rounded border border-dashed px-2 py-1 text-center text-[10px] ${
+                                    insertAt?.layoutId === l.id &&
+                                    insertAt.index === tree.modules.length
+                                      ? "border-sky-400 text-sky-300"
+                                      : "border-slate-800 text-slate-600"
+                                  }`}
+                                >
+                                  drop here to add at end
+                                </li>
                               </ul>
                             ) : (
                               <p className="mb-2 text-xs text-slate-600">
