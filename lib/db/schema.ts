@@ -196,20 +196,21 @@ export const opsLog = pgTable(
 );
 
 // ---- module_layouts ------------------------------------------------------
-// module_id references the locally-synced Module Repository catalog (carried
-// forward from the M6 work). Kept as text to match the repo's record number.
+// The ordered module sequence that makes up a LAYOUT (#84): a layout owns its
+// modules, and a session runs on the layout. module_id references the
+// locally-synced Module Repository catalog; kept as text to match its record #.
 export const moduleLayouts = pgTable(
   "module_layouts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    sessionId: uuid("session_id")
+    layoutId: uuid("layout_id")
       .notNull()
-      .references(() => sessions.id, { onDelete: "cascade" }),
+      .references(() => layouts.id, { onDelete: "cascade" }),
     moduleId: text("module_id").notNull(),
     positionIndex: integer("position_index").notNull().default(0),
     stagingEnd: text("staging_end").$type<StagingEnd>(),
   },
-  (t) => [index("module_layouts_session_idx").on(t.sessionId)],
+  (t) => [index("module_layouts_layout_idx").on(t.layoutId)],
 );
 
 // ---- repo_modules --------------------------------------------------------
@@ -219,6 +220,7 @@ export const moduleLayouts = pgTable(
 export const repoModules = pgTable("repo_modules", {
   recordNumber: text("record_number").primaryKey(), // e.g. "FMN-0001"
   moduleName: text("module_name").notNull(),
+  owner: text("owner"),
   description: text("description"),
   category: text("category"),
   geometryType: text("geometry_type"),

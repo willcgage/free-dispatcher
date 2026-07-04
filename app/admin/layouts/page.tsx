@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel } from "@/components/admin/ui";
+import { moduleMatches } from "@/lib/client/moduleSearch";
+import type { CatalogModule } from "@/lib/client/types";
+import type { StagingEnd } from "@/lib/db/schema";
 
 // ---- API shapes (client-side mirror of the track model) ------------------
 interface LayoutRow {
@@ -32,7 +35,15 @@ interface DistrictNode {
   sections: SectionNode[];
   turnouts: TurnoutNode[];
 }
+interface LayoutModuleNode {
+  id: string;
+  moduleId: string;
+  positionIndex: number;
+  stagingEnd: StagingEnd | null;
+  moduleName: string | null;
+}
 interface LayoutTree extends LayoutRow {
+  modules: LayoutModuleNode[];
   districts: DistrictNode[];
 }
 
@@ -77,23 +88,41 @@ export default function AdminLayouts() {
   const [sessionLayoutId, setSessionLayoutId] = useState<string | null>(null);
   const [hasSession, setHasSession] = useState(false);
   const [draft, setDraft] = useState<LayoutDraft>(EMPTY_DRAFT);
+  const [catalog, setCatalog] = useState<CatalogModule[]>([]);
+  const [modQuery, setModQuery] = useState<Record<string, string>>({});
+  const [modChecked, setModChecked] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [{ layouts }, session] = await Promise.all([
+    const [{ layouts }, session, cat] = await Promise.all([
       apiGet<{ layouts: LayoutRow[] }>("/api/layouts"),
       apiGet<{ session: { layoutId: string | null } | null }>("/api/session"),
+      apiGet<{ modules: CatalogModule[] }>("/api/modules/catalog").catch(() => ({
+        modules: [] as CatalogModule[],
+      })),
     ]);
     setLayouts(layouts);
     setSessionLayoutId(session.session?.layoutId ?? null);
     setHasSession(session.session != null);
+    setCatalog(cat.modules);
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  const reloadTree = useCallback(async (id: string) => {
+    try {
+      const { layout } = await apiGet<{ layout: LayoutTree }>(
+        `/api/layouts/${id}`,
+      );
+      setTrees((prev) => ({ ...prev, [id]: layout }));
+    } catch {
+      /* best-effort */
+    }
+  }, []);
 
   async function toggleTree(id: string) {
     setExpanded((prev) => {
@@ -102,15 +131,64 @@ export default function AdminLayouts() {
       else next.add(id);
       return next;
     });
-    if (!trees[id]) {
-      try {
-        const { layout } = await apiGet<{ layout: LayoutTree }>(
-          `/api/layouts/${id}`,
-        );
-        setTrees((prev) => ({ ...prev, [id]: layout }));
-      } catch {
-        /* best-effort */
-      }
+    if (!trees[id]) await reloadTree(id);
+  }
+
+  const qOf = (id: string) => modQuery[id] ?? "";
+  const checkedOf = (id: string) => modChecked[id] ?? [];
+
+  function toggleCheck(id: string, rec: string) {
+    setModChecked((p) => {
+      const cur = p[id] ?? [];
+      return {
+        ...p,
+        [id]: cur.includes(rec) ? cur.filter((r) => r !== rec) : [...cur, rec],
+      };
+    });
+  }
+
+  async function addModules(layoutId: string) {
+    const ids = checkedOf(layoutId);
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      await apiSend("POST", "/api/modules", { layoutId, moduleIds: ids });
+      setModChecked((p) => ({ ...p, [layoutId]: [] }));
+      await Promise.all([reloadTree(layoutId), load()]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "add failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setStaging(
+    layoutId: string,
+    id: string,
+    stagingEnd: "" | StagingEnd,
+  ) {
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/modules/${id}`, {
+        stagingEnd: stagingEnd || null,
+      });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "update failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeModule(layoutId: string, id: string) {
+    setBusy(true);
+    try {
+      await apiSend("DELETE", `/api/modules/${id}`);
+      await Promise.all([reloadTree(layoutId), load()]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "remove failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -243,45 +321,205 @@ export default function AdminLayouts() {
                     )}
                   </div>
                   {expanded.has(l.id) && (
-                    <div className="mt-2 pl-5 text-sm">
+                    <div className="mt-2 space-y-3 pl-5 text-sm">
                       {!tree ? (
                         <p className="text-slate-500">Loading…</p>
-                      ) : tree.districts.length === 0 ? (
-                        <p className="text-slate-500">No districts yet.</p>
                       ) : (
-                        <ul className="space-y-1.5">
-                          {tree.districts.map((d) => (
-                            <li key={d.id}>
-                              <div className="font-medium text-slate-300">
-                                {d.name}
-                              </div>
-                              <ul className="ml-3 space-y-0.5 text-slate-400">
-                                {d.sections.map((s) => (
-                                  <li key={s.id}>
-                                    <span className="text-slate-300">
-                                      {s.name}
+                        <>
+                          {/* Module sequence */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Modules ({tree.modules.length})
+                            </div>
+                            {tree.modules.length > 0 ? (
+                              <ul className="mb-2 space-y-1">
+                                {tree.modules.map((m, i) => (
+                                  <li
+                                    key={m.id}
+                                    className="flex items-center gap-2 rounded border border-slate-700 bg-slate-800/60 px-2 py-1"
+                                  >
+                                    <span className="w-5 shrink-0 text-right text-xs text-slate-500">
+                                      {i + 1}
                                     </span>
-                                    {s.track && (
-                                      <span className="ml-1 text-xs text-slate-500">
-                                        ({s.track})
-                                      </span>
-                                    )}
-                                    <span className="ml-2 text-xs text-slate-500">
-                                      {s.blocks.map((b) => b.name).join(" · ") ||
-                                        "no blocks"}
+                                    <span className="min-w-0 flex-1 truncate text-slate-200">
+                                      {m.moduleName ?? m.moduleId}
                                     </span>
+                                    <span className="shrink-0 font-mono text-xs text-slate-500">
+                                      {m.moduleId}
+                                    </span>
+                                    <select
+                                      value={m.stagingEnd ?? ""}
+                                      onChange={(e) =>
+                                        setStaging(
+                                          l.id,
+                                          m.id,
+                                          e.target.value as "" | StagingEnd,
+                                        )
+                                      }
+                                      title="Staging end"
+                                      className="shrink-0 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                    >
+                                      <option value="">—</option>
+                                      <option value="A">Stg A</option>
+                                      <option value="B">Stg B</option>
+                                    </select>
+                                    <button
+                                      disabled={busy}
+                                      onClick={() => removeModule(l.id, m.id)}
+                                      title="Remove"
+                                      className="shrink-0 text-xs text-red-400 hover:text-red-300"
+                                    >
+                                      ✕
+                                    </button>
                                   </li>
                                 ))}
-                                {d.turnouts.length > 0 && (
-                                  <li className="text-xs text-slate-500">
-                                    Turnouts:{" "}
-                                    {d.turnouts.map((t) => t.name).join(" · ")}
-                                  </li>
-                                )}
                               </ul>
-                            </li>
-                          ))}
-                        </ul>
+                            ) : (
+                              <p className="mb-2 text-xs text-slate-600">
+                                No modules assigned yet.
+                              </p>
+                            )}
+
+                            {/* Add from the catalog (multi-select) */}
+                            {catalog.length === 0 ? (
+                              <p className="text-xs text-slate-600">
+                                Catalog empty —{" "}
+                                <a
+                                  href="/admin/modules"
+                                  className="text-sky-400 hover:underline"
+                                >
+                                  sync it in Modules
+                                </a>
+                                .
+                              </p>
+                            ) : (
+                              <div className="rounded-md border border-slate-800 bg-slate-900/40 p-2">
+                                <div className="mb-2 flex items-center gap-2">
+                                  <input
+                                    className={smInput}
+                                    placeholder="Search name, #, category…"
+                                    value={qOf(l.id)}
+                                    onChange={(e) =>
+                                      setModQuery((p) => ({
+                                        ...p,
+                                        [l.id]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                  <button
+                                    disabled={busy || checkedOf(l.id).length === 0}
+                                    onClick={() => addModules(l.id)}
+                                    className="shrink-0 rounded-md bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-40"
+                                  >
+                                    Add {checkedOf(l.id).length || ""}
+                                  </button>
+                                </div>
+                                <ul className="max-h-56 space-y-0.5 overflow-y-auto">
+                                  {catalog
+                                    .filter((m) => moduleMatches(m, qOf(l.id)))
+                                    .slice(0, 200)
+                                    .map((m) => {
+                                      const isAssigned = tree.modules.some(
+                                        (x) => x.moduleId === m.recordNumber,
+                                      );
+                                      const isChecked = checkedOf(l.id).includes(
+                                        m.recordNumber,
+                                      );
+                                      return (
+                                        <li key={m.recordNumber}>
+                                          <label
+                                            className={`flex items-center gap-2 rounded px-1.5 py-1 text-sm ${
+                                              isAssigned
+                                                ? "opacity-50"
+                                                : "cursor-pointer hover:bg-slate-800/60"
+                                            }`}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              disabled={isAssigned || busy}
+                                              checked={isAssigned || isChecked}
+                                              onChange={() =>
+                                                toggleCheck(l.id, m.recordNumber)
+                                              }
+                                              className="h-4 w-4 accent-sky-500"
+                                            />
+                                            <span className="min-w-0 flex-1 truncate text-slate-200">
+                                              {m.moduleName}
+                                            </span>
+                                            {m.owner && (
+                                              <span className="hidden shrink-0 truncate text-xs text-slate-500 sm:inline">
+                                                {m.owner}
+                                              </span>
+                                            )}
+                                            <span className="shrink-0 font-mono text-xs text-slate-500">
+                                              {m.recordNumber}
+                                            </span>
+                                            {m.category && (
+                                              <span className="shrink-0 text-xs text-slate-600">
+                                                {m.category}
+                                              </span>
+                                            )}
+                                            {isAssigned && (
+                                              <span className="shrink-0 text-xs text-emerald-400">
+                                                added
+                                              </span>
+                                            )}
+                                          </label>
+                                        </li>
+                                      );
+                                    })}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Track */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Track
+                            </div>
+                            {tree.districts.length === 0 ? (
+                              <p className="text-slate-500">No districts yet.</p>
+                            ) : (
+                              <ul className="space-y-1.5">
+                                {tree.districts.map((d) => (
+                                  <li key={d.id}>
+                                    <div className="font-medium text-slate-300">
+                                      {d.name}
+                                    </div>
+                                    <ul className="ml-3 space-y-0.5 text-slate-400">
+                                      {d.sections.map((s) => (
+                                        <li key={s.id}>
+                                          <span className="text-slate-300">
+                                            {s.name}
+                                          </span>
+                                          {s.track && (
+                                            <span className="ml-1 text-xs text-slate-500">
+                                              ({s.track})
+                                            </span>
+                                          )}
+                                          <span className="ml-2 text-xs text-slate-500">
+                                            {s.blocks
+                                              .map((b) => b.name)
+                                              .join(" · ") || "no blocks"}
+                                          </span>
+                                        </li>
+                                      ))}
+                                      {d.turnouts.length > 0 && (
+                                        <li className="text-xs text-slate-500">
+                                          Turnouts:{" "}
+                                          {d.turnouts
+                                            .map((t) => t.name)
+                                            .join(" · ")}
+                                        </li>
+                                      )}
+                                    </ul>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   )}

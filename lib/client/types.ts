@@ -56,11 +56,24 @@ export interface OperatorRow {
 
 export interface ModuleLayoutRow {
   id: string;
-  sessionId: string;
+  layoutId: string;
   moduleId: string;
   positionIndex: number;
   stagingEnd: "A" | "B" | null;
   moduleName?: string | null;
+}
+
+/** A row from the local Module Repository catalog (GET /api/modules/catalog). */
+export interface CatalogModule {
+  recordNumber: string;
+  moduleName: string;
+  owner: string | null;
+  category: string | null;
+  geometryType: string | null;
+  lengthTotalInches?: number | null;
+  mainlineLengthInches?: number | null;
+  endplateCount: number | null;
+  hasMss: boolean | null;
 }
 
 export interface FullState {

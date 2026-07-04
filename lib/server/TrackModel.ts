@@ -12,7 +12,7 @@
  * is caught at the DB level by a partial unique index (one active allocation per
  * section per session); an allocation route must also stay within one District.
  */
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   layouts,
@@ -23,8 +23,11 @@ import {
   sectionAllocations,
   turnouts,
   turnoutPositions,
+  moduleLayouts,
+  repoModules,
   type SectionDirection,
   type TurnoutPosition,
+  type StagingEnd,
 } from "@/lib/db/schema";
 import { sessionManager } from "./SessionManager";
 
@@ -62,7 +65,16 @@ type DistrictRow = typeof districts.$inferSelect;
 type LayoutRow = typeof layouts.$inferSelect;
 type TurnoutRow = typeof turnouts.$inferSelect;
 
+export interface LayoutModule {
+  id: string;
+  moduleId: string;
+  positionIndex: number;
+  stagingEnd: StagingEnd | null;
+  moduleName: string | null;
+}
+
 export interface LayoutTree extends LayoutRow {
+  modules: LayoutModule[];
   districts: (DistrictRow & {
     sections: (SectionRow & { blocks: BlockRow[] })[];
     turnouts: TurnoutRow[];
@@ -96,6 +108,7 @@ export function buildLayoutTree(
   sectionRows: SectionRow[],
   blockRows: BlockRow[],
   turnoutRows: TurnoutRow[] = [],
+  moduleRows: LayoutModule[] = [],
 ): LayoutTree {
   const byPos = <T extends { position: number }>(a: T, b: T) =>
     a.position - b.position;
@@ -119,6 +132,7 @@ export function buildLayoutTree(
   }
   return {
     ...layout,
+    modules: [...moduleRows].sort((a, b) => a.positionIndex - b.positionIndex),
     districts: [...districtRows].sort(byPos).map((d) => ({
       ...d,
       sections: (sectionsByDistrict.get(d.id) ?? []).sort(byPos).map((s) => ({
@@ -213,8 +227,27 @@ class TrackModel {
     const turnoutRows = districtIds.length
       ? await db.select().from(turnouts).where(inArray(turnouts.districtId, districtIds))
       : [];
+    const moduleRows = await db
+      .select({
+        id: moduleLayouts.id,
+        moduleId: moduleLayouts.moduleId,
+        positionIndex: moduleLayouts.positionIndex,
+        stagingEnd: moduleLayouts.stagingEnd,
+        moduleName: repoModules.moduleName,
+      })
+      .from(moduleLayouts)
+      .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))
+      .where(eq(moduleLayouts.layoutId, layoutId))
+      .orderBy(asc(moduleLayouts.positionIndex));
 
-    return buildLayoutTree(layout, districtRows, sectionRows, blockRows, turnoutRows);
+    return buildLayoutTree(
+      layout,
+      districtRows,
+      sectionRows,
+      blockRows,
+      turnoutRows,
+      moduleRows,
+    );
   }
 
   // -- Runtime (active-session-scoped) ----------------------------------
