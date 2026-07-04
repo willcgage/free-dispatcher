@@ -5,6 +5,7 @@ import type { CatalogModule } from "../types";
 const mod: CatalogModule = {
   recordNumber: "FMN-0042",
   moduleName: "Columbia River Gorge",
+  standard: "freemon",
   owner: "Alice Modeler",
   category: "scenic",
   geometryType: "straight",

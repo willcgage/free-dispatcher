@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     .select({
       recordNumber: repoModules.recordNumber,
       moduleName: repoModules.moduleName,
+      standard: repoModules.standard,
       owner: repoModules.owner,
       category: repoModules.category,
       geometryType: repoModules.geometryType,

@@ -33,6 +33,7 @@ describe("buildLayoutTree (#80)", () => {
     id: "L",
     name: "Test",
     description: null,
+    standard: "freemon",
     createdAt: new Date(),
   };
 

@@ -5,6 +5,11 @@ import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel } from "@/components/admin/ui";
 import { moduleMatches } from "@/lib/client/moduleSearch";
 import {
+  DEFAULT_STANDARD,
+  standardLabel,
+  standardOptions,
+} from "@/lib/client/standards";
+import {
   LayoutSchematic,
   MODULE_DRAG_MIME,
 } from "@/components/layout/LayoutSchematic";
@@ -16,6 +21,7 @@ interface LayoutRow {
   id: string;
   name: string;
   description: string | null;
+  standard: string;
   createdAt: string;
 }
 interface BlockNode {
@@ -78,10 +84,16 @@ interface DistrictDraft {
 interface LayoutDraft {
   name: string;
   description: string;
+  standard: string;
   districts: DistrictDraft[];
 }
 
-const EMPTY_DRAFT: LayoutDraft = { name: "", description: "", districts: [] };
+const EMPTY_DRAFT: LayoutDraft = {
+  name: "",
+  description: "",
+  standard: DEFAULT_STANDARD,
+  districts: [],
+};
 
 const input =
   "w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500";
@@ -315,6 +327,7 @@ export default function AdminLayouts() {
     return {
       name: d.name.trim(),
       description: d.description.trim() || undefined,
+      standard: d.standard || DEFAULT_STANDARD,
       districts: d.districts
         .filter((di) => di.name.trim())
         .map((di) => ({
@@ -386,6 +399,9 @@ export default function AdminLayouts() {
                       </span>
                       <span className="truncate font-medium text-slate-100">
                         {l.name}
+                      </span>
+                      <span className="shrink-0 rounded bg-slate-700/50 px-1.5 py-0.5 text-xs font-medium text-slate-300">
+                        {standardLabel(l.standard)}
                       </span>
                       {isCurrent && (
                         <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-xs font-medium text-emerald-300">
@@ -560,9 +576,23 @@ export default function AdminLayouts() {
                                     Add {checkedOf(l.id).length || ""}
                                   </button>
                                 </div>
+                                <p className="mb-1 text-[11px] text-slate-500">
+                                  Showing{" "}
+                                  <span className="text-slate-300">
+                                    {standardLabel(l.standard)}
+                                  </span>{" "}
+                                  modules.
+                                </p>
                                 <ul className="max-h-56 space-y-0.5 overflow-y-auto">
                                   {catalog
-                                    .filter((m) => moduleMatches(m, qOf(l.id)))
+                                    .filter(
+                                      (m) =>
+                                        // The layout's standard (null = legacy,
+                                        // pre-backfill; shown until re-synced #123).
+                                        (m.standard === l.standard ||
+                                          m.standard == null) &&
+                                        moduleMatches(m, qOf(l.id)),
+                                    )
                                     .slice(0, 200)
                                     .map((m) => {
                                       const isAssigned = tree.modules.some(
@@ -783,6 +813,22 @@ export default function AdminLayouts() {
               onChange={(e) => mutate((d) => (d.description = e.target.value))}
             />
           </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-400">
+            <span className="shrink-0">Standard</span>
+            <select
+              className={`${input} max-w-[12rem]`}
+              value={draft.standard}
+              onChange={(e) => mutate((d) => (d.standard = e.target.value))}
+              title="The modular standard this layout is built to; its module catalog is filtered to this."
+            >
+              {standardOptions(catalog).map((s) => (
+                <option key={s} value={s}>
+                  {standardLabel(s)}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {/* Districts */}
           <div className="space-y-3">
