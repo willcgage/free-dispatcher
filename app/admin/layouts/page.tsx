@@ -766,6 +766,7 @@ export default function AdminLayouts() {
                             </div>
                             <LayoutSchematic
                               modules={tree.modules}
+                              districts={tree.districts}
                               onDropModule={(rec) => dropAddModule(l.id, rec)}
                             />
                           </div>

@@ -10,15 +10,24 @@
 import { useState } from "react";
 import { buildSchematic, type SchematicInput } from "@/lib/track/schematic";
 import { endplateConnections } from "@/lib/track/endplates";
+import {
+  districtColor,
+  districtLegend,
+  moduleDistrictMap,
+  type DistrictLite,
+} from "@/lib/track/districts";
 
 /** Drag payload MIME for dropping a catalog module onto the schematic. */
 export const MODULE_DRAG_MIME = "application/x-fd-module";
 
 export function LayoutSchematic({
   modules,
+  districts,
   onDropModule,
 }: {
   modules: SchematicInput[];
+  /** Layout districts, used to paint modules by dispatcher territory (#115). */
+  districts?: DistrictLite[];
   /** Called with a catalog record # when one is dropped onto the schematic. */
   onDropModule?: (recordNumber: string) => void;
 }) {
@@ -63,6 +72,9 @@ export function LayoutSchematic({
   const connections = endplateConnections(modules);
   const mismatches = connections.filter((c) => c.status === "mismatch");
   const label = (i: number) => modules[i]?.moduleName ?? modules[i]?.moduleId;
+  // District painting (#115, phase 4): colour each module by its territory.
+  const dmap = districts ? moduleDistrictMap(districts) : new Map();
+  const legend = districts ? districtLegend(districts) : [];
   const w = Math.max(bbox.maxX - bbox.minX, 1);
   const h = Math.max(bbox.maxY - bbox.minY, 1);
   const pad = Math.max(w, h) * 0.06 + 6;
@@ -92,14 +104,24 @@ export function LayoutSchematic({
           const noLen = !(
             seg.input.lengthTotalInches && seg.input.lengthTotalInches > 0
           );
+          const dist = seg.input.moduleId
+            ? dmap.get(seg.input.moduleId)
+            : undefined;
+          // District colour wins; otherwise staging (indigo) / no-length
+          // (amber) / plain (slate, so painted districts stand out).
+          const color = dist
+            ? districtColor(dist.index)
+            : seg.input.stagingEnd
+              ? "#818cf8"
+              : noLen
+                ? "#f59e0b"
+                : "#64748b";
           return (
             <polyline
               key={seg.input.id}
               points={seg.points.map((p) => `${p.x},${p.y}`).join(" ")}
               fill="none"
-              stroke={
-                seg.input.stagingEnd ? "#818cf8" : noLen ? "#f59e0b" : "#38bdf8"
-              }
+              stroke={color}
               strokeWidth={stroke}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -107,7 +129,9 @@ export function LayoutSchematic({
               <title>
                 {`${seg.input.moduleName ?? seg.input.moduleId} · ${
                   seg.input.moduleId
-                }${seg.input.geometryType ? ` · ${seg.input.geometryType}` : ""}`}
+                }${seg.input.geometryType ? ` · ${seg.input.geometryType}` : ""}${
+                  dist ? ` · ${dist.name}` : ""
+                }`}
               </title>
             </polyline>
           );
@@ -137,6 +161,19 @@ export function LayoutSchematic({
           );
         })}
       </svg>
+      {legend.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+          {legend.map((d) => (
+            <span key={d.id} className="flex items-center gap-1">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-sm"
+                style={{ backgroundColor: d.color }}
+              />
+              {d.name}
+            </span>
+          ))}
+        </div>
+      )}
       {mismatches.length > 0 && (
         <div className="mt-1 rounded-md border border-red-900/60 bg-red-950/30 px-2 py-1 text-[11px] text-red-300">
           <span className="font-semibold">
@@ -154,8 +191,9 @@ export function LayoutSchematic({
       )}
       <p className="mt-1 text-[10px] text-slate-600">
         To scale, following each module&rsquo;s geometry (straights, curves, 90°
-        corners). Staging tinted, unknown-length amber; red joins flag an endplate
-        track-config mismatch; curve orientation is approximate.
+        corners). Modules are coloured by district where assigned (else staging
+        indigo, unknown-length amber); red joins flag an endplate track-config
+        mismatch; curve orientation is approximate.
       </p>
     </div>
   );
