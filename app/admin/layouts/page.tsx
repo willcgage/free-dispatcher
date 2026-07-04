@@ -446,6 +446,11 @@ export default function AdminLayouts() {
                                             <span className="min-w-0 flex-1 truncate text-slate-200">
                                               {m.moduleName}
                                             </span>
+                                            {m.owner && (
+                                              <span className="hidden shrink-0 truncate text-xs text-slate-500 sm:inline">
+                                                {m.owner}
+                                              </span>
+                                            )}
                                             <span className="shrink-0 font-mono text-xs text-slate-500">
                                               {m.recordNumber}
                                             </span>

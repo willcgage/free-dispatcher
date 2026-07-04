@@ -43,6 +43,7 @@ export interface SyncError {
 interface ModuleFull {
   record_number: string;
   module_name: string;
+  owner?: string | null;
   description?: string | null;
   category?: string | null;
   geometry_type?: string | null;
@@ -124,6 +125,7 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
   for (const m of modules) {
     const values = {
       moduleName: m.module_name,
+      owner: m.owner ?? null,
       description: m.description ?? null,
       category: m.category ?? null,
       geometryType: m.geometry_type ?? null,

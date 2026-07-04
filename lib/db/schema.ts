@@ -220,6 +220,7 @@ export const moduleLayouts = pgTable(
 export const repoModules = pgTable("repo_modules", {
   recordNumber: text("record_number").primaryKey(), // e.g. "FMN-0001"
   moduleName: text("module_name").notNull(),
+  owner: text("owner"),
   description: text("description"),
   category: text("category"),
   geometryType: text("geometry_type"),

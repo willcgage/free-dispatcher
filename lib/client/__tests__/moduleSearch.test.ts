@@ -5,6 +5,7 @@ import type { CatalogModule } from "../types";
 const mod: CatalogModule = {
   recordNumber: "FMN-0042",
   moduleName: "Columbia River Gorge",
+  owner: "Alice Modeler",
   category: "scenic",
   geometryType: "straight",
   endplateCount: 2,
@@ -12,9 +13,10 @@ const mod: CatalogModule = {
 };
 
 describe("moduleMatches", () => {
-  it("matches on name, record #, category and geometry (case-insensitive)", () => {
+  it("matches on name, record #, owner, category and geometry (case-insensitive)", () => {
     expect(moduleMatches(mod, "columbia")).toBe(true);
     expect(moduleMatches(mod, "fmn-0042")).toBe(true);
+    expect(moduleMatches(mod, "alice")).toBe(true);
     expect(moduleMatches(mod, "SCENIC")).toBe(true);
     expect(moduleMatches(mod, "straight")).toBe(true);
   });

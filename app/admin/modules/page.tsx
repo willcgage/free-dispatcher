@@ -145,8 +145,13 @@ export default function AdminModules() {
                       MSS
                     </span>
                   )}
-                  {m.category && (
+                  {m.owner && (
                     <span className="ml-auto shrink-0 text-xs text-slate-500">
+                      {m.owner}
+                    </span>
+                  )}
+                  {m.category && (
+                    <span className={`${m.owner ? "" : "ml-auto"} shrink-0 text-xs text-slate-600`}>
                       {m.category}
                     </span>
                   )}
