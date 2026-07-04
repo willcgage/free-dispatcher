@@ -248,6 +248,10 @@ export const repoModules = pgTable("repo_modules", {
   // (storage_path, file_name, file_format); the private file is fetched via a
   // signed URL on demand (#122).
   schematics: jsonb("schematics"),
+  // Owner-authored structured track-graph (#122) — the module's schematic doc
+  // (endplates/tracks/turnouts/signals) FD composes into a layout. See
+  // docs/module-schematic-format.md. Null for un-authored modules.
+  schematic: jsonb("schematic"),
   upstreamUpdatedAt: timestamp("upstream_updated_at", { withTimezone: true }),
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
 });

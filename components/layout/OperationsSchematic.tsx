@@ -26,17 +26,21 @@ import {
   sectionSpans,
   type SectionAwareDistrict,
 } from "@/lib/track/sections";
+import { asModuleSchematic, moduleFeatures } from "@/lib/track/moduleSchematic";
 
 // All coordinates are in inches (the spine's natural unit); the SVG scales.
 const LANE_GAP = 12; // vertical gap between Main 1 and Main 2
 const PAD_X = 12;
 const SECTION_LABEL_Y = 6; // section name (top band)
 const SECTION_BRACKET_Y = 9; // section bracket line
-const Y1 = 22; // Main 2 (upper)
+const Y1 = 32; // Main 2 (upper) — headroom above for siding/spur lanes
 const Y0 = Y1 + LANE_GAP; // Main 1 (lower, continuous)
-const LABEL_Y = Y0 + 14;
-const HEIGHT = LABEL_Y + 8;
+const LABEL_Y = Y0 + 10;
+const HEIGHT = LABEL_Y + 6;
 const STROKE = 2.4;
+
+/** Lane index → y. Lane 0 is Main 1; higher lanes stack upward. */
+const laneY = (lane: number) => Y0 - lane * LANE_GAP;
 
 export function OperationsSchematic({
   modules,
@@ -231,6 +235,68 @@ export function OperationsSchematic({
           );
         })}
 
+        {/* Authored track-graph overlay (#122): sidings/spurs, turnouts, signals
+            for modules whose owner published a schematic. */}
+        {schem.cells.map((c) => {
+          const doc = asModuleSchematic(c.input.schematic);
+          if (!doc) return null;
+          const feat = moduleFeatures(doc);
+          const stroke = colorFor(c.input.moduleId);
+          const px = (frac: number) => c.x + frac * c.width;
+          return (
+            <g key={`${c.input.id}-schem`}>
+              {feat.extraTracks.map((t) => (
+                <line
+                  key={t.id}
+                  x1={px(t.fromFrac)}
+                  y1={laneY(t.lane)}
+                  x2={px(t.toFrac)}
+                  y2={laneY(t.lane)}
+                  stroke={stroke}
+                  strokeWidth={STROKE * 0.8}
+                  strokeLinecap="round"
+                  strokeDasharray={t.role === "spur" ? "2 2" : undefined}
+                >
+                  <title>
+                    {`${t.role}${t.capacityFeet ? ` · ${t.capacityFeet} ft` : ""}`}
+                  </title>
+                </line>
+              ))}
+              {feat.turnouts.map((t) => {
+                const dir = t.posFrac < 0.5 ? 1 : -1;
+                return (
+                  <line
+                    key={t.id}
+                    x1={px(t.posFrac) - dir * 4}
+                    y1={laneY(t.onLane)}
+                    x2={px(t.posFrac)}
+                    y2={laneY(t.divergeLane)}
+                    stroke={stroke}
+                    strokeWidth={STROKE * 0.8}
+                    strokeLinecap="round"
+                  >
+                    <title>{`Turnout${t.name ? ` · ${t.name}` : ""}`}</title>
+                  </line>
+                );
+              })}
+              {feat.signals.map((s) => (
+                <g key={s.id}>
+                  <line
+                    x1={px(s.posFrac)}
+                    y1={laneY(s.lane) - 2}
+                    x2={px(s.posFrac)}
+                    y2={laneY(s.lane) - 7}
+                    stroke="#94a3b8"
+                    strokeWidth={0.8}
+                  />
+                  <circle cx={px(s.posFrac)} cy={laneY(s.lane) - 8} r={1.6} fill="#94a3b8" />
+                  <title>{`Signal${s.name ? ` · ${s.name}` : ""} (${s.facing})`}</title>
+                </g>
+              ))}
+            </g>
+          );
+        })}
+
         {/* Control points — where the main-track count changes (interlockings) */}
         {cps.map((cp, i) => (
           <g key={`cp-${i}`}>
@@ -284,6 +350,20 @@ export function OperationsSchematic({
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-full border border-red-500 bg-red-900" />
           endplate mismatch
+        </span>
+        <span className="flex items-center gap-1">
+          <svg width="20" height="10" className="shrink-0">
+            <line x1="1" y1="7" x2="19" y2="7" stroke="#64748b" strokeWidth="1.4" />
+            <line x1="6" y1="7" x2="14" y2="2" stroke="#64748b" strokeWidth="1.4" />
+          </svg>
+          siding / turnout
+        </span>
+        <span className="flex items-center gap-1">
+          <svg width="12" height="10" className="shrink-0">
+            <line x1="6" y1="9" x2="6" y2="4" stroke="#94a3b8" strokeWidth="0.9" />
+            <circle cx="6" cy="3" r="1.8" fill="#94a3b8" />
+          </svg>
+          signal
         </span>
         {legend.map((d) => (
           <span key={d.id} className="flex items-center gap-1">

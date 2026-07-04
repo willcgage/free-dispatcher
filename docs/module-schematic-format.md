@@ -57,7 +57,7 @@ values are `single` | `double`.
 | Entity | Purpose | Fields |
 |---|---|---|
 | **endplate** | connection point to the neighbor | `id` (`A`/`B`/…), `label`, `tracks[]` = `{ trackId, lane, config }` |
-| **track** | a running track | `id`, `role` (`main`\|`siding`\|`spur`\|`yard`\|`crossover`), `lane`, `from`, `to` (endplate or node id), `capacityFeet?`, `industryRef?` |
+| **track** | a running track | `id`, `role` (`main`\|`siding`\|`spur`\|`yard`\|`crossover`), `lane`, `from`, `to` (endplate or node id), `fromPos?`/`toPos?` (explicit inches, overriding node lookup), `capacityFeet?`, `industryRef?` |
 | **turnout** | a switch diverging off a track | `id`, `pos`, `onTrack`, `divergeTrack`, `kind` (`left`\|`right`\|`wye`), `name`, `address?` |
 | **signal** | a mast/dwarf governing a track | `id`, `pos`, `track`, `facing` (`AtoB`\|`BtoA`), `kind` (`mast`\|`dwarf`), `name`, `aspects[]`, `address?` |
 | **block** | native detection segment | `id`, `name`, `tracks[]`, `from`, `to` (pos range) |
@@ -96,8 +96,8 @@ Decisions baked in (revisable):
   ],
   "tracks": [
     { "id": "main", "role": "main",   "lane": 0, "from": "A",   "to": "B" },
-    { "id": "sid",  "role": "siding", "lane": 1, "from": "swW", "to": "swE", "capacityFeet": 8 },
-    { "id": "spur", "role": "spur",   "lane": 2, "from": "swW", "to": "spurEnd", "industryRef": 5 }
+    { "id": "sid",  "role": "siding", "lane": 1, "from": "swW", "to": "swE", "fromPos": 18, "toPos": 78, "capacityFeet": 8 },
+    { "id": "spur", "role": "spur",   "lane": 2, "from": "swW", "to": "spurEnd", "fromPos": 18, "toPos": 40, "industryRef": 5 }
   ],
   "turnouts": [
     { "id": "swW", "pos": 18, "onTrack": "main", "divergeTrack": "sid", "kind": "right", "name": "West Siding" },
@@ -146,12 +146,12 @@ current operations renderer does, so un-authored modules render unchanged.
 ## Implementation checklist
 
 **Module Repository**
-- [ ] Migration: `schematic jsonb`, `schematic_version int` on `freemon_modules`.
-- [ ] `modules-full`: return `schematic` inline.
+- [x] Migration: `schematic jsonb`, `schematic_version int` on `freemon_modules`.
+- [x] `modules-full`: return `schematic` inline.
 - [ ] Build tool: the authoring UI in the MR web app (Next.js) that produces this doc.
 
 **Free-Dispatcher**
-- [ ] Sync `repo_modules.schematic` (jsonb).
-- [ ] Import + compose module graphs into the layout operations schematic (replacing
-      the field-derived version, with the fallback above).
-- [ ] Seed layout turnouts/signals/blocks from imported module graphs.
+- [x] Sync `repo_modules.schematic` (jsonb).
+- [x] Import + overlay module graphs (sidings/spurs, turnouts, signals) on the
+      operations schematic, with the field-derived fallback above.
+- [ ] Seed layout turnouts/signals/blocks (occupancy/allocation) from imported graphs.

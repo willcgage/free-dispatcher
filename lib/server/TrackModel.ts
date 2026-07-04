@@ -80,6 +80,7 @@ export interface LayoutModule {
   geometryDegrees: number | null;
   flipped: boolean;
   endplates: unknown;
+  schematic: unknown;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -254,6 +255,7 @@ class TrackModel {
         geometryType: repoModules.geometryType,
         geometryDegrees: repoModules.geometryDegrees,
         endplates: repoModules.endplates,
+        schematic: repoModules.schematic,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))
