@@ -19,6 +19,8 @@ export interface OpsModuleInput extends ModuleEndplates {
   stagingEnd?: "A" | "B" | null;
   mainlineLengthInches?: number | null;
   lengthTotalInches?: number | null;
+  /** Owner-authored track-graph (jsonb); overlaid when present (#122). */
+  schematic?: unknown;
 }
 
 export interface OpsCell {
