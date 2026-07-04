@@ -13,6 +13,7 @@ import {
   LayoutSchematic,
   MODULE_DRAG_MIME,
 } from "@/components/layout/LayoutSchematic";
+import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
 import type { CatalogModule } from "@/lib/client/types";
 import type { StagingEnd } from "@/lib/db/schema";
 
@@ -759,10 +760,21 @@ export default function AdminLayouts() {
                             )}
                           </div>
 
-                          {/* Schematic (to-scale) */}
+                          {/* Operations schematic (straightened — primary) */}
                           <div>
                             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
-                              Schematic
+                              Operations schematic
+                            </div>
+                            <OperationsSchematic
+                              modules={tree.modules}
+                              districts={tree.districts}
+                            />
+                          </div>
+
+                          {/* Footprint (to-scale, physical shape) */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Footprint (physical layout)
                             </div>
                             <LayoutSchematic
                               modules={tree.modules}
