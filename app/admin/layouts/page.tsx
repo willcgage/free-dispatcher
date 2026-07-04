@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel } from "@/components/admin/ui";
 import { moduleMatches } from "@/lib/client/moduleSearch";
+import { LayoutSchematic } from "@/components/layout/LayoutSchematic";
 import type { CatalogModule } from "@/lib/client/types";
 import type { StagingEnd } from "@/lib/db/schema";
 
@@ -41,6 +42,9 @@ interface LayoutModuleNode {
   positionIndex: number;
   stagingEnd: StagingEnd | null;
   moduleName: string | null;
+  lengthTotalInches: number | null;
+  mainlineLengthInches: number | null;
+  hasMss: boolean | null;
 }
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
@@ -561,6 +565,14 @@ export default function AdminLayouts() {
                                 </ul>
                               </div>
                             )}
+                          </div>
+
+                          {/* Schematic (to-scale) */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Schematic
+                            </div>
+                            <LayoutSchematic modules={tree.modules} />
                           </div>
 
                           {/* Track */}
