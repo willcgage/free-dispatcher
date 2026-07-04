@@ -14,6 +14,11 @@
 import { useState } from "react";
 import { apiSend } from "@/lib/client/api";
 import { useTrackBoard } from "@/lib/client/useTrackBoard";
+import {
+  deriveSectionAspect,
+  ASPECT_META,
+  ASPECT_ORDER,
+} from "@/lib/track/signals";
 import type { TrainRow } from "@/lib/client/types";
 
 type Direction = "AtoB" | "BtoA";
@@ -93,8 +98,25 @@ export function TrackBoard({
     );
   }
 
+  const occupiedBlocks = new Set(
+    Object.values(occupancy)
+      .filter((o) => o.occupied)
+      .map((o) => o.blockId),
+  );
+
   return (
     <div className="space-y-4">
+      {/* Signal legend */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span className="font-medium text-slate-500">Signals:</span>
+        {ASPECT_ORDER.map((a) => (
+          <span key={a} className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 rounded-full ${ASPECT_META[a].dot}`} />
+            {ASPECT_META[a].label}
+          </span>
+        ))}
+      </div>
+
       {/* Route allocation bar — appears once sections are selected. */}
       {canControl && selected.size > 0 && (
         <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-sky-800/60 bg-slate-900 p-2.5 shadow-lg">
@@ -147,6 +169,11 @@ export function TrackBoard({
             {d.sections.map((section) => {
               const alloc = allocations[section.id];
               const isSelected = selected.has(section.id);
+              const aspect = deriveSectionAspect(
+                section.blocks.map((b) => b.id),
+                occupiedBlocks,
+                !!alloc,
+              );
               return (
                 <div
                   key={section.id}
@@ -155,6 +182,10 @@ export function TrackBoard({
                   }`}
                 >
                   <div className="mb-2 flex items-center gap-2">
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${ASPECT_META[aspect].dot}`}
+                      title={`Signal: ${ASPECT_META[aspect].label}`}
+                    />
                     {canControl && !alloc && (
                       <input
                         type="checkbox"
