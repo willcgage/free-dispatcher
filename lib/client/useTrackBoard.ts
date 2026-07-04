@@ -21,11 +21,17 @@ export interface SectionNode {
   track: string | null;
   blocks: BlockNode[];
 }
+export interface TurnoutNode {
+  id: string;
+  name: string;
+}
 export interface DistrictNode {
   id: string;
   name: string;
   sections: SectionNode[];
+  turnouts: TurnoutNode[];
 }
+export type TurnoutPosition = "normal" | "reversed";
 export interface LayoutTree {
   id: string;
   name: string;
@@ -42,11 +48,16 @@ export interface AllocationRow {
   trainId: string;
   direction: "AtoB" | "BtoA";
 }
+export interface TurnoutPositionRow {
+  turnoutId: string;
+  position: TurnoutPosition;
+}
 
 const TRACK_EVENTS = [
   "block_occupancy_changed",
   "section_allocated",
   "section_released",
+  "turnout_changed",
 ];
 const SESSION_EVENTS = ["session_start", "session_archived"];
 
@@ -56,6 +67,8 @@ export interface UseTrackBoard {
   occupancy: Record<string, OccupancyRow>;
   /** sectionId → active allocation. */
   allocations: Record<string, AllocationRow>;
+  /** turnoutId → position (only turnouts that have been set). */
+  turnoutPositions: Record<string, TurnoutPosition>;
   loading: boolean;
   refresh: () => Promise<void>;
 }
@@ -66,16 +79,23 @@ export function useTrackBoard(): UseTrackBoard {
   const [allocations, setAllocations] = useState<Record<string, AllocationRow>>(
     {},
   );
+  const [turnoutPositions, setTurnoutPositions] = useState<
+    Record<string, TurnoutPosition>
+  >({});
   const [loading, setLoading] = useState(true);
 
   const loadState = useCallback(async () => {
     const st = await apiGet<{
       occupancy: OccupancyRow[];
       allocations: AllocationRow[];
+      turnouts: TurnoutPositionRow[];
     }>("/api/track/state");
     setOccupancy(Object.fromEntries(st.occupancy.map((o) => [o.blockId, o])));
     setAllocations(
       Object.fromEntries(st.allocations.map((a) => [a.sectionId, a])),
+    );
+    setTurnoutPositions(
+      Object.fromEntries(st.turnouts.map((t) => [t.turnoutId, t.position])),
     );
   }, []);
 
@@ -117,5 +137,5 @@ export function useTrackBoard(): UseTrackBoard {
     };
   }, [refresh, loadState]);
 
-  return { layout, occupancy, allocations, loading, refresh };
+  return { layout, occupancy, allocations, turnoutPositions, loading, refresh };
 }
