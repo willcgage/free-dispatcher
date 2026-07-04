@@ -36,5 +36,11 @@ next-env.d.ts
 # Local PGlite data dir
 /.data/
 
+# Playwright e2e artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # Zello credentials (issuer + private key) — never commit
 zello-credentials.json
