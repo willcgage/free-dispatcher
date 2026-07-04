@@ -114,13 +114,13 @@ export default function AdminLayouts() {
     }
   }
 
-  async function attachToSession(id: string) {
+  async function setSessionLayout(id: string | null) {
     setBusy(true);
     try {
       await apiSend("PATCH", "/api/session", { layoutId: id });
       await load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "attach failed");
+      alert(e instanceof Error ? e.message : "update failed");
     } finally {
       setBusy(false);
     }
@@ -216,18 +216,31 @@ export default function AdminLayouts() {
                         </span>
                       )}
                     </button>
-                    <button
-                      disabled={busy || isCurrent || !hasSession}
-                      onClick={() => attachToSession(l.id)}
-                      title={
-                        !hasSession
-                          ? "Start a session first"
-                          : "Attach this layout to the active session"
-                      }
-                      className="shrink-0 rounded-md border border-sky-700/60 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-sky-900/30 disabled:opacity-40"
-                    >
-                      {isCurrent ? "Current" : "Use in session"}
-                    </button>
+                    {isCurrent ? (
+                      <button
+                        disabled={busy}
+                        onClick={() => setSessionLayout(null)}
+                        title="Remove this layout from the active session"
+                        className="shrink-0 rounded-md border border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                      >
+                        Remove from session
+                      </button>
+                    ) : (
+                      <button
+                        disabled={busy || !hasSession}
+                        onClick={() => setSessionLayout(l.id)}
+                        title={
+                          !hasSession
+                            ? "Start a session first"
+                            : sessionLayoutId
+                              ? "Switch the session to this layout"
+                              : "Attach this layout to the active session"
+                        }
+                        className="shrink-0 rounded-md border border-sky-700/60 px-2.5 py-1 text-xs font-medium text-sky-300 hover:bg-sky-900/30 disabled:opacity-40"
+                      >
+                        {sessionLayoutId ? "Switch to this" : "Use in session"}
+                      </button>
+                    )}
                   </div>
                   {expanded.has(l.id) && (
                     <div className="mt-2 pl-5 text-sm">

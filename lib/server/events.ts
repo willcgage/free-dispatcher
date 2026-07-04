@@ -12,6 +12,7 @@ import type {
 export type FdEvent =
   | { type: "session_start"; sessionId: string }
   | { type: "session_archived"; sessionId: string }
+  | { type: "layout_changed"; layoutId: string | null }
   | {
       type: "block_occupancy_changed";
       blockId: string;

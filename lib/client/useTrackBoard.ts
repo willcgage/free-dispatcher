@@ -59,7 +59,7 @@ const TRACK_EVENTS = [
   "section_released",
   "turnout_changed",
 ];
-const SESSION_EVENTS = ["session_start", "session_archived"];
+const SESSION_EVENTS = ["session_start", "session_archived", "layout_changed"];
 
 export interface UseTrackBoard {
   layout: LayoutTree | null;
