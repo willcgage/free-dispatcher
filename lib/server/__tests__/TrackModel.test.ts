@@ -51,6 +51,7 @@ describe("buildLayoutTree (#80)", () => {
         { id: "b1", sectionId: "s0", name: "Blk 2", position: 1, moduleRecordNumber: null, createdAt: new Date() },
         { id: "b0", sectionId: "s0", name: "Blk 1", position: 0, moduleRecordNumber: null, createdAt: new Date() },
       ],
+      [{ id: "t1", districtId: "d1", name: "Sw 1", createdAt: new Date() }],
     );
 
     // Districts sorted by position.
@@ -62,7 +63,10 @@ describe("buildLayoutTree (#80)", () => {
       "Blk 1",
       "Blk 2",
     ]);
-    // Empty district still renders with no sections.
+    // Turnouts nest under their district.
+    expect(tree.districts[0].turnouts.map((t) => t.name)).toEqual(["Sw 1"]);
+    // Empty district still renders with no sections or turnouts.
     expect(tree.districts[1].sections).toEqual([]);
+    expect(tree.districts[1].turnouts).toEqual([]);
   });
 });

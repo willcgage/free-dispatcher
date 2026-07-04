@@ -40,6 +40,8 @@ export type StagingEnd = "A" | "B";
 // or reverse). Set per allocation (#80) so single-track sections work both ways
 // for meets and double-track mains carry parallel chains.
 export type SectionDirection = "AtoB" | "BtoA";
+// Virtual turnout state (#83) — normal (straight/main) or reversed (diverging).
+export type TurnoutPosition = "normal" | "reversed";
 
 // ---- layouts -------------------------------------------------------------
 // A layout is the reusable, static definition of a physical layout: its track
@@ -381,6 +383,55 @@ export const sectionAllocations = pgTable(
   ],
 );
 
+// ---- turnouts ------------------------------------------------------------
+// Static, layout-scoped turnouts within a District (#83). The switch position
+// itself is per-session runtime state (turnout_positions), like block occupancy.
+export const turnouts = pgTable(
+  "turnouts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    districtId: uuid("district_id")
+      .notNull()
+      .references(() => districts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("turnouts_district_idx").on(t.districtId)],
+);
+
+// ---- turnout_positions ---------------------------------------------------
+// This session's live position of a turnout (manual in v1). One row per
+// (session, turnout).
+export const turnoutPositions = pgTable(
+  "turnout_positions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sessions.id, { onDelete: "cascade" }),
+    turnoutId: uuid("turnout_id")
+      .notNull()
+      .references(() => turnouts.id, { onDelete: "cascade" }),
+    position: text("position")
+      .$type<TurnoutPosition>()
+      .notNull()
+      .default("normal"),
+    updatedBy: text("updated_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("turnout_positions_session_turnout").on(
+      t.sessionId,
+      t.turnoutId,
+    ),
+    index("turnout_positions_session_idx").on(t.sessionId),
+  ],
+);
+
 // ---- app_settings --------------------------------------------------------
 // Singleton-ish key/value store for Admin configuration (WiThrottle, server).
 // Not in spec §9 but required by the §3.3 settings screens; persisted
@@ -408,6 +459,8 @@ export const schema = {
   blocks,
   blockOccupancy,
   sectionAllocations,
+  turnouts,
+  turnoutPositions,
   appSettings,
   repoModules,
 };
