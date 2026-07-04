@@ -21,7 +21,10 @@ import {
   blocks,
   blockOccupancy,
   sectionAllocations,
+  turnouts,
+  turnoutPositions,
   type SectionDirection,
+  type TurnoutPosition,
 } from "@/lib/db/schema";
 import { sessionManager } from "./SessionManager";
 
@@ -38,10 +41,14 @@ export interface SectionInput {
   position?: number;
   blocks?: BlockInput[];
 }
+export interface TurnoutInput {
+  name: string;
+}
 export interface DistrictInput {
   name: string;
   position?: number;
   sections?: SectionInput[];
+  turnouts?: TurnoutInput[];
 }
 export interface LayoutInput {
   name: string;
@@ -53,10 +60,12 @@ type BlockRow = typeof blocks.$inferSelect;
 type SectionRow = typeof sections.$inferSelect;
 type DistrictRow = typeof districts.$inferSelect;
 type LayoutRow = typeof layouts.$inferSelect;
+type TurnoutRow = typeof turnouts.$inferSelect;
 
 export interface LayoutTree extends LayoutRow {
   districts: (DistrictRow & {
     sections: (SectionRow & { blocks: BlockRow[] })[];
+    turnouts: TurnoutRow[];
   })[];
 }
 
@@ -80,12 +89,13 @@ export function assertSingleDistrict(
   return [...districtIds][0];
 }
 
-/** Nest flat district/section/block rows under a layout into a tree. */
+/** Nest flat district/section/block/turnout rows under a layout into a tree. */
 export function buildLayoutTree(
   layout: LayoutRow,
   districtRows: DistrictRow[],
   sectionRows: SectionRow[],
   blockRows: BlockRow[],
+  turnoutRows: TurnoutRow[] = [],
 ): LayoutTree {
   const byPos = <T extends { position: number }>(a: T, b: T) =>
     a.position - b.position;
@@ -101,6 +111,12 @@ export function buildLayoutTree(
     arr.push(s);
     sectionsByDistrict.set(s.districtId, arr);
   }
+  const turnoutsByDistrict = new Map<string, TurnoutRow[]>();
+  for (const t of turnoutRows) {
+    const arr = turnoutsByDistrict.get(t.districtId) ?? [];
+    arr.push(t);
+    turnoutsByDistrict.set(t.districtId, arr);
+  }
   return {
     ...layout,
     districts: [...districtRows].sort(byPos).map((d) => ({
@@ -109,6 +125,7 @@ export function buildLayoutTree(
         ...s,
         blocks: (blocksBySection.get(s.id) ?? []).sort(byPos),
       })),
+      turnouts: turnoutsByDistrict.get(d.id) ?? [],
     })),
   };
 }
@@ -154,6 +171,12 @@ class TrackModel {
             );
           }
         }
+
+        if (d.turnouts?.length) {
+          await tx.insert(turnouts).values(
+            d.turnouts.map((t) => ({ districtId: district.id, name: t.name })),
+          );
+        }
       }
       return layout.id;
     });
@@ -187,8 +210,11 @@ class TrackModel {
     const blockRows = sectionIds.length
       ? await db.select().from(blocks).where(inArray(blocks.sectionId, sectionIds))
       : [];
+    const turnoutRows = districtIds.length
+      ? await db.select().from(turnouts).where(inArray(turnouts.districtId, districtIds))
+      : [];
 
-    return buildLayoutTree(layout, districtRows, sectionRows, blockRows);
+    return buildLayoutTree(layout, districtRows, sectionRows, blockRows, turnoutRows);
   }
 
   // -- Runtime (active-session-scoped) ----------------------------------
@@ -214,6 +240,31 @@ class TrackModel {
 
     await sessionManager.broadcast(
       { type: "block_occupancy_changed", blockId, occupied, trainId },
+      session.id,
+    );
+    return row;
+  }
+
+  /** Set a turnout's position for the active session (upsert). */
+  async setTurnoutPosition(
+    turnoutId: string,
+    position: TurnoutPosition,
+    updatedBy: string | null,
+  ) {
+    const session = await sessionManager.getActiveSession();
+    if (!session) throw new Error("no active session");
+
+    const [row] = await db
+      .insert(turnoutPositions)
+      .values({ sessionId: session.id, turnoutId, position, updatedBy })
+      .onConflictDoUpdate({
+        target: [turnoutPositions.sessionId, turnoutPositions.turnoutId],
+        set: { position, updatedBy, updatedAt: new Date() },
+      })
+      .returning();
+
+    await sessionManager.broadcast(
+      { type: "turnout_changed", turnoutId, position },
       session.id,
     );
     return row;
@@ -310,12 +361,12 @@ class TrackModel {
     return released;
   }
 
-  /** Live occupancy + active allocations for the active session. */
+  /** Live occupancy + active allocations + turnout positions for the session. */
   async getSessionTrackState() {
     const session = await sessionManager.getActiveSession();
-    if (!session) return { occupancy: [], allocations: [] };
+    if (!session) return { occupancy: [], allocations: [], turnouts: [] };
 
-    const [occupancy, allocations] = await Promise.all([
+    const [occupancy, allocations, turnoutRows] = await Promise.all([
       db.select().from(blockOccupancy).where(eq(blockOccupancy.sessionId, session.id)),
       db
         .select()
@@ -326,8 +377,12 @@ class TrackModel {
             eq(sectionAllocations.active, true),
           ),
         ),
+      db
+        .select()
+        .from(turnoutPositions)
+        .where(eq(turnoutPositions.sessionId, session.id)),
     ]);
-    return { occupancy, allocations };
+    return { occupancy, allocations, turnouts: turnoutRows };
   }
 }
 

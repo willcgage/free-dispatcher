@@ -6,6 +6,7 @@ import type {
   OperatorRole,
   TrainStatus,
   SectionDirection,
+  TurnoutPosition,
 } from "@/lib/db/schema";
 
 export type FdEvent =
@@ -30,6 +31,7 @@ export type FdEvent =
       sectionId: string;
       trainId: string;
     }
+  | { type: "turnout_changed"; turnoutId: string; position: TurnoutPosition }
   | {
       type: "train_status_changed";
       trainId: string;

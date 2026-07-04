@@ -70,4 +70,37 @@ describe("database migrations", () => {
 
     await client.close();
   });
+
+  it("stores one turnout position per session (unique) — #83", async () => {
+    const client = new PGlite();
+    const db = drizzle(client);
+    await migrate(db, { migrationsFolder: "./lib/db/migrations" });
+
+    const L = "00000000-0000-0000-0000-0000000000a1";
+    const D = "00000000-0000-0000-0000-0000000000a2";
+    const TO = "00000000-0000-0000-0000-0000000000a3";
+    const SESS = "00000000-0000-0000-0000-0000000000a4";
+
+    await client.query(`insert into layouts (id, name) values ('${L}', 'L')`);
+    await client.query(`insert into districts (id, layout_id, name) values ('${D}', '${L}', 'D')`);
+    await client.query(`insert into turnouts (id, district_id, name) values ('${TO}', '${D}', 'Sw 1')`);
+    await client.query(`insert into sessions (id, name) values ('${SESS}', 'S')`);
+
+    await client.query(
+      `insert into turnout_positions (session_id, turnout_id, position) values ('${SESS}', '${TO}', 'reversed')`,
+    );
+    // A second position row for the same (session, turnout) is rejected.
+    await expect(
+      client.query(
+        `insert into turnout_positions (session_id, turnout_id, position) values ('${SESS}', '${TO}', 'normal')`,
+      ),
+    ).rejects.toThrow();
+
+    const res = await client.query<{ position: string }>(
+      `select position from turnout_positions where turnout_id = '${TO}'`,
+    );
+    expect(res.rows[0].position).toBe("reversed");
+
+    await client.close();
+  });
 });
