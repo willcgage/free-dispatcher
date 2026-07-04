@@ -20,13 +20,19 @@ import {
   districtColor,
   districtLegend,
   moduleDistrictMap,
-  type DistrictLite,
 } from "@/lib/track/districts";
+import {
+  moduleSectionMap,
+  sectionSpans,
+  type SectionAwareDistrict,
+} from "@/lib/track/sections";
 
 // All coordinates are in inches (the spine's natural unit); the SVG scales.
 const LANE_GAP = 12; // vertical gap between Main 1 and Main 2
 const PAD_X = 12;
-const Y1 = 18; // Main 2 (upper)
+const SECTION_LABEL_Y = 6; // section name (top band)
+const SECTION_BRACKET_Y = 9; // section bracket line
+const Y1 = 22; // Main 2 (upper)
 const Y0 = Y1 + LANE_GAP; // Main 1 (lower, continuous)
 const LABEL_Y = Y0 + 14;
 const HEIGHT = LABEL_Y + 8;
@@ -37,7 +43,7 @@ export function OperationsSchematic({
   districts,
 }: {
   modules: OpsModuleInput[];
-  districts?: DistrictLite[];
+  districts?: SectionAwareDistrict[];
 }) {
   if (modules.length === 0) {
     return (
@@ -52,6 +58,11 @@ export function OperationsSchematic({
   const connections = endplateConnections(modules);
   const dmap = districts ? moduleDistrictMap(districts) : new Map();
   const legend = districts ? districtLegend(districts) : [];
+  const smap = districts ? moduleSectionMap(districts) : new Map();
+  // Contiguous runs of modules that share a section — one bracket each.
+  const spans = sectionSpans(schem.cells, (c) =>
+    c.input.moduleId ? smap.get(c.input.moduleId) : undefined,
+  );
 
   const total = schem.totalInches;
   const viewBox = `${-PAD_X} 0 ${total + 2 * PAD_X} ${HEIGHT}`;
@@ -82,6 +93,30 @@ export function OperationsSchematic({
         <text x={total + PAD_X - 1} y={Y0 - LANE_GAP / 2} textAnchor="end" className="fill-slate-500" fontSize="7" dominantBaseline="middle">
           E
         </text>
+
+        {/* Section brackets — the units a dispatcher allocates */}
+        {spans
+          .filter((s) => s.sectionName)
+          .map((s, i) => {
+            const first = s.items[0];
+            const last = s.items[s.items.length - 1];
+            const startX = first.x;
+            const endX = last.x + last.width;
+            const track = first.input.moduleId
+              ? smap.get(first.input.moduleId)?.track
+              : null;
+            return (
+              <g key={`sec-${i}`}>
+                <line x1={startX} y1={SECTION_BRACKET_Y} x2={endX} y2={SECTION_BRACKET_Y} stroke="#475569" strokeWidth={0.7} />
+                <line x1={startX} y1={SECTION_BRACKET_Y - 2.5} x2={startX} y2={SECTION_BRACKET_Y} stroke="#475569" strokeWidth={0.7} />
+                <line x1={endX} y1={SECTION_BRACKET_Y - 2.5} x2={endX} y2={SECTION_BRACKET_Y} stroke="#475569" strokeWidth={0.7} />
+                <text x={(startX + endX) / 2} y={SECTION_LABEL_Y} textAnchor="middle" className="fill-slate-400" fontSize="6">
+                  {s.sectionName}
+                  {track ? ` · ${track}` : ""}
+                </text>
+              </g>
+            );
+          })}
 
         {/* Per-module: Main 1 (continuous) + Main 2 (where double) + turnouts */}
         {schem.cells.map((c) => {
