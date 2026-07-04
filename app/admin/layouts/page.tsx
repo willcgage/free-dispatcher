@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel } from "@/components/admin/ui";
+import { ModulePicker, type CatalogModule } from "@/components/modules/ModulePicker";
+import type { StagingEnd } from "@/lib/db/schema";
 
 // ---- API shapes (client-side mirror of the track model) ------------------
 interface LayoutRow {
@@ -32,7 +34,15 @@ interface DistrictNode {
   sections: SectionNode[];
   turnouts: TurnoutNode[];
 }
+interface LayoutModuleNode {
+  id: string;
+  moduleId: string;
+  positionIndex: number;
+  stagingEnd: StagingEnd | null;
+  moduleName: string | null;
+}
 interface LayoutTree extends LayoutRow {
+  modules: LayoutModuleNode[];
   districts: DistrictNode[];
 }
 
@@ -77,23 +87,42 @@ export default function AdminLayouts() {
   const [sessionLayoutId, setSessionLayoutId] = useState<string | null>(null);
   const [hasSession, setHasSession] = useState(false);
   const [draft, setDraft] = useState<LayoutDraft>(EMPTY_DRAFT);
+  const [catalog, setCatalog] = useState<CatalogModule[]>([]);
+  const [modSel, setModSel] = useState<
+    Record<string, { moduleId: string; stagingEnd: "" | StagingEnd }>
+  >({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [{ layouts }, session] = await Promise.all([
+    const [{ layouts }, session, cat] = await Promise.all([
       apiGet<{ layouts: LayoutRow[] }>("/api/layouts"),
       apiGet<{ session: { layoutId: string | null } | null }>("/api/session"),
+      apiGet<{ modules: CatalogModule[] }>("/api/modules/catalog").catch(() => ({
+        modules: [] as CatalogModule[],
+      })),
     ]);
     setLayouts(layouts);
     setSessionLayoutId(session.session?.layoutId ?? null);
     setHasSession(session.session != null);
+    setCatalog(cat.modules);
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  const reloadTree = useCallback(async (id: string) => {
+    try {
+      const { layout } = await apiGet<{ layout: LayoutTree }>(
+        `/api/layouts/${id}`,
+      );
+      setTrees((prev) => ({ ...prev, [id]: layout }));
+    } catch {
+      /* best-effort */
+    }
+  }, []);
 
   async function toggleTree(id: string) {
     setExpanded((prev) => {
@@ -102,15 +131,40 @@ export default function AdminLayouts() {
       else next.add(id);
       return next;
     });
-    if (!trees[id]) {
-      try {
-        const { layout } = await apiGet<{ layout: LayoutTree }>(
-          `/api/layouts/${id}`,
-        );
-        setTrees((prev) => ({ ...prev, [id]: layout }));
-      } catch {
-        /* best-effort */
-      }
+    if (!trees[id]) await reloadTree(id);
+  }
+
+  const modPick = (id: string) =>
+    modSel[id] ?? { moduleId: "", stagingEnd: "" as "" | StagingEnd };
+
+  async function addModule(layoutId: string) {
+    const sel = modPick(layoutId);
+    if (!sel.moduleId.trim()) return;
+    setBusy(true);
+    try {
+      await apiSend("POST", "/api/modules", {
+        layoutId,
+        moduleId: sel.moduleId.trim(),
+        stagingEnd: sel.stagingEnd || undefined,
+      });
+      setModSel((p) => ({ ...p, [layoutId]: { moduleId: "", stagingEnd: "" } }));
+      await Promise.all([reloadTree(layoutId), load()]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "add failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeModule(layoutId: string, id: string) {
+    setBusy(true);
+    try {
+      await apiSend("DELETE", `/api/modules/${id}`);
+      await Promise.all([reloadTree(layoutId), load()]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "remove failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -243,45 +297,136 @@ export default function AdminLayouts() {
                     )}
                   </div>
                   {expanded.has(l.id) && (
-                    <div className="mt-2 pl-5 text-sm">
+                    <div className="mt-2 space-y-3 pl-5 text-sm">
                       {!tree ? (
                         <p className="text-slate-500">Loading…</p>
-                      ) : tree.districts.length === 0 ? (
-                        <p className="text-slate-500">No districts yet.</p>
                       ) : (
-                        <ul className="space-y-1.5">
-                          {tree.districts.map((d) => (
-                            <li key={d.id}>
-                              <div className="font-medium text-slate-300">
-                                {d.name}
-                              </div>
-                              <ul className="ml-3 space-y-0.5 text-slate-400">
-                                {d.sections.map((s) => (
-                                  <li key={s.id}>
-                                    <span className="text-slate-300">
-                                      {s.name}
+                        <>
+                          {/* Module sequence */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Modules ({tree.modules.length})
+                            </div>
+                            {tree.modules.length > 0 ? (
+                              <ol className="mb-2 flex flex-wrap gap-1.5">
+                                {tree.modules.map((m, i) => (
+                                  <li
+                                    key={m.id}
+                                    className="flex items-center gap-1.5 rounded border border-slate-700 bg-slate-800/60 px-2 py-1"
+                                  >
+                                    <span className="text-xs text-slate-500">
+                                      {i + 1}
                                     </span>
-                                    {s.track && (
-                                      <span className="ml-1 text-xs text-slate-500">
-                                        ({s.track})
+                                    <span className="font-mono text-xs text-slate-200">
+                                      {m.moduleId}
+                                    </span>
+                                    {m.stagingEnd && (
+                                      <span className="rounded bg-indigo-600/20 px-1 text-xs text-indigo-300">
+                                        stg {m.stagingEnd}
                                       </span>
                                     )}
-                                    <span className="ml-2 text-xs text-slate-500">
-                                      {s.blocks.map((b) => b.name).join(" · ") ||
-                                        "no blocks"}
-                                    </span>
+                                    <button
+                                      disabled={busy}
+                                      onClick={() => removeModule(l.id, m.id)}
+                                      className="text-xs text-red-400 hover:text-red-300"
+                                    >
+                                      ✕
+                                    </button>
                                   </li>
                                 ))}
-                                {d.turnouts.length > 0 && (
-                                  <li className="text-xs text-slate-500">
-                                    Turnouts:{" "}
-                                    {d.turnouts.map((t) => t.name).join(" · ")}
+                              </ol>
+                            ) : (
+                              <p className="mb-2 text-xs text-slate-600">
+                                No modules assigned yet.
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <ModulePicker
+                                catalog={catalog}
+                                value={modPick(l.id).moduleId}
+                                onChange={(v) =>
+                                  setModSel((p) => ({
+                                    ...p,
+                                    [l.id]: { ...modPick(l.id), moduleId: v },
+                                  }))
+                                }
+                              />
+                              <select
+                                value={modPick(l.id).stagingEnd}
+                                onChange={(e) =>
+                                  setModSel((p) => ({
+                                    ...p,
+                                    [l.id]: {
+                                      ...modPick(l.id),
+                                      stagingEnd: e.target.value as
+                                        | ""
+                                        | StagingEnd,
+                                    },
+                                  }))
+                                }
+                                className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-100"
+                              >
+                                <option value="">— not staging —</option>
+                                <option value="A">Staging A</option>
+                                <option value="B">Staging B</option>
+                              </select>
+                              <button
+                                disabled={busy || !modPick(l.id).moduleId.trim()}
+                                onClick={() => addModule(l.id)}
+                                className="rounded-md bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-40"
+                              >
+                                Append
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Track */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Track
+                            </div>
+                            {tree.districts.length === 0 ? (
+                              <p className="text-slate-500">No districts yet.</p>
+                            ) : (
+                              <ul className="space-y-1.5">
+                                {tree.districts.map((d) => (
+                                  <li key={d.id}>
+                                    <div className="font-medium text-slate-300">
+                                      {d.name}
+                                    </div>
+                                    <ul className="ml-3 space-y-0.5 text-slate-400">
+                                      {d.sections.map((s) => (
+                                        <li key={s.id}>
+                                          <span className="text-slate-300">
+                                            {s.name}
+                                          </span>
+                                          {s.track && (
+                                            <span className="ml-1 text-xs text-slate-500">
+                                              ({s.track})
+                                            </span>
+                                          )}
+                                          <span className="ml-2 text-xs text-slate-500">
+                                            {s.blocks
+                                              .map((b) => b.name)
+                                              .join(" · ") || "no blocks"}
+                                          </span>
+                                        </li>
+                                      ))}
+                                      {d.turnouts.length > 0 && (
+                                        <li className="text-xs text-slate-500">
+                                          Turnouts:{" "}
+                                          {d.turnouts
+                                            .map((t) => t.name)
+                                            .join(" · ")}
+                                        </li>
+                                      )}
+                                    </ul>
                                   </li>
-                                )}
+                                ))}
                               </ul>
-                            </li>
-                          ))}
-                        </ul>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   )}

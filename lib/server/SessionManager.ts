@@ -122,10 +122,13 @@ class SessionManager {
             isNull(operators.leftAt),
           ),
         ),
-      db
-        .select()
-        .from(moduleLayouts)
-        .where(eq(moduleLayouts.sessionId, session.id)),
+      // Modules belong to the session's layout now (#84), not the session.
+      session.layoutId
+        ? db
+            .select()
+            .from(moduleLayouts)
+            .where(eq(moduleLayouts.layoutId, session.layoutId))
+        : Promise.resolve([] as Array<typeof moduleLayouts.$inferSelect>),
     ]);
 
     const statusByTrain = new Map(statusRows.map((s) => [s.trainId, s]));

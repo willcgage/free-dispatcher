@@ -56,7 +56,7 @@ export interface OperatorRow {
 
 export interface ModuleLayoutRow {
   id: string;
-  sessionId: string;
+  layoutId: string;
   moduleId: string;
   positionIndex: number;
   stagingEnd: "A" | "B" | null;
