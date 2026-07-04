@@ -47,6 +47,8 @@ interface ModuleFull {
   description?: string | null;
   category?: string | null;
   geometry_type?: string | null;
+  geometry_degrees?: number | null;
+  geometry_offset_inches?: number | null;
   length_total_inches?: number | null;
   mainline_length_inches?: number | null;
   endplate_count?: number | null;
@@ -129,6 +131,8 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
       description: m.description ?? null,
       category: m.category ?? null,
       geometryType: m.geometry_type ?? null,
+      geometryDegrees: m.geometry_degrees ?? null,
+      geometryOffsetInches: m.geometry_offset_inches ?? null,
       lengthTotalInches: m.length_total_inches ?? null,
       mainlineLengthInches: m.mainline_length_inches ?? null,
       endplateCount: m.endplate_count ?? null,

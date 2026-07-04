@@ -1,35 +1,29 @@
 /**
- * LayoutSchematic (#115, phase 1) — a to-scale linear view of a layout's module
- * sequence. Each module is drawn proportional to its total length; staging
- * modules are tinted, MSS is dotted, and modules with no catalogued length fall
- * back to a default width (marked "?"). Geometry-aware (curved) rendering is a
- * later phase.
+ * LayoutSchematic (#115, phase 2) — a to-scale schematic of a layout's module
+ * sequence, drawn from each module's geometry (straights, curves, 90° corners)
+ * as an SVG polyline. Staging modules are tinted, unknown-length modules amber,
+ * and endplate boundaries are marked. The path shape is computed by the pure
+ * buildSchematic helper.
  */
 "use client";
 
-export interface SchematicModule {
-  id: string;
-  moduleId: string;
-  moduleName: string | null;
-  stagingEnd: "A" | "B" | null;
-  lengthTotalInches: number | null;
-  hasMss: boolean | null;
-}
+import { buildSchematic, type SchematicInput } from "@/lib/track/schematic";
 
-const DEFAULT_LEN = 24; // fallback inches for a module missing a length
-
-export function LayoutSchematic({ modules }: { modules: SchematicModule[] }) {
+export function LayoutSchematic({ modules }: { modules: SchematicInput[] }) {
   if (modules.length === 0) {
     return <p className="text-xs text-slate-600">No modules to draw yet.</p>;
   }
 
-  const lengths = modules.map((m) =>
-    m.lengthTotalInches && m.lengthTotalInches > 0
-      ? m.lengthTotalInches
-      : DEFAULT_LEN,
-  );
-  const total = lengths.reduce((a, b) => a + b, 0);
-  const feet = Math.round((total / 12) * 10) / 10;
+  const schem = buildSchematic(modules);
+  const { bbox, totalInches } = schem;
+  const w = Math.max(bbox.maxX - bbox.minX, 1);
+  const h = Math.max(bbox.maxY - bbox.minY, 1);
+  const pad = Math.max(w, h) * 0.06 + 6;
+  const viewBox = `${bbox.minX - pad} ${bbox.minY - pad} ${w + 2 * pad} ${
+    h + 2 * pad
+  }`;
+  const stroke = Math.max(w, h) * 0.018 + 2;
+  const feet = Math.round((totalInches / 12) * 10) / 10;
 
   return (
     <div>
@@ -39,52 +33,54 @@ export function LayoutSchematic({ modules }: { modules: SchematicModule[] }) {
         </span>
         <span>{feet} ft total</span>
       </div>
-      <div className="flex h-16 w-full overflow-hidden rounded-md border border-slate-700 bg-slate-900">
-        {modules.map((m, i) => {
-          const noLen = !(m.lengthTotalInches && m.lengthTotalInches > 0);
+      <svg
+        viewBox={viewBox}
+        width="100%"
+        height="150"
+        preserveAspectRatio="xMidYMid meet"
+        className="rounded-md border border-slate-700 bg-slate-900"
+      >
+        {schem.segments.map((seg) => {
+          const noLen = !(
+            seg.input.lengthTotalInches && seg.input.lengthTotalInches > 0
+          );
           return (
-            <div
-              key={m.id}
-              title={`${m.moduleName ?? m.moduleId} · ${m.moduleId}${
-                noLen ? " · no length" : ` · ${Math.round(lengths[i])}"`
-              }`}
-              style={{ width: `${(lengths[i] / total) * 100}%` }}
-              className={`relative flex min-w-0 flex-col justify-center border-r border-slate-700 px-1 last:border-r-0 ${
-                m.stagingEnd ? "bg-indigo-900/40" : "bg-slate-800/60"
-              }`}
+            <polyline
+              key={seg.input.id}
+              points={seg.points.map((p) => `${p.x},${p.y}`).join(" ")}
+              fill="none"
+              stroke={
+                seg.input.stagingEnd ? "#818cf8" : noLen ? "#f59e0b" : "#38bdf8"
+              }
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              <span className="truncate text-[10px] font-medium text-slate-200">
-                {m.moduleName ?? m.moduleId}
-              </span>
-              <span className="truncate text-[9px] text-slate-500">
-                {m.moduleId}
-              </span>
-              {m.stagingEnd && (
-                <span className="absolute right-0.5 top-0.5 rounded bg-indigo-600/40 px-0.5 text-[8px] text-indigo-200">
-                  stg {m.stagingEnd}
-                </span>
-              )}
-              {m.hasMss && (
-                <span
-                  title="MSS"
-                  className="absolute bottom-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500"
-                />
-              )}
-              {noLen && (
-                <span
-                  title="No length in catalog"
-                  className="absolute left-0.5 top-0.5 text-[8px] text-amber-400"
-                >
-                  ?
-                </span>
-              )}
-            </div>
+              <title>
+                {`${seg.input.moduleName ?? seg.input.moduleId} · ${
+                  seg.input.moduleId
+                }${seg.input.geometryType ? ` · ${seg.input.geometryType}` : ""}`}
+              </title>
+            </polyline>
           );
         })}
-      </div>
+        {/* Endplate boundaries. */}
+        {schem.segments.map((seg) => (
+          <circle
+            key={`${seg.input.id}-c`}
+            cx={seg.points[0].x}
+            cy={seg.points[0].y}
+            r={stroke * 1.1}
+            fill="#0f172a"
+            stroke="#475569"
+            strokeWidth={stroke * 0.3}
+          />
+        ))}
+      </svg>
       <p className="mt-1 text-[10px] text-slate-600">
-        To scale by module length. Modules with no catalogued length use a
-        default width (?).
+        To scale, following each module&rsquo;s geometry (straights, curves, 90°
+        corners). Staging tinted, unknown-length amber; curve orientation is
+        approximate.
       </p>
     </div>
   );

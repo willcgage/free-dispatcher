@@ -224,6 +224,8 @@ export const repoModules = pgTable("repo_modules", {
   description: text("description"),
   category: text("category"),
   geometryType: text("geometry_type"),
+  geometryDegrees: real("geometry_degrees"),
+  geometryOffsetInches: real("geometry_offset_inches"),
   lengthTotalInches: real("length_total_inches"),
   mainlineLengthInches: real("mainline_length_inches"),
   endplateCount: integer("endplate_count"),
