@@ -17,6 +17,7 @@ import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
 import {
   layoutControlPoints,
   deriveSections,
+  asLayoutCps,
 } from "@/lib/track/layoutControlPoints";
 import type { CatalogModule } from "@/lib/client/types";
 import type { StagingEnd } from "@/lib/db/schema";
@@ -28,6 +29,7 @@ interface LayoutRow {
   description: string | null;
   standard: string;
   controlPointDistricts: Record<string, string> | null;
+  layoutControlPoints: unknown;
   createdAt: string;
 }
 interface BlockNode {
@@ -121,6 +123,10 @@ export default function AdminLayouts() {
   const [catalog, setCatalog] = useState<CatalogModule[]>([]);
   const [modQuery, setModQuery] = useState<Record<string, string>>({});
   const [modChecked, setModChecked] = useState<Record<string, string[]>>({});
+  // Add-form draft for a layout-level control point, keyed by layout id (#144).
+  const [cpDraft, setCpDraft] = useState<
+    Record<string, { name: string; anchor: string; offset: string }>
+  >({});
   const [drag, setDrag] = useState<{ layoutId: string; from: number } | null>(
     null,
   );
@@ -365,6 +371,24 @@ export default function AdminLayouts() {
       await reloadTree(layoutId);
     } catch (e) {
       alert(e instanceof Error ? e.message : "assign failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Add or remove a layout-level control point (#144). */
+  async function saveLayoutControlPoints(
+    layoutId: string,
+    cps: { id: string; name: string; anchor: string; offsetInches: number }[],
+  ) {
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/layouts/${layoutId}`, {
+        layoutControlPoints: cps,
+      });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "save failed");
     } finally {
       setBusy(false);
     }
@@ -818,19 +842,91 @@ export default function AdminLayouts() {
                               Control Points → Districts
                             </div>
                             {(() => {
-                              const cps = layoutControlPoints(tree.modules);
+                              const layoutCps = asLayoutCps(tree.layoutControlPoints);
+                              const cps = layoutControlPoints(tree.modules, layoutCps);
+                              const draft = cpDraft[l.id] ?? {
+                                name: "",
+                                anchor: tree.modules[0]?.id ?? "",
+                                offset: "",
+                              };
+                              const addForm = tree.modules.length > 0 && (
+                                <div className="mt-2 flex items-center gap-1.5">
+                                  <input
+                                    value={draft.name}
+                                    placeholder="New control point"
+                                    onChange={(e) =>
+                                      setCpDraft((p) => ({
+                                        ...p,
+                                        [l.id]: { ...draft, name: e.target.value },
+                                      }))
+                                    }
+                                    className="w-36 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200"
+                                  />
+                                  <select
+                                    value={draft.anchor}
+                                    onChange={(e) =>
+                                      setCpDraft((p) => ({
+                                        ...p,
+                                        [l.id]: { ...draft, anchor: e.target.value },
+                                      }))
+                                    }
+                                    className="rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                  >
+                                    {tree.modules.map((m) => (
+                                      <option key={m.id} value={m.id}>
+                                        {m.moduleName ?? m.moduleId}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    value={draft.offset}
+                                    placeholder="in from A"
+                                    inputMode="decimal"
+                                    onChange={(e) =>
+                                      setCpDraft((p) => ({
+                                        ...p,
+                                        [l.id]: { ...draft, offset: e.target.value },
+                                      }))
+                                    }
+                                    className="w-20 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200"
+                                  />
+                                  <button
+                                    disabled={
+                                      busy ||
+                                      !draft.name.trim() ||
+                                      !draft.anchor ||
+                                      !Number.isFinite(Number(draft.offset)) ||
+                                      draft.offset.trim() === ""
+                                    }
+                                    onClick={() => {
+                                      const cp = {
+                                        id: `lcp-${Date.now().toString(36)}`,
+                                        name: draft.name.trim(),
+                                        anchor: draft.anchor,
+                                        offsetInches: Number(draft.offset),
+                                      };
+                                      setCpDraft((p) => ({
+                                        ...p,
+                                        [l.id]: { ...draft, name: "", offset: "" },
+                                      }));
+                                      saveLayoutControlPoints(l.id, [...layoutCps, cp]);
+                                    }}
+                                    className="rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                                  >
+                                    + Add
+                                  </button>
+                                </div>
+                              );
                               if (cps.length === 0)
                                 return (
-                                  <p className="text-xs text-slate-600">
-                                    No control points yet — author them in the
-                                    modules&rsquo; schematics (Module Repository).
-                                  </p>
-                                );
-                              if (tree.districts.length === 0)
-                                return (
-                                  <p className="text-xs text-slate-600">
-                                    Add districts (below) to assign control points.
-                                  </p>
+                                  <>
+                                    <p className="text-xs text-slate-600">
+                                      No control points yet — author them in the
+                                      modules&rsquo; schematics (Module Repository),
+                                      or add one at the layout level below.
+                                    </p>
+                                    {addForm}
+                                  </>
                                 );
                               const assign = tree.controlPointDistricts ?? {};
                               const sections = deriveSections(cps, assign);
@@ -841,33 +937,65 @@ export default function AdminLayouts() {
                                       <li key={cp.key} className="flex items-center gap-2">
                                         <span className="min-w-0 flex-1 truncate text-slate-200">
                                           {cp.name}
+                                          {cp.source === "layout" && (
+                                            <span className="ml-1.5 rounded bg-slate-700 px-1 py-px text-[10px] uppercase text-slate-400">
+                                              layout
+                                            </span>
+                                          )}
                                         </span>
                                         <span className="shrink-0 font-mono text-xs text-slate-500">
                                           {cp.moduleId}
+                                          {cp.source === "layout" &&
+                                            ` @ ${cp.posInches ?? 0}"`}
                                         </span>
-                                        <select
-                                          value={assign[cp.key] ?? ""}
-                                          disabled={busy}
-                                          onChange={(e) =>
-                                            assignControlPoint(
-                                              l.id,
-                                              tree.controlPointDistricts,
-                                              cp.key,
-                                              e.target.value,
-                                            )
-                                          }
-                                          className="shrink-0 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
-                                        >
-                                          <option value="">— district</option>
-                                          {tree.districts.map((d) => (
-                                            <option key={d.id} value={d.id}>
-                                              {d.name}
-                                            </option>
-                                          ))}
-                                        </select>
+                                        {tree.districts.length > 0 && (
+                                          <select
+                                            value={assign[cp.key] ?? ""}
+                                            disabled={busy}
+                                            onChange={(e) =>
+                                              assignControlPoint(
+                                                l.id,
+                                                tree.controlPointDistricts,
+                                                cp.key,
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="shrink-0 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                          >
+                                            <option value="">— district</option>
+                                            {tree.districts.map((d) => (
+                                              <option key={d.id} value={d.id}>
+                                                {d.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
+                                        {cp.source === "layout" && (
+                                          <button
+                                            disabled={busy}
+                                            title="Remove layout control point"
+                                            onClick={() =>
+                                              saveLayoutControlPoints(
+                                                l.id,
+                                                layoutCps.filter(
+                                                  (x) => x.id !== cp.cpId,
+                                                ),
+                                              )
+                                            }
+                                            className="shrink-0 rounded px-1 text-xs text-slate-500 hover:text-red-400"
+                                          >
+                                            ✕
+                                          </button>
+                                        )}
                                       </li>
                                     ))}
                                   </ul>
+                                  {tree.districts.length === 0 && (
+                                    <p className="mt-1 text-xs text-slate-600">
+                                      Add districts (below) to assign control points.
+                                    </p>
+                                  )}
+                                  {addForm}
                                   {sections.length > 0 && (
                                     <p className="mt-2 text-xs text-slate-400">
                                       <span className="font-semibold text-slate-300">

@@ -6,28 +6,70 @@
  * interlocking. Assigning each to a District makes it a dispatcher's territory;
  * a Section is then the mainline between two adjacent control points that belong
  * to the same district. Pure so it can be unit-tested.
+ *
+ * Beyond the module-authored ones, the Layout Builder can place additional
+ * layout-level control points (#144) — anchored to a module placement at an
+ * offset in inches from its A end — for boundaries the modules don't provide
+ * (a CP-less module, a junction between towns). They interleave positionally
+ * with the imported ones and feed the same Section derivation.
  */
 import { asModuleSchematic } from "./moduleSchematic";
+import type { SchematicControlPoint, ModuleSchematicDoc } from "./moduleSchematic";
 
 export interface CpModuleInput {
+  /** layout_modules row id — the anchor for layout-level control points. */
+  id?: string | null;
   moduleId?: string | null;
   moduleName?: string | null;
   positionIndex?: number;
   schematic?: unknown;
 }
 
+/** A layout-level control point stored on layouts.layout_control_points. */
+export interface LayoutCp {
+  id: string;
+  name: string;
+  /** layout_modules row id the point is anchored to. */
+  anchor: string;
+  /** Inches from the anchored module's A end. */
+  offsetInches: number;
+}
+
 export interface ControlPointRef {
-  /** Stable key within the layout: "<moduleRecordNumber>:<cpId>". */
+  /** Stable key within the layout: "<moduleRecordNumber>:<cpId>" for imported
+   * points, "layout:<id>" for layout-level ones. */
   key: string;
   moduleId: string;
   moduleName: string | null;
   cpId: string;
   name: string;
+  source: "module" | "layout";
+  /** Inches from the module's A end, when the schematic positions it. */
+  posInches: number | null;
 }
 
-/** Control points across the layout's modules, in module (spine) order. */
+/** A module CP's representative position: its westmost signal or turnout. */
+function cpPosInches(
+  cp: SchematicControlPoint,
+  doc: ModuleSchematicDoc,
+): number | null {
+  const positions: number[] = [];
+  for (const s of cp.signals ?? []) positions.push(s.pos);
+  for (const tid of cp.turnouts ?? []) {
+    const t = (doc.turnouts ?? []).find((x) => x.id === tid);
+    if (t) positions.push(t.pos);
+  }
+  return positions.length ? Math.min(...positions) : null;
+}
+
+/**
+ * Control points across the layout, in running order: modules in spine order,
+ * points within a module by position (doc order when unpositioned). Layout-level
+ * points interleave by their anchored offset.
+ */
 export function layoutControlPoints(
   modules: CpModuleInput[],
+  layoutCps: LayoutCp[] = [],
 ): ControlPointRef[] {
   const ordered = [...modules].sort(
     (a, b) => (a.positionIndex ?? 0) - (b.positionIndex ?? 0),
@@ -37,16 +79,35 @@ export function layoutControlPoints(
     const moduleId = m.moduleId;
     if (!moduleId) continue;
     const doc = asModuleSchematic(m.schematic);
+    const refs: ControlPointRef[] = [];
+    let docIndex = 0;
     for (const cp of doc?.controlPoints ?? []) {
       if (!cp.id) continue;
-      out.push({
+      refs.push({
         key: `${moduleId}:${cp.id}`,
         moduleId,
         moduleName: m.moduleName ?? null,
         cpId: cp.id,
         name: cp.name?.trim() || cp.id,
+        source: "module",
+        posInches: cpPosInches(cp, doc!) ?? docIndex,
+      });
+      docIndex += 1;
+    }
+    for (const lc of layoutCps) {
+      if (lc.anchor !== (m.id ?? "")) continue;
+      refs.push({
+        key: `layout:${lc.id}`,
+        moduleId,
+        moduleName: m.moduleName ?? null,
+        cpId: lc.id,
+        name: lc.name?.trim() || lc.id,
+        source: "layout",
+        posInches: lc.offsetInches,
       });
     }
+    refs.sort((a, b) => (a.posInches ?? 0) - (b.posInches ?? 0));
+    out.push(...refs);
   }
   return out;
 }
@@ -81,6 +142,24 @@ export function deriveSections(
         name: `${a.name} – ${b.name}`,
       });
     }
+  }
+  return out;
+}
+
+/** Parse a jsonb value into layout-level control points, tolerating junk. */
+export function asLayoutCps(x: unknown): LayoutCp[] {
+  if (!Array.isArray(x)) return [];
+  const out: LayoutCp[] = [];
+  for (const v of x) {
+    if (!v || typeof v !== "object") continue;
+    const c = v as Record<string, unknown>;
+    if (typeof c.id !== "string" || typeof c.anchor !== "string") continue;
+    out.push({
+      id: c.id,
+      name: typeof c.name === "string" ? c.name : c.id,
+      anchor: c.anchor,
+      offsetInches: typeof c.offsetInches === "number" ? c.offsetInches : 0,
+    });
   }
   return out;
 }
