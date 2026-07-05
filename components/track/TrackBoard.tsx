@@ -16,9 +16,15 @@ import { apiSend } from "@/lib/client/api";
 import { useTrackBoard } from "@/lib/client/useTrackBoard";
 import {
   deriveSectionAspect,
+  cpSignalAspects,
   ASPECT_META,
   ASPECT_ORDER,
 } from "@/lib/track/signals";
+import {
+  layoutControlPoints,
+  asLayoutCps,
+} from "@/lib/track/layoutControlPoints";
+import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
 import type { TrainRow } from "@/lib/client/types";
 
 type Direction = "AtoB" | "BtoA";
@@ -113,8 +119,35 @@ export function TrackBoard({
       .map((o) => o.blockId),
   );
 
+  // Live CTC panel (#151): control-point signal aspects from allocations.
+  const allSections = layout.districts.flatMap((d) => d.sections);
+  const cps = layout.modules?.length
+    ? layoutControlPoints(layout.modules, asLayoutCps(layout.layoutControlPoints))
+    : [];
+  const sectionsByDerivedKey = new Map(
+    allSections
+      .filter((s) => s.derivedKey != null)
+      .map((s) => [s.derivedKey!, s.id]),
+  );
+  const occupiedSectionIds = new Set(
+    allSections
+      .filter((s) => s.blocks.some((b) => occupiedBlocks.has(b.id)))
+      .map((s) => s.id),
+  );
+  const aspects = cpSignalAspects(
+    cps,
+    sectionsByDerivedKey,
+    allocations,
+    occupiedSectionIds,
+  );
+
   return (
     <div className="space-y-4">
+      {/* Live operations panel — signals show cleared routes (#151). */}
+      {layout.modules && layout.modules.length > 0 && (
+        <OperationsSchematic modules={layout.modules} signalAspects={aspects} />
+      )}
+
       {/* Signal legend */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
         <span className="font-medium text-slate-500">Signals:</span>

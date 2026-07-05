@@ -19,6 +19,8 @@ export interface SectionNode {
   id: string;
   name: string;
   track: string | null;
+  /** Non-null when materialized from control points (#146). */
+  derivedKey: string | null;
   blocks: BlockNode[];
 }
 export interface TurnoutNode {
@@ -32,10 +34,29 @@ export interface DistrictNode {
   turnouts: TurnoutNode[];
 }
 export type TurnoutPosition = "normal" | "reversed";
+export interface LayoutModuleNode {
+  id: string;
+  moduleId: string;
+  moduleName: string | null;
+  positionIndex: number;
+  stagingEnd: "A" | "B" | null;
+  lengthTotalInches: number | null;
+  mainlineLengthInches: number | null;
+  hasMss: boolean | null;
+  geometryType: string | null;
+  geometryDegrees: number | null;
+  flipped: boolean;
+  endplates: import("@/lib/track/endplates").EndplateInfo[] | null;
+  schematic: unknown;
+}
 export interface LayoutTree {
   id: string;
   name: string;
   districts: DistrictNode[];
+  /** Module placements in spine order — for the live operations panel (#151). */
+  modules?: LayoutModuleNode[];
+  controlPointDistricts?: Record<string, string> | null;
+  layoutControlPoints?: unknown;
 }
 export interface OccupancyRow {
   blockId: string;
