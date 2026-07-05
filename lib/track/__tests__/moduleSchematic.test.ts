@@ -60,8 +60,9 @@ describe("moduleFeatures", () => {
     expect(f.signals[0]).toMatchObject({ posFrac: 0.1, lane: 0, facing: "AtoB" });
   });
 
-  it("holds features off the endplates on a very long module (inset clamp)", () => {
-    // One Mile: 432\" module, switch 24\" from the West end would be at ~5.5%.
+  it("positions features by their true proportion, distinct near an end", () => {
+    // One Mile: 432\" module. Two control-point signals 6\" and 14\" from the West
+    // end must render at DIFFERENT spots (not bunched at an inset boundary).
     const oneMile: ModuleSchematicDoc = {
       version: 1,
       lengthInches: 432,
@@ -71,19 +72,28 @@ describe("moduleFeatures", () => {
       ],
       tracks: [
         { id: "main", role: "main", lane: 0, from: "A", to: "B" },
-        { id: "sid", role: "siding", lane: 1, from: "swW", to: "swE", fromPos: 24, toPos: 408 },
+        { id: "sid", role: "siding", lane: 1, from: "swW", to: "swE", fromPos: 12, toPos: 420 },
       ],
       turnouts: [
-        { id: "swW", pos: 24, onTrack: "main", divergeTrack: "sid", kind: "right" },
-        { id: "swE", pos: 408, onTrack: "main", divergeTrack: "sid", kind: "left" },
+        { id: "swW", pos: 12, onTrack: "main", divergeTrack: "sid", kind: "right" },
+      ],
+      controlPoints: [
+        {
+          id: "cp1",
+          name: "West",
+          turnouts: ["swW"],
+          signals: [
+            { id: "a", pos: 6, track: "main", facing: "AtoB" },
+            { id: "b", pos: 14, track: "sid", facing: "BtoA" },
+          ],
+        },
       ],
     };
     const feat = moduleFeatures(oneMile);
-    // 24/432 = 0.056 → clamped up to the 0.08 inset (off the endplate).
-    expect(feat.turnouts[0].posFrac).toBeCloseTo(0.08);
-    expect(feat.turnouts[1].posFrac).toBeCloseTo(0.92);
-    expect(feat.extraTracks[0].fromFrac).toBeCloseTo(0.08);
-    expect(feat.extraTracks[0].toFrac).toBeCloseTo(0.92);
+    expect(feat.turnouts[0].posFrac).toBeCloseTo(12 / 432);
+    expect(feat.signals[0].posFrac).toBeCloseTo(6 / 432);
+    expect(feat.signals[1].posFrac).toBeCloseTo(14 / 432);
+    expect(feat.signals[0].posFrac).not.toBeCloseTo(feat.signals[1].posFrac);
   });
 
   it("flattens control-point groups into signals (both directions per CP)", () => {
