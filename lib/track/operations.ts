@@ -14,6 +14,7 @@
  * is unknown so the line stays continuous. The SVG component just draws it.
  */
 import { inConfig, outConfig, type ModuleEndplates } from "./endplates";
+import { asModuleSchematic } from "./moduleSchematic";
 
 export interface OpsModuleInput extends ModuleEndplates {
   stagingEnd?: "A" | "B" | null;
@@ -59,12 +60,18 @@ export function buildOperationsSchematic(
   // First pass: raw left/right counts (may be null) and cell widths.
   let x = 0;
   const cells: OpsCell[] = modules.map((m) => {
+    // When a module has an authored schematic, its features are positioned in
+    // the schematic's own coordinate space (its lengthInches), so the cell must
+    // be that wide or the overlaid sidings/turnouts/signals won't line up.
+    const schematicLen = asModuleSchematic(m.schematic)?.lengthInches;
     const len =
-      (m.mainlineLengthInches && m.mainlineLengthInches > 0
-        ? m.mainlineLengthInches
-        : m.lengthTotalInches && m.lengthTotalInches > 0
-          ? m.lengthTotalInches
-          : DEFAULT_CELL_INCHES) || DEFAULT_CELL_INCHES;
+      (schematicLen && schematicLen > 0
+        ? schematicLen
+        : m.mainlineLengthInches && m.mainlineLengthInches > 0
+          ? m.mainlineLengthInches
+          : m.lengthTotalInches && m.lengthTotalInches > 0
+            ? m.lengthTotalInches
+            : DEFAULT_CELL_INCHES) || DEFAULT_CELL_INCHES;
     const width = Math.max(len, MIN_CELL_INCHES);
     const cell: OpsCell = {
       input: m,
