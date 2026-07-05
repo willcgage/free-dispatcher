@@ -60,6 +60,10 @@ export const layouts = pgTable("layouts", {
   // assigning each imported control point to a dispatcher territory (#138).
   // Sections derive as the track between adjacent control points in a district.
   controlPointDistricts: jsonb("control_point_districts"),
+  // Layout-level control points (#144): [{id, name, anchor, offsetInches}],
+  // anchored to a layout_modules row at an offset from its A end. They
+  // interleave with the imported ones and feed the same section derivation.
+  layoutControlPoints: jsonb("layout_control_points"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -228,6 +228,17 @@ class TrackModel {
       .where(eq(layouts.id, layoutId));
   }
 
+  /** Replace the layout-level control points (#144). */
+  async setLayoutControlPoints(
+    layoutId: string,
+    cps: { id: string; name: string; anchor: string; offsetInches: number }[],
+  ): Promise<void> {
+    await db
+      .update(layouts)
+      .set({ layoutControlPoints: cps })
+      .where(eq(layouts.id, layoutId));
+  }
+
   /** Full District→Section→Block tree for a layout, or null if missing. */
   async getLayout(layoutId: string): Promise<LayoutTree | null> {
     const [layout] = await db
