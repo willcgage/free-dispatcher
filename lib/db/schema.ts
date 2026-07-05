@@ -262,6 +262,10 @@ export const repoModules = pgTable("repo_modules", {
   schematic: jsonb("schematic"),
   upstreamUpdatedAt: timestamp("upstream_updated_at", { withTimezone: true }),
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  // Tombstone (#155): set when a sync no longer finds this record in the
+  // Module Repository; cleared if it reappears. Retired modules are hidden
+  // from the catalog but existing layout placements keep their data.
+  removedFromRepoAt: timestamp("removed_from_repo_at", { withTimezone: true }),
 });
 
 // ---- staging_tracks ------------------------------------------------------

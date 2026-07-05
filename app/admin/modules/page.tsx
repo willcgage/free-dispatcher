@@ -42,7 +42,8 @@ export default function AdminModules() {
     setSyncMsg(null);
     try {
       const result = await apiSend<
-        { synced: number; lastSyncedAt: string } | { error: string; message: string }
+        | { synced: number; removed?: number; lastSyncedAt: string }
+        | { error: string; message: string }
       >("POST", "/api/modules/sync", undefined);
 
       if ("error" in result) {
@@ -56,7 +57,12 @@ export default function AdminModules() {
           last_synced_at: result.lastSyncedAt,
           module_count: fresh.modules.length,
         });
-        setSyncMsg({ ok: true, text: `Synced ${result.synced} module(s)` });
+        setSyncMsg({
+          ok: true,
+          text: `Synced ${result.synced} module(s)${
+            result.removed ? ` · ${result.removed} removed from the repo` : ""
+          }`,
+        });
       }
     } catch (err) {
       setSyncMsg({

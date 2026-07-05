@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { appSettings, repoModules } from "@/lib/db/schema";
 import { config } from "@/lib/config";
@@ -31,6 +31,8 @@ async function writeSyncMeta(meta: SyncMeta): Promise<void> {
 
 export interface SyncResult {
   synced: number;
+  /** Modules newly tombstoned this sync — gone from the repo (#155). */
+  removed: number;
   lastSyncedAt: string;
 }
 
@@ -150,12 +152,32 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
       schematic: (m.schematic ?? null) as object | null,
       upstreamUpdatedAt: m.updated_at ? new Date(m.updated_at) : null,
       syncedAt: new Date(),
+      // A record the repo returns is present — clear any tombstone (#155).
+      removedFromRepoAt: null,
     };
 
     await db
       .insert(repoModules)
       .values({ recordNumber: m.record_number, ...values })
       .onConflictDoUpdate({ target: repoModules.recordNumber, set: values });
+  }
+
+  // Tombstone local records the repo no longer returns (#155). Guarded: an
+  // empty catalog is treated as an upstream problem, not a mass removal.
+  let removed = 0;
+  if (modules.length > 0) {
+    const fetched = modules.map((m) => m.record_number);
+    const retired = await db
+      .update(repoModules)
+      .set({ removedFromRepoAt: new Date() })
+      .where(
+        and(
+          isNull(repoModules.removedFromRepoAt),
+          notInArray(repoModules.recordNumber, fetched),
+        ),
+      )
+      .returning({ recordNumber: repoModules.recordNumber });
+    removed = retired.length;
   }
 
   const [{ count }] = await db
@@ -165,7 +187,7 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
   const now = new Date().toISOString();
   await writeSyncMeta({ last_synced_at: now, module_count: Number(count) });
 
-  return { synced: modules.length, lastSyncedAt: now };
+  return { synced: modules.length, removed, lastSyncedAt: now };
 }
 
 export async function getSyncMeta(): Promise<SyncMeta | null> {
