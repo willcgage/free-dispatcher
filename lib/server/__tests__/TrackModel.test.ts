@@ -47,8 +47,8 @@ describe("buildLayoutTree (#80)", () => {
         { id: "d1", layoutId: "L", name: "North", position: 0, createdAt: new Date() },
       ],
       [
-        { id: "s1", districtId: "d1", name: "Sec B", track: null, position: 1, createdAt: new Date() },
-        { id: "s0", districtId: "d1", name: "Sec A", track: null, position: 0, createdAt: new Date() },
+        { id: "s1", districtId: "d1", name: "Sec B", track: null, position: 1, derivedKey: null, createdAt: new Date() },
+        { id: "s0", districtId: "d1", name: "Sec A", track: null, position: 0, derivedKey: null, createdAt: new Date() },
       ],
       [
         { id: "b1", sectionId: "s0", name: "Blk 2", position: 1, moduleRecordNumber: null, createdAt: new Date() },

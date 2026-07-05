@@ -3,8 +3,12 @@ import {
   layoutControlPoints,
   deriveSections,
   asLayoutCps,
+  planSectionSync,
+  DERIVED_POSITION_BASE,
   type CpModuleInput,
   type LayoutCp,
+  type DerivedSection,
+  type ExistingSectionRow,
 } from "../layoutControlPoints";
 
 const mod = (
@@ -145,6 +149,64 @@ describe("deriveSections", () => {
       "FMN-0001:b": "d1",
     });
     expect(sections.map((s) => s.name)).toEqual(["A – Mid", "Mid – B"]);
+  });
+});
+
+describe("planSectionSync (#146)", () => {
+  const derived: DerivedSection[] = [
+    { districtId: "d1", fromKey: "M:a", toKey: "M:b", name: "A – B" },
+    { districtId: "d1", fromKey: "M:b", toKey: "M:c", name: "B – C" },
+  ];
+  const valid = new Set(["d1"]);
+  const row = (
+    id: string,
+    derivedKey: string | null,
+    over: Partial<ExistingSectionRow> = {},
+  ): ExistingSectionRow => ({
+    id,
+    districtId: "d1",
+    name: "A – B",
+    position: DERIVED_POSITION_BASE,
+    derivedKey,
+    ...over,
+  });
+
+  it("inserts everything on first sync, positioned after hand-authored rows", () => {
+    const plan = planSectionSync([row("hand", null)], derived, valid);
+    expect(plan.remove).toEqual([]);
+    expect(plan.update).toEqual([]);
+    expect(plan.insert).toEqual([
+      { districtId: "d1", name: "A – B", position: DERIVED_POSITION_BASE, derivedKey: "M:a→M:b" },
+      { districtId: "d1", name: "B – C", position: DERIVED_POSITION_BASE + 1, derivedKey: "M:b→M:c" },
+    ]);
+  });
+
+  it("is a no-op when rows already match, and never touches hand-authored rows", () => {
+    const existing = [
+      row("hand", null, { name: "Yard lead", position: 0 }),
+      row("x1", "M:a→M:b"),
+      row("x2", "M:b→M:c", { name: "B – C", position: DERIVED_POSITION_BASE + 1 }),
+    ];
+    const plan = planSectionSync(existing, derived, valid);
+    expect(plan).toEqual({ insert: [], update: [], remove: [] });
+  });
+
+  it("renames/moves changed rows and removes stale ones", () => {
+    const existing = [
+      row("x1", "M:a→M:b", { name: "Old name" }), // renamed CP
+      row("gone", "M:c→M:d"), // no longer derived
+    ];
+    const plan = planSectionSync(existing, derived, valid);
+    expect(plan.update).toEqual([
+      { id: "x1", districtId: "d1", name: "A – B", position: DERIVED_POSITION_BASE },
+    ]);
+    expect(plan.remove).toEqual(["gone"]);
+    expect(plan.insert.map((i) => i.derivedKey)).toEqual(["M:b→M:c"]);
+  });
+
+  it("skips sections for districts that no longer exist", () => {
+    const plan = planSectionSync([], derived, new Set<string>());
+    expect(plan.insert).toEqual([]);
   });
 });
 

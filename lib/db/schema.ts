@@ -318,6 +318,10 @@ export const sections = pgTable(
     name: text("name").notNull(),
     track: text("track"),
     position: integer("position").notNull().default(0),
+    // Non-null marks a section materialized from control points (#146):
+    // "<fromCpKey>→<toCpKey>". Managed by syncDerivedSections — inserted,
+    // renamed, and removed as assignments change; hand-authored rows are null.
+    derivedKey: text("derived_key"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

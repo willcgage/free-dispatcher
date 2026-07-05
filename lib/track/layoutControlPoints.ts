@@ -146,6 +146,78 @@ export function deriveSections(
   return out;
 }
 
+// ---- Materializing derived sections as rows (#146) -------------------------
+
+/** The identity a derived section row carries in sections.derived_key. */
+export function derivedSectionKey(s: DerivedSection): string {
+  return `${s.fromKey}→${s.toKey}`;
+}
+
+/** Derived rows sort after any hand-authored sections in a district. */
+export const DERIVED_POSITION_BASE = 1000;
+
+export interface ExistingSectionRow {
+  id: string;
+  districtId: string;
+  name: string;
+  position: number;
+  derivedKey: string | null;
+}
+
+export interface SectionSyncPlan {
+  insert: { districtId: string; name: string; position: number; derivedKey: string }[];
+  update: { id: string; districtId: string; name: string; position: number }[];
+  remove: string[]; // section row ids
+}
+
+/**
+ * Diff the currently materialized derived sections against what the control
+ * points now derive. Hand-authored rows (derivedKey null) are never touched;
+ * derived rows are inserted, renamed/moved, or removed to match. Pure so it can
+ * be unit-tested; the TrackModel applies the plan transactionally.
+ */
+export function planSectionSync(
+  existing: ExistingSectionRow[],
+  derived: DerivedSection[],
+  validDistrictIds: Set<string>,
+): SectionSyncPlan {
+  const desired = new Map<
+    string,
+    { districtId: string; name: string; position: number }
+  >();
+  derived.forEach((s, i) => {
+    if (!validDistrictIds.has(s.districtId)) return;
+    desired.set(derivedSectionKey(s), {
+      districtId: s.districtId,
+      name: s.name,
+      position: DERIVED_POSITION_BASE + i,
+    });
+  });
+
+  const plan: SectionSyncPlan = { insert: [], update: [], remove: [] };
+  const seen = new Set<string>();
+  for (const row of existing) {
+    if (row.derivedKey == null) continue; // hand-authored — leave alone
+    const want = desired.get(row.derivedKey);
+    if (!want || seen.has(row.derivedKey)) {
+      plan.remove.push(row.id);
+      continue;
+    }
+    seen.add(row.derivedKey);
+    if (
+      want.districtId !== row.districtId ||
+      want.name !== row.name ||
+      want.position !== row.position
+    ) {
+      plan.update.push({ id: row.id, ...want });
+    }
+  }
+  for (const [key, want] of desired) {
+    if (!seen.has(key)) plan.insert.push({ ...want, derivedKey: key });
+  }
+  return plan;
+}
+
 /** Parse a jsonb value into layout-level control points, tolerating junk. */
 export function asLayoutCps(x: unknown): LayoutCp[] {
   if (!Array.isArray(x)) return [];

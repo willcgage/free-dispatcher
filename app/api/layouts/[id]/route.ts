@@ -77,5 +77,7 @@ export async function PATCH(
     );
     await trackModel.setLayoutControlPoints(id, cps);
   }
+  // Re-materialize the sections the control points derive (#146).
+  await trackModel.syncDerivedSections(id);
   return NextResponse.json({ ok: true });
 }
