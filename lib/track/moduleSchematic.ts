@@ -48,6 +48,8 @@ export interface SchematicSignal {
   kind?: string;
   name?: string | null;
   aspects?: string[];
+  /** Which side of the track the signal sits on (#122). */
+  side?: string; // above | below
   /** Turnout this control point governs; absent = standalone block signal (#122). */
   turnout?: string;
 }
@@ -109,6 +111,7 @@ export interface DrawSignal {
   posFrac: number;
   lane: number;
   facing: string;
+  side: string; // above | below
 }
 export interface ModuleFeatures {
   /** Non-main tracks (sidings/spurs/yard/crossover). */
@@ -183,6 +186,7 @@ export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
     posFrac: clampFrac(s.pos),
     lane: s.track ? (trackLane.get(s.track) ?? 0) : 0,
     facing: s.facing ?? "AtoB",
+    side: s.side === "below" ? "below" : "above",
   });
   // Signals come from control-point groups; fall back to pre-grouping flat
   // signals for modules authored before the model changed.
