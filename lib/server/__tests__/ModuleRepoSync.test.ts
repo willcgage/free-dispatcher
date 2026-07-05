@@ -35,6 +35,12 @@ vi.mock("@/lib/db/client", () => ({
     insert: vi.fn(() => ({
       values: vi.fn(() => ({ onConflictDoUpdate: mockOnConflict })),
     })),
+    // Tombstone pass (#155): update … set … where … returning
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]) })),
+      })),
+    })),
     delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
     $count: vi.fn(() => ({ type: "sql_count_expression" })),
   },

@@ -90,6 +90,8 @@ export interface LayoutModule {
   flipped: boolean;
   endplates: unknown;
   schematic: unknown;
+  /** Set when the module was removed from the Module Repository (#155). */
+  removedFromRepoAt: Date | null;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -363,6 +365,7 @@ class TrackModel {
         geometryDegrees: repoModules.geometryDegrees,
         endplates: repoModules.endplates,
         schematic: repoModules.schematic,
+        removedFromRepoAt: repoModules.removedFromRepoAt,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))

@@ -68,6 +68,8 @@ interface LayoutModuleNode {
   flipped: boolean;
   endplates: { label?: string | null; track_config?: string | null }[] | null;
   schematic: unknown;
+  /** Set when the module was removed from the Module Repository (#155). */
+  removedFromRepoAt: string | null;
 }
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
@@ -600,6 +602,14 @@ export default function AdminLayouts() {
                                     </span>
                                     <span className="min-w-0 flex-1 truncate text-slate-200">
                                       {m.moduleName ?? m.moduleId}
+                                      {m.removedFromRepoAt && (
+                                        <span
+                                          title="This module was removed from the Module Repository. The layout keeps its data, but it can't be re-added elsewhere."
+                                          className="ml-1.5 rounded bg-amber-900/60 px-1 py-px text-[10px] uppercase text-amber-400"
+                                        >
+                                          removed from repo
+                                        </span>
+                                      )}
                                     </span>
                                     <span className="shrink-0 font-mono text-xs text-slate-500">
                                       {m.moduleId}
