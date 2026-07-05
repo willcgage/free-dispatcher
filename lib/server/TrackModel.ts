@@ -12,7 +12,7 @@
  * is caught at the DB level by a partial unique index (one active allocation per
  * section per session); an allocation route must also stay within one District.
  */
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   layouts,
@@ -225,9 +225,32 @@ class TrackModel {
     return this.getLayout(layoutId) as Promise<LayoutTree>;
   }
 
-  /** All layouts, newest first. */
-  async listLayouts(): Promise<LayoutRow[]> {
-    return db.select().from(layouts);
+  /**
+   * All layouts, each with a count of at-risk placements — modules that were
+   * removed from the repo or marked inactive/archived by their owner (#160).
+   * Surfaced on the layout list so risk is visible without expanding.
+   */
+  async listLayouts(): Promise<(LayoutRow & { atRiskModules: number })[]> {
+    const rows = await db.select().from(layouts);
+    const risky = await db
+      .select({
+        layoutId: moduleLayouts.layoutId,
+        n: sql<number>`count(*)`,
+      })
+      .from(moduleLayouts)
+      .innerJoin(
+        repoModules,
+        eq(moduleLayouts.moduleId, repoModules.recordNumber),
+      )
+      .where(
+        or(
+          isNotNull(repoModules.removedFromRepoAt),
+          sql`lower(coalesce(${repoModules.status}, 'active')) IN ('inactive', 'archived')`,
+        ),
+      )
+      .groupBy(moduleLayouts.layoutId);
+    const byLayout = new Map(risky.map((r) => [r.layoutId, Number(r.n)]));
+    return rows.map((l) => ({ ...l, atRiskModules: byLayout.get(l.id) ?? 0 }));
   }
 
   /** Assign the layout's imported control points to districts (#138). */
