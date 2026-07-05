@@ -63,7 +63,8 @@ export function buildOperationsSchematic(
     // When a module has an authored schematic, its features are positioned in
     // the schematic's own coordinate space (its lengthInches), so the cell must
     // be that wide or the overlaid sidings/turnouts/signals won't line up.
-    const schematicLen = asModuleSchematic(m.schematic)?.lengthInches;
+    const doc = asModuleSchematic(m.schematic);
+    const schematicLen = doc?.lengthInches;
     const len =
       (schematicLen && schematicLen > 0
         ? schematicLen
@@ -73,12 +74,19 @@ export function buildOperationsSchematic(
             ? m.lengthTotalInches
             : DEFAULT_CELL_INCHES) || DEFAULT_CELL_INCHES;
     const width = Math.max(len, MIN_CELL_INCHES);
+    // The authored schematic also declares single/double; trust it when the
+    // physical endplate track_config is missing (modulerepo#14).
+    const schemTracks = doc
+      ? doc.endplates.some((e) => e.tracks?.some((t) => t.config === "double"))
+        ? 2
+        : 1
+      : null;
     const cell: OpsCell = {
       input: m,
       x,
       width,
-      leftTracks: trackCount(inConfig(m)) ?? 0,
-      rightTracks: trackCount(outConfig(m)) ?? 0,
+      leftTracks: trackCount(inConfig(m)) ?? schemTracks ?? 0,
+      rightTracks: trackCount(outConfig(m)) ?? schemTracks ?? 0,
     };
     x += width;
     return cell;
