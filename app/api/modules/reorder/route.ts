@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { moduleLayouts } from "@/lib/db/schema";
+import { trackModel } from "@/lib/server/TrackModel";
 import { requireRole } from "@/lib/server/guard";
 
 export const dynamic = "force-dynamic";
@@ -40,5 +41,7 @@ export async function POST(req: Request) {
         );
     }
   });
+  // Spine order changed → re-materialize control-point sections (#146).
+  await trackModel.syncDerivedSections(layoutId);
   return NextResponse.json({ ok: true });
 }

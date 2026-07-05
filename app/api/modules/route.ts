@@ -10,6 +10,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { moduleLayouts, repoModules } from "@/lib/db/schema";
 import { sessionManager } from "@/lib/server/SessionManager";
+import { trackModel } from "@/lib/server/TrackModel";
 import { requireRole } from "@/lib/server/guard";
 import type { StagingEnd } from "@/lib/db/schema";
 
@@ -89,5 +90,7 @@ export async function POST(req: Request) {
       })),
     )
     .returning();
+  // The module list changed → re-materialize control-point sections (#146).
+  await trackModel.syncDerivedSections(layoutId);
   return NextResponse.json({ modules: rows }, { status: 201 });
 }

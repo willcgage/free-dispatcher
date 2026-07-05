@@ -30,6 +30,12 @@ import {
   type StagingEnd,
 } from "@/lib/db/schema";
 import { sessionManager } from "./SessionManager";
+import {
+  layoutControlPoints,
+  deriveSections,
+  asLayoutCps,
+  planSectionSync,
+} from "@/lib/track/layoutControlPoints";
 
 // ---- Authoring input/output shapes ---------------------------------------
 
@@ -237,6 +243,56 @@ class TrackModel {
       .update(layouts)
       .set({ layoutControlPoints: cps })
       .where(eq(layouts.id, layoutId));
+  }
+
+  /**
+   * Materialize the sections derived from control points as real rows (#146),
+   * so allocations/occupancy/dispatch operate on them. Reconciles by
+   * sections.derived_key: inserts new, renames/moves changed, removes stale;
+   * hand-authored rows are never touched. Call after anything that changes the
+   * derivation — CP assignments, layout-level CPs, or the module list.
+   */
+  async syncDerivedSections(layoutId: string): Promise<void> {
+    const tree = await this.getLayout(layoutId);
+    if (!tree) return;
+    const cps = layoutControlPoints(
+      tree.modules,
+      asLayoutCps(tree.layoutControlPoints),
+    );
+    const assignments =
+      tree.controlPointDistricts && typeof tree.controlPointDistricts === "object"
+        ? (tree.controlPointDistricts as Record<string, string>)
+        : {};
+    const derived = deriveSections(cps, assignments);
+    const existing = tree.districts.flatMap((d) =>
+      d.sections.map((s) => ({
+        id: s.id,
+        districtId: s.districtId,
+        name: s.name,
+        position: s.position,
+        derivedKey: s.derivedKey,
+      })),
+    );
+    const plan = planSectionSync(
+      existing,
+      derived,
+      new Set(tree.districts.map((d) => d.id)),
+    );
+    if (!plan.insert.length && !plan.update.length && !plan.remove.length) return;
+    await db.transaction(async (tx) => {
+      if (plan.remove.length) {
+        await tx.delete(sections).where(inArray(sections.id, plan.remove));
+      }
+      for (const u of plan.update) {
+        await tx
+          .update(sections)
+          .set({ districtId: u.districtId, name: u.name, position: u.position })
+          .where(eq(sections.id, u.id));
+      }
+      if (plan.insert.length) {
+        await tx.insert(sections).values(plan.insert);
+      }
+    });
   }
 
   /** Full District→Section→Block tree for a layout, or null if missing. */

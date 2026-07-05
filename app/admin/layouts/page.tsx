@@ -41,6 +41,7 @@ interface SectionNode {
   id: string;
   name: string;
   track: string | null;
+  derivedKey: string | null;
   blocks: BlockNode[];
 }
 interface TurnoutNode {
@@ -1061,9 +1062,10 @@ export default function AdminLayouts() {
                                       {d.sections.map((s, si) => (
                                         <li
                                           key={s.id}
-                                          draggable={!busy}
+                                          draggable={!busy && !s.derivedKey}
                                           onDragStart={(e) => {
                                             e.stopPropagation();
+                                            if (s.derivedKey) return;
                                             setDragSection({
                                               layoutId: l.id,
                                               sectionId: s.id,
@@ -1095,12 +1097,26 @@ export default function AdminLayouts() {
                                               : "hover:bg-slate-800/40"
                                           }`}
                                         >
-                                          <span className="cursor-grab select-none text-slate-600">
+                                          <span
+                                            className={`select-none text-slate-600 ${
+                                              s.derivedKey
+                                                ? "invisible"
+                                                : "cursor-grab"
+                                            }`}
+                                          >
                                             ⠿
                                           </span>
                                           <span className="text-slate-300">
                                             {s.name}
                                           </span>
+                                          {s.derivedKey && (
+                                            <span
+                                              title="Materialized from control points — its district follows the assignment"
+                                              className="rounded bg-slate-700 px-1 py-px text-[10px] uppercase text-slate-400"
+                                            >
+                                              derived
+                                            </span>
+                                          )}
                                           {s.track && (
                                             <span className="text-xs text-slate-500">
                                               ({s.track})

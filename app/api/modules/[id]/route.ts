@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { moduleLayouts } from "@/lib/db/schema";
+import { trackModel } from "@/lib/server/TrackModel";
 import { requireRole } from "@/lib/server/guard";
 import type { StagingEnd } from "@/lib/db/schema";
 
@@ -63,5 +64,7 @@ export async function DELETE(
   if (deleted.length === 0) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  // The module list changed → re-materialize control-point sections (#146).
+  await trackModel.syncDerivedSections(deleted[0].layoutId);
   return NextResponse.json({ ok: true });
 }
