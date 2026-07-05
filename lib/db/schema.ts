@@ -56,6 +56,10 @@ export const layouts = pgTable("layouts", {
   // multi-standard). Its module catalog is filtered to this value (#123).
   // Stored as the standard's `value` slug (e.g. "freemon", "ttrak").
   standard: text("standard").notNull().default("freemon"),
+  // Map of control-point key ("<moduleRecordNumber>:<cpId>") → district id,
+  // assigning each imported control point to a dispatcher territory (#138).
+  // Sections derive as the track between adjacent control points in a district.
+  controlPointDistricts: jsonb("control_point_districts"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

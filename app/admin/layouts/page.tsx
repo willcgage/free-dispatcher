@@ -14,6 +14,10 @@ import {
   MODULE_DRAG_MIME,
 } from "@/components/layout/LayoutSchematic";
 import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
+import {
+  layoutControlPoints,
+  deriveSections,
+} from "@/lib/track/layoutControlPoints";
 import type { CatalogModule } from "@/lib/client/types";
 import type { StagingEnd } from "@/lib/db/schema";
 
@@ -23,6 +27,7 @@ interface LayoutRow {
   name: string;
   description: string | null;
   standard: string;
+  controlPointDistricts: Record<string, string> | null;
   createdAt: string;
 }
 interface BlockNode {
@@ -337,6 +342,29 @@ export default function AdminLayouts() {
       await Promise.all([reloadTree(layoutId), load()]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "reorder failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Assign an imported control point to a district (#138). */
+  async function assignControlPoint(
+    layoutId: string,
+    current: Record<string, string> | null,
+    key: string,
+    districtId: string,
+  ) {
+    const map = { ...(current ?? {}) };
+    if (districtId) map[key] = districtId;
+    else delete map[key];
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/layouts/${layoutId}`, {
+        controlPointDistricts: map,
+      });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "assign failed");
     } finally {
       setBusy(false);
     }
@@ -782,6 +810,87 @@ export default function AdminLayouts() {
                               districts={tree.districts}
                               onDropModule={(rec) => dropAddModule(l.id, rec)}
                             />
+                          </div>
+
+                          {/* Control Points → Districts (#138) */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Control Points → Districts
+                            </div>
+                            {(() => {
+                              const cps = layoutControlPoints(tree.modules);
+                              if (cps.length === 0)
+                                return (
+                                  <p className="text-xs text-slate-600">
+                                    No control points yet — author them in the
+                                    modules&rsquo; schematics (Module Repository).
+                                  </p>
+                                );
+                              if (tree.districts.length === 0)
+                                return (
+                                  <p className="text-xs text-slate-600">
+                                    Add districts (below) to assign control points.
+                                  </p>
+                                );
+                              const assign = tree.controlPointDistricts ?? {};
+                              const sections = deriveSections(cps, assign);
+                              return (
+                                <>
+                                  <ul className="space-y-1">
+                                    {cps.map((cp) => (
+                                      <li key={cp.key} className="flex items-center gap-2">
+                                        <span className="min-w-0 flex-1 truncate text-slate-200">
+                                          {cp.name}
+                                        </span>
+                                        <span className="shrink-0 font-mono text-xs text-slate-500">
+                                          {cp.moduleId}
+                                        </span>
+                                        <select
+                                          value={assign[cp.key] ?? ""}
+                                          disabled={busy}
+                                          onChange={(e) =>
+                                            assignControlPoint(
+                                              l.id,
+                                              tree.controlPointDistricts,
+                                              cp.key,
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="shrink-0 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                        >
+                                          <option value="">— district</option>
+                                          {tree.districts.map((d) => (
+                                            <option key={d.id} value={d.id}>
+                                              {d.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                  {sections.length > 0 && (
+                                    <p className="mt-2 text-xs text-slate-400">
+                                      <span className="font-semibold text-slate-300">
+                                        Sections
+                                      </span>{" "}
+                                      (derived between adjacent control points):{" "}
+                                      {sections.map((s, i) => {
+                                        const d = tree.districts.find(
+                                          (x) => x.id === s.districtId,
+                                        );
+                                        return (
+                                          <span key={`${s.fromKey}-${s.toKey}`}>
+                                            {i > 0 && " · "}
+                                            {s.name}
+                                            {d ? ` (${d.name})` : ""}
+                                          </span>
+                                        );
+                                      })}
+                                    </p>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
 
                           {/* Track */}

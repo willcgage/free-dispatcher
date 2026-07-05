@@ -1,0 +1,1 @@
+ALTER TABLE "layouts" ADD COLUMN "control_point_districts" jsonb;
