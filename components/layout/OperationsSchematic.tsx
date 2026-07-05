@@ -35,8 +35,6 @@ const SECTION_LABEL_Y = 6; // section name (top band)
 const SECTION_BRACKET_Y = 9; // section bracket line
 const Y1 = 32; // Main 2 (upper) — headroom above for siding/spur lanes
 const Y0 = Y1 + LANE_GAP; // Main 1 (lower, continuous)
-const LABEL_Y = Y0 + 10;
-const HEIGHT = LABEL_Y + 6;
 const STROKE = 2.4;
 
 /** Lane index → y. Lane 0 is Main 1; higher lanes stack upward. */
@@ -73,6 +71,17 @@ export function OperationsSchematic({
   );
 
   const total = schem.totalInches;
+  // Tracks below Main 1 (negative lanes — e.g. a team track outside a double
+  // main, modulerepo#14) push the label band and canvas bottom down.
+  const minLane = Math.min(
+    0,
+    ...schem.cells.map((c) => {
+      const doc = asModuleSchematic(c.input.schematic);
+      return doc ? moduleFeatures(doc).laneMin : 0;
+    }),
+  );
+  const LABEL_Y = Y0 - minLane * LANE_GAP + 10;
+  const HEIGHT = LABEL_Y + 6;
   const viewBox = `${-PAD_X} 0 ${total + 2 * PAD_X} ${HEIGHT}`;
   const feet = Math.round((total / 12) * 10) / 10;
 
@@ -255,7 +264,9 @@ export function OperationsSchematic({
                 const x1 = px(t.fromFrac);
                 const x2 = px(t.toFrac);
                 const yl = laneY(t.lane);
-                const ym = laneY(0);
+                // Diverge from the main this track's turnout sits on — a team
+                // track off Main 2 starts at lane 1, not a crossover from Main 1.
+                const ym = laneY(t.divergesFromLane);
                 const thr = Math.max(6, c.width * 0.04);
                 const pts =
                   t.role === "spur"
