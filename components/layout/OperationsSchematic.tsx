@@ -245,46 +245,46 @@ export function OperationsSchematic({
           const px = (frac: number) => c.x + frac * c.width;
           return (
             <g key={`${c.input.id}-schem`}>
-              {feat.extraTracks.map((t) => (
-                <line
-                  key={t.id}
-                  x1={px(t.fromFrac)}
-                  y1={laneY(t.lane)}
-                  x2={px(t.toFrac)}
-                  y2={laneY(t.lane)}
-                  stroke={stroke}
-                  strokeWidth={STROKE * 0.8}
-                  strokeLinecap="round"
-                  strokeDasharray={t.role === "spur" ? "2 2" : undefined}
-                >
-                  <title>
-                    {`${t.role}${t.capacityFeet ? ` · ${t.capacityFeet} ft` : ""}`}
-                  </title>
-                </line>
-              ))}
-              {feat.turnouts.map((t) => {
-                const dir = t.posFrac < 0.5 ? 1 : -1;
+              {feat.extraTracks.map((t) => {
+                // A siding is a passing loop: it dips down to the mainline at a
+                // turnout at each end. A spur rises at one end and ends in a stub.
+                const x1 = px(t.fromFrac);
+                const x2 = px(t.toFrac);
+                const yl = laneY(t.lane);
+                const ym = laneY(0);
+                const thr = Math.max(6, c.width * 0.04);
+                const pts =
+                  t.role === "spur"
+                    ? `${x1},${ym} ${x1 + thr},${yl} ${x2},${yl}`
+                    : `${x1},${ym} ${x1 + thr},${yl} ${x2 - thr},${yl} ${x2},${ym}`;
                 return (
-                  <line
+                  <polyline
                     key={t.id}
-                    x1={px(t.posFrac) - dir * 4}
-                    y1={laneY(t.onLane)}
-                    x2={px(t.posFrac)}
-                    y2={laneY(t.divergeLane)}
+                    points={pts}
+                    fill="none"
                     stroke={stroke}
                     strokeWidth={STROKE * 0.8}
+                    strokeLinejoin="round"
                     strokeLinecap="round"
+                    strokeDasharray={t.role === "spur" ? "2 2" : undefined}
                   >
-                    <title>{`Turnout${t.name ? ` · ${t.name}` : ""}`}</title>
-                  </line>
+                    <title>
+                      {`${t.role}${t.capacityFeet ? ` · ${t.capacityFeet} ft` : ""}`}
+                    </title>
+                  </polyline>
                 );
               })}
+              {feat.turnouts.map((t) => (
+                <circle key={t.id} cx={px(t.posFrac)} cy={laneY(t.onLane)} r={1.2} fill={stroke}>
+                  <title>{`Turnout${t.name ? ` · ${t.name}` : ""}`}</title>
+                </circle>
+              ))}
               {feat.signals.map((s) => {
                 // Draw the signal parallel to the track, pointing in its facing
                 // direction, so two signals at the same spot (opposite ways)
                 // separate instead of stacking.
                 const sx = px(s.posFrac);
-                const sy = laneY(s.lane) - 3;
+                const sy = s.side === "below" ? laneY(s.lane) + 3 : laneY(s.lane) - 3;
                 const dir = s.facing === "BtoA" ? -1 : 1;
                 const L = Math.max(4, c.width * 0.02);
                 return (
