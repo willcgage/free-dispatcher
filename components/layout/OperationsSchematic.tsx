@@ -45,9 +45,13 @@ const laneY = (lane: number) => Y0 - lane * LANE_GAP;
 export function OperationsSchematic({
   modules,
   districts,
+  signalAspects,
 }: {
   modules: OpsModuleInput[];
   districts?: SectionAwareDistrict[];
+  /** Live CTC aspects keyed "<moduleRecordNumber>:<cpId>" (#151). When given,
+   * control-point signals color green (clear) / red (stop); absent = neutral. */
+  signalAspects?: Record<string, { AtoB: "clear" | "stop"; BtoA: "clear" | "stop" }>;
 }) {
   if (modules.length === 0) {
     return (
@@ -287,11 +291,22 @@ export function OperationsSchematic({
                 const sy = s.side === "below" ? laneY(s.lane) + 3 : laneY(s.lane) - 3;
                 const dir = s.facing === "BtoA" ? -1 : 1;
                 const L = Math.max(4, c.width * 0.02);
+                // Live aspect: join back to the control point (#151).
+                const aspect =
+                  signalAspects && s.cp && c.input.moduleId
+                    ? signalAspects[`${c.input.moduleId}:${s.cp}`]?.[s.facing]
+                    : undefined;
+                const color =
+                  aspect === "clear"
+                    ? "#34d399"
+                    : aspect === "stop"
+                      ? "#ef4444"
+                      : "#94a3b8";
                 return (
                   <g key={s.id}>
-                    <line x1={sx} y1={sy} x2={sx + dir * L} y2={sy} stroke="#94a3b8" strokeWidth={0.9} />
-                    <circle cx={sx + dir * L} cy={sy} r={1.4} fill="#94a3b8" />
-                    <title>{`Signal${s.name ? ` · ${s.name}` : ""} (${s.facing})`}</title>
+                    <line x1={sx} y1={sy} x2={sx + dir * L} y2={sy} stroke={color} strokeWidth={0.9} />
+                    <circle cx={sx + dir * L} cy={sy} r={aspect ? 1.7 : 1.4} fill={color} />
+                    <title>{`Signal${s.name ? ` · ${s.name}` : ""} (${s.facing})${aspect ? ` — ${aspect.toUpperCase()}` : ""}`}</title>
                   </g>
                 );
               })}

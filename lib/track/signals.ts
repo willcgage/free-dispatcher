@@ -10,6 +10,8 @@
  *   clear     — free and unallocated → available
  */
 
+import type { ControlPointRef } from "./layoutControlPoints";
+
 export type SignalAspect = "clear" | "allocated" | "occupied";
 
 /** Derive a Section's aspect from its blocks' occupancy and whether it's held. */
@@ -38,3 +40,44 @@ export const ASPECT_META: Record<SignalAspect, AspectMeta> = {
 };
 
 export const ASPECT_ORDER: SignalAspect[] = ["clear", "allocated", "occupied"];
+
+// ---- Control-point signal aspects (#151) -----------------------------------
+
+/** A control-point signal is absolute: red until a route is cleared past it. */
+export type CpSignalAspect = "clear" | "stop";
+
+export interface CpAspects {
+  AtoB: CpSignalAspect;
+  BtoA: CpSignalAspect;
+}
+
+/**
+ * Direction-aware aspects for every control point on the panel (CTC-style):
+ * the signal at a section's entrance clears only when that section is allocated
+ * in the signal's facing direction and nothing occupies it; everything else —
+ * unallocated, opposing movement, occupied — reads stop.
+ *
+ * Keyed by the control point's layout key ("<moduleRecordNumber>:<cpId>" /
+ * "layout:<id>"). Pure so it unit-tests without a database.
+ */
+export function cpSignalAspects(
+  controlPoints: ControlPointRef[],
+  sectionsByDerivedKey: ReadonlyMap<string, string>, // derivedKey → sectionId
+  allocations: Readonly<Record<string, { direction: "AtoB" | "BtoA" }>>,
+  occupiedSectionIds: ReadonlySet<string>,
+): Record<string, CpAspects> {
+  const out: Record<string, CpAspects> = {};
+  for (const cp of controlPoints) out[cp.key] = { AtoB: "stop", BtoA: "stop" };
+  for (let i = 0; i < controlPoints.length - 1; i++) {
+    const a = controlPoints[i];
+    const b = controlPoints[i + 1];
+    const sectionId = sectionsByDerivedKey.get(`${a.key}→${b.key}`);
+    if (!sectionId) continue;
+    const alloc = allocations[sectionId];
+    if (!alloc || occupiedSectionIds.has(sectionId)) continue;
+    // Entering the section eastward past A, or westward past B.
+    if (alloc.direction === "AtoB") out[a.key].AtoB = "clear";
+    else out[b.key].BtoA = "clear";
+  }
+  return out;
+}
