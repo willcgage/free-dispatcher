@@ -4,11 +4,14 @@ import {
   deriveSections,
   asLayoutCps,
   planSectionSync,
+  planBlockSync,
   DERIVED_POSITION_BASE,
   type CpModuleInput,
   type LayoutCp,
   type DerivedSection,
   type ExistingSectionRow,
+  type ExistingBlockRow,
+  type SpannedModule,
 } from "../layoutControlPoints";
 
 const mod = (
@@ -149,6 +152,80 @@ describe("deriveSections", () => {
       "FMN-0001:b": "d1",
     });
     expect(sections.map((s) => s.name)).toEqual(["A – Mid", "Mid – B"]);
+  });
+});
+
+describe("deriveSections module span (#148)", () => {
+  it("spans every module between the two control points, including CP-less ones", () => {
+    const modules = [
+      mod("FMN-0001", 0, [{ id: "a", name: "A", pos: 90 }]),
+      mod("FMN-0002", 1, []), // no control points — still part of the span
+      mod("FMN-0003", 2, [{ id: "b", name: "B", pos: 10 }]),
+    ];
+    const cps = layoutControlPoints(modules);
+    const sections = deriveSections(cps, { "FMN-0001:a": "d1", "FMN-0003:b": "d1" }, modules);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].moduleSpan?.map((m) => m.moduleId)).toEqual([
+      "FMN-0001",
+      "FMN-0002",
+      "FMN-0003",
+    ]);
+  });
+
+  it("a section within one module spans just that module; span omitted without modules", () => {
+    const modules = [
+      mod("FMN-0001", 0, [{ id: "a", name: "A", pos: 10 }, { id: "b", name: "B", pos: 90 }]),
+    ];
+    const cps = layoutControlPoints(modules);
+    const assign = { "FMN-0001:a": "d1", "FMN-0001:b": "d1" };
+    expect(deriveSections(cps, assign, modules)[0].moduleSpan?.map((m) => m.moduleId)).toEqual([
+      "FMN-0001",
+    ]);
+    expect(deriveSections(cps, assign)[0].moduleSpan).toBeUndefined();
+  });
+});
+
+describe("planBlockSync (#148)", () => {
+  const span: SpannedModule[] = [
+    { moduleId: "FMN-0001", moduleName: "One Mile" },
+    { moduleId: "FMN-0002", moduleName: null },
+  ];
+  const blk = (
+    id: string,
+    sectionId: string,
+    name: string,
+    position: number,
+    moduleRecordNumber: string,
+  ): ExistingBlockRow => ({ id, sectionId, name, position, moduleRecordNumber });
+
+  it("creates one block per spanned module, named after the module", () => {
+    const plan = planBlockSync([], new Map([["s1", span]]));
+    expect(plan.remove).toEqual([]);
+    expect(plan.insert).toEqual([
+      { sectionId: "s1", name: "One Mile", position: 0, moduleRecordNumber: "FMN-0001" },
+      { sectionId: "s1", name: "FMN-0002", position: 1, moduleRecordNumber: "FMN-0002" },
+    ]);
+  });
+
+  it("is a no-op when blocks already match", () => {
+    const existing = [
+      blk("b1", "s1", "One Mile", 0, "FMN-0001"),
+      blk("b2", "s1", "FMN-0002", 1, "FMN-0002"),
+    ];
+    expect(planBlockSync(existing, new Map([["s1", span]]))).toEqual({
+      insert: [],
+      remove: [],
+    });
+  });
+
+  it("replaces a section's blocks when the span changes, and clears orphans", () => {
+    const existing = [
+      blk("b1", "s1", "One Mile", 0, "FMN-0001"),
+      blk("b9", "sGone", "Old", 0, "FMN-0009"),
+    ];
+    const plan = planBlockSync(existing, new Map([["s1", span]]));
+    expect(plan.remove.sort()).toEqual(["b1", "b9"]);
+    expect(plan.insert).toHaveLength(2);
   });
 });
 

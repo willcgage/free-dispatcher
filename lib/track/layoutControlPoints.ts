@@ -112,22 +112,46 @@ export function layoutControlPoints(
   return out;
 }
 
+export interface SpannedModule {
+  moduleId: string;
+  moduleName: string | null;
+}
+
 export interface DerivedSection {
   districtId: string;
   fromKey: string;
   toKey: string;
   name: string;
+  /** Modules the section runs across, in spine order (when modules given). */
+  moduleSpan?: SpannedModule[];
 }
 
 /**
  * Sections between adjacent control points that share a district. The stretch of
  * mainline between two consecutive control points belongs to a district only
- * when both endpoints are assigned to it.
+ * when both endpoints are assigned to it. Pass `modules` to also report each
+ * section's module span (#148) — every placement from the from-point's module
+ * to the to-point's, including CP-less ones in between.
  */
 export function deriveSections(
   controlPoints: ControlPointRef[],
   assignments: Record<string, string | undefined>,
+  modules?: CpModuleInput[],
 ): DerivedSection[] {
+  const spine = modules
+    ? [...modules]
+        .sort((a, b) => (a.positionIndex ?? 0) - (b.positionIndex ?? 0))
+        .filter((m) => m.moduleId)
+    : [];
+  const spanOf = (aModule: string, bModule: string): SpannedModule[] => {
+    const from = spine.findIndex((m) => m.moduleId === aModule);
+    const to = spine.findIndex((m) => m.moduleId === bModule);
+    if (from < 0 || to < 0) return [];
+    return spine
+      .slice(Math.min(from, to), Math.max(from, to) + 1)
+      .map((m) => ({ moduleId: m.moduleId!, moduleName: m.moduleName ?? null }));
+  };
+
   const out: DerivedSection[] = [];
   for (let i = 0; i < controlPoints.length - 1; i++) {
     const a = controlPoints[i];
@@ -140,6 +164,7 @@ export function deriveSections(
         fromKey: a.key,
         toKey: b.key,
         name: `${a.name} – ${b.name}`,
+        ...(modules ? { moduleSpan: spanOf(a.moduleId, b.moduleId) } : {}),
       });
     }
   }
@@ -214,6 +239,69 @@ export function planSectionSync(
   }
   for (const [key, want] of desired) {
     if (!seen.has(key)) plan.insert.push({ ...want, derivedKey: key });
+  }
+  return plan;
+}
+
+export interface ExistingBlockRow {
+  id: string;
+  sectionId: string;
+  name: string;
+  position: number;
+  moduleRecordNumber: string | null;
+}
+
+export interface BlockSyncPlan {
+  insert: {
+    sectionId: string;
+    name: string;
+    position: number;
+    moduleRecordNumber: string;
+  }[];
+  remove: string[]; // block row ids
+}
+
+/**
+ * Blocks under a derived section are fully managed (#148): one block per module
+ * the section spans, in spine order, named after the module. When a section's
+ * blocks no longer match its span, they are replaced wholesale (occupancy is
+ * per-session runtime state; stale rows must not linger under a changed span).
+ * `existing` must contain only blocks of derived sections — hand-authored
+ * sections are never passed in.
+ */
+export function planBlockSync(
+  existing: ExistingBlockRow[],
+  desired: Map<string, SpannedModule[]>, // sectionId → span
+): BlockSyncPlan {
+  const bySection = new Map<string, ExistingBlockRow[]>();
+  for (const b of existing) {
+    const arr = bySection.get(b.sectionId) ?? [];
+    arr.push(b);
+    bySection.set(b.sectionId, arr);
+  }
+  const plan: BlockSyncPlan = { insert: [], remove: [] };
+  const sectionIds = new Set([...desired.keys(), ...bySection.keys()]);
+  for (const sectionId of sectionIds) {
+    const want = (desired.get(sectionId) ?? []).map((m, i) => ({
+      sectionId,
+      name: m.moduleName?.trim() || m.moduleId,
+      position: i,
+      moduleRecordNumber: m.moduleId,
+    }));
+    const have = (bySection.get(sectionId) ?? []).sort(
+      (a, b) => a.position - b.position,
+    );
+    const matches =
+      want.length === have.length &&
+      want.every(
+        (w, i) =>
+          have[i].name === w.name &&
+          have[i].position === w.position &&
+          have[i].moduleRecordNumber === w.moduleRecordNumber,
+      );
+    if (matches) continue;
+    plan.remove.push(...have.map((b) => b.id));
+    plan.insert.push(...want);
   }
   return plan;
 }
