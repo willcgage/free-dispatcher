@@ -35,6 +35,9 @@ import {
   deriveSections,
   asLayoutCps,
   planSectionSync,
+  planBlockSync,
+  derivedSectionKey,
+  type SpannedModule,
 } from "@/lib/track/layoutControlPoints";
 
 // ---- Authoring input/output shapes ---------------------------------------
@@ -263,7 +266,7 @@ class TrackModel {
       tree.controlPointDistricts && typeof tree.controlPointDistricts === "object"
         ? (tree.controlPointDistricts as Record<string, string>)
         : {};
-    const derived = deriveSections(cps, assignments);
+    const derived = deriveSections(cps, assignments, tree.modules);
     const existing = tree.districts.flatMap((d) =>
       d.sections.map((s) => ({
         id: s.id,
@@ -278,7 +281,6 @@ class TrackModel {
       derived,
       new Set(tree.districts.map((d) => d.id)),
     );
-    if (!plan.insert.length && !plan.update.length && !plan.remove.length) return;
     await db.transaction(async (tx) => {
       if (plan.remove.length) {
         await tx.delete(sections).where(inArray(sections.id, plan.remove));
@@ -289,8 +291,35 @@ class TrackModel {
           .set({ districtId: u.districtId, name: u.name, position: u.position })
           .where(eq(sections.id, u.id));
       }
-      if (plan.insert.length) {
-        await tx.insert(sections).values(plan.insert);
+      const inserted = plan.insert.length
+        ? await tx.insert(sections).values(plan.insert).returning()
+        : [];
+
+      // Blocks under derived sections: one per spanned module (#148).
+      const removedIds = new Set(plan.remove);
+      const derivedRows = [
+        ...existing.filter((s) => s.derivedKey != null && !removedIds.has(s.id)),
+        ...inserted,
+      ];
+      const spanByKey = new Map(
+        derived.map((s) => [derivedSectionKey(s), s.moduleSpan ?? []]),
+      );
+      const desired = new Map<string, SpannedModule[]>(
+        derivedRows.map((s) => [s.id, spanByKey.get(s.derivedKey!) ?? []]),
+      );
+      const sectionIds = derivedRows.map((s) => s.id);
+      const existingBlocks = sectionIds.length
+        ? await tx
+            .select()
+            .from(blocks)
+            .where(inArray(blocks.sectionId, sectionIds))
+        : [];
+      const blockPlan = planBlockSync(existingBlocks, desired);
+      if (blockPlan.remove.length) {
+        await tx.delete(blocks).where(inArray(blocks.id, blockPlan.remove));
+      }
+      if (blockPlan.insert.length) {
+        await tx.insert(blocks).values(blockPlan.insert);
       }
     });
   }
