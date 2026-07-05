@@ -73,6 +73,24 @@ describe("buildOperationsSchematic", () => {
     expect(s.cells[0]).toMatchObject({ leftTracks: 1, rightTracks: 1 });
   });
 
+  it("sizes the cell to the schematic's own length so features line up", () => {
+    // Module record says 396", but the authored schematic uses 432" — the cell
+    // must be 432 or the overlaid siding/turnout/signal positions won't match.
+    const s = buildOperationsSchematic([
+      mod("a", "single", "single", {
+        mainlineLengthInches: 396,
+        lengthTotalInches: 396,
+        schematic: {
+          version: 1,
+          lengthInches: 432,
+          endplates: [],
+          tracks: [{ id: "main", role: "main", lane: 0 }],
+        },
+      }),
+    ]);
+    expect(s.cells[0].width).toBe(432);
+  });
+
   it("enforces a minimum drawn width", () => {
     const s = buildOperationsSchematic([
       mod("a", "single", "single", { mainlineLengthInches: 2, lengthTotalInches: 2 }),
