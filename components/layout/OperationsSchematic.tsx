@@ -44,12 +44,16 @@ export function OperationsSchematic({
   modules,
   districts,
   signalAspects,
+  highlightModuleIds,
 }: {
   modules: OpsModuleInput[];
   districts?: SectionAwareDistrict[];
   /** Live CTC aspects keyed "<moduleRecordNumber>:<cpId>" (#151). When given,
    * control-point signals color green (clear) / red (stop); absent = neutral. */
   signalAspects?: Record<string, { AtoB: "clear" | "stop"; BtoA: "clear" | "stop" }>;
+  /** Placement ids (layout_modules row ids) to call out — e.g. a module no
+   * longer offered by the repo (#158). Drawn with an amber outline. */
+  highlightModuleIds?: string[];
 }) {
   if (modules.length === 0) {
     return (
@@ -221,6 +225,19 @@ export function OperationsSchematic({
                     />
                   );
                 })}
+              {/* Called-out placement (e.g. dropped from the repo, #158) */}
+              {highlightModuleIds?.includes(c.input.id) && (
+                <rect
+                  x={c.x + 0.5}
+                  y={SECTION_BRACKET_Y + 2}
+                  width={c.width - 1}
+                  height={HEIGHT - SECTION_BRACKET_Y - 4}
+                  fill="#f59e0b22"
+                  stroke="#f59e0b"
+                  strokeWidth={0.8}
+                  rx={2}
+                />
+              )}
               {/* Hover detail + centred label */}
               <rect x={c.x} y={0} width={c.width} height={HEIGHT} fill="transparent">
                 <title>

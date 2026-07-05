@@ -92,6 +92,8 @@ export interface LayoutModule {
   schematic: unknown;
   /** Set when the module was removed from the Module Repository (#155). */
   removedFromRepoAt: Date | null;
+  /** Owner's repo status: active | inactive | archived (#158). */
+  status: string | null;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -366,6 +368,7 @@ class TrackModel {
         endplates: repoModules.endplates,
         schematic: repoModules.schematic,
         removedFromRepoAt: repoModules.removedFromRepoAt,
+        status: repoModules.status,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))
