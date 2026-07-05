@@ -279,20 +279,22 @@ export function OperationsSchematic({
                   </line>
                 );
               })}
-              {feat.signals.map((s) => (
-                <g key={s.id}>
-                  <line
-                    x1={px(s.posFrac)}
-                    y1={laneY(s.lane) - 2}
-                    x2={px(s.posFrac)}
-                    y2={laneY(s.lane) - 7}
-                    stroke="#94a3b8"
-                    strokeWidth={0.8}
-                  />
-                  <circle cx={px(s.posFrac)} cy={laneY(s.lane) - 8} r={1.6} fill="#94a3b8" />
-                  <title>{`Signal${s.name ? ` · ${s.name}` : ""} (${s.facing})`}</title>
-                </g>
-              ))}
+              {feat.signals.map((s) => {
+                // Draw the signal parallel to the track, pointing in its facing
+                // direction, so two signals at the same spot (opposite ways)
+                // separate instead of stacking.
+                const sx = px(s.posFrac);
+                const sy = laneY(s.lane) - 3;
+                const dir = s.facing === "BtoA" ? -1 : 1;
+                const L = Math.max(4, c.width * 0.02);
+                return (
+                  <g key={s.id}>
+                    <line x1={sx} y1={sy} x2={sx + dir * L} y2={sy} stroke="#94a3b8" strokeWidth={0.9} />
+                    <circle cx={sx + dir * L} cy={sy} r={1.4} fill="#94a3b8" />
+                    <title>{`Signal${s.name ? ` · ${s.name}` : ""} (${s.facing})`}</title>
+                  </g>
+                );
+              })}
             </g>
           );
         })}
@@ -359,9 +361,9 @@ export function OperationsSchematic({
           siding / turnout
         </span>
         <span className="flex items-center gap-1">
-          <svg width="12" height="10" className="shrink-0">
-            <line x1="6" y1="9" x2="6" y2="4" stroke="#94a3b8" strokeWidth="0.9" />
-            <circle cx="6" cy="3" r="1.8" fill="#94a3b8" />
+          <svg width="16" height="10" className="shrink-0">
+            <line x1="2" y1="5" x2="12" y2="5" stroke="#94a3b8" strokeWidth="1" />
+            <circle cx="13" cy="5" r="1.8" fill="#94a3b8" />
           </svg>
           signal
         </span>
