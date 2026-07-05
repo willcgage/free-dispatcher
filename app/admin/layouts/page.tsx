@@ -35,6 +35,8 @@ interface LayoutRow {
   standard: string;
   controlPointDistricts: Record<string, string> | null;
   layoutControlPoints: unknown;
+  /** Placements whose module was removed/deactivated/archived upstream (#160). */
+  atRiskModules: number;
   createdAt: string;
 }
 interface BlockNode {
@@ -615,6 +617,22 @@ export default function AdminLayouts() {
                         </span>
                       )}
                     </button>
+                    {l.atRiskModules > 0 && (
+                      <button
+                        title="Modules in this layout were removed, deactivated, or archived in the Module Repository — click to review"
+                        onClick={async () => {
+                          if (!expanded.has(l.id)) {
+                            setExpanded((p) => new Set(p).add(l.id));
+                            if (!trees[l.id]) await reloadTree(l.id);
+                          }
+                          unavailNotified.current.add(l.id);
+                          setUnavailNotice({ layoutId: l.id });
+                        }}
+                        className="shrink-0 rounded bg-amber-900/60 px-1.5 py-0.5 text-xs font-medium text-amber-300 hover:bg-amber-900"
+                      >
+                        ⚠ {l.atRiskModules} at-risk module{l.atRiskModules > 1 ? "s" : ""}
+                      </button>
+                    )}
                     {isCurrent ? (
                       <button
                         disabled={busy}
