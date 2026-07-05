@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { moduleLayouts } from "@/lib/db/schema";
+import { moduleLayouts, repoModules } from "@/lib/db/schema";
 import { trackModel } from "@/lib/server/TrackModel";
 import { requireRole } from "@/lib/server/guard";
 import type { StagingEnd } from "@/lib/db/schema";
@@ -25,6 +25,8 @@ export async function PATCH(
     positionIndex?: number;
     stagingEnd?: StagingEnd | null;
     flipped?: boolean;
+    /** Replace the placement with another catalog module (#158). */
+    moduleId?: string;
   };
   try {
     body = await req.json();
@@ -36,6 +38,20 @@ export async function PATCH(
   if (typeof body.positionIndex === "number") set.positionIndex = body.positionIndex;
   if (body.stagingEnd !== undefined) set.stagingEnd = body.stagingEnd;
   if (typeof body.flipped === "boolean") set.flipped = body.flipped;
+  if (typeof body.moduleId === "string" && body.moduleId.trim()) {
+    const rec = body.moduleId.trim();
+    const [target] = await db
+      .select({ recordNumber: repoModules.recordNumber })
+      .from(repoModules)
+      .where(eq(repoModules.recordNumber, rec));
+    if (!target) {
+      return NextResponse.json(
+        { error: `module ${rec} is not in the local catalog` },
+        { status: 400 },
+      );
+    }
+    set.moduleId = rec;
+  }
   if (Object.keys(set).length === 0) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }
@@ -46,6 +62,10 @@ export async function PATCH(
     .where(eq(moduleLayouts.id, id))
     .returning();
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (set.moduleId) {
+    // The spine's control points changed — re-materialize sections (#146).
+    await trackModel.syncDerivedSections(row.layoutId);
+  }
   return NextResponse.json({ module: row });
 }
 

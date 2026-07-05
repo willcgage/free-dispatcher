@@ -4,7 +4,7 @@
  * Requires a Free Dispatcher session token (any role); no Module Repo token needed.
  */
 import { NextResponse } from "next/server";
-import { asc, isNull } from "drizzle-orm";
+import { and, asc, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { repoModules } from "@/lib/db/schema";
 import { requireRole } from "@/lib/server/guard";
@@ -31,9 +31,19 @@ export async function GET(req: Request) {
       schematics: repoModules.schematics,
     })
     .from(repoModules)
-    // Tombstoned modules (removed upstream, #155) aren't offered for new
-    // placements; layouts already using them keep their data.
-    .where(isNull(repoModules.removedFromRepoAt))
+    // Unavailable modules aren't offered for new placements: tombstoned
+    // (removed upstream, #155) or marked inactive/archived by the owner
+    // (#158). Missing status counts as active. Layouts already using one
+    // keep their data.
+    .where(
+      and(
+        isNull(repoModules.removedFromRepoAt),
+        or(
+          isNull(repoModules.status),
+          sql`lower(${repoModules.status}) NOT IN ('inactive', 'archived')`,
+        ),
+      ),
+    )
     .orderBy(asc(repoModules.recordNumber));
 
   return NextResponse.json({ modules });

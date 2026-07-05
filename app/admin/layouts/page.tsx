@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet, apiSend } from "@/lib/client/api";
 import { Panel } from "@/components/admin/ui";
 import { moduleMatches } from "@/lib/client/moduleSearch";
@@ -19,6 +19,11 @@ import {
   deriveSections,
   asLayoutCps,
 } from "@/lib/track/layoutControlPoints";
+import {
+  moduleUnavailability,
+  UNAVAILABLE_LABEL,
+  UNAVAILABLE_HINT,
+} from "@/lib/track/moduleAvailability";
 import type { CatalogModule } from "@/lib/client/types";
 import type { StagingEnd } from "@/lib/db/schema";
 
@@ -70,6 +75,8 @@ interface LayoutModuleNode {
   schematic: unknown;
   /** Set when the module was removed from the Module Repository (#155). */
   removedFromRepoAt: string | null;
+  /** Owner's repo status: active | inactive | archived (#158). */
+  status: string | null;
 }
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
@@ -130,6 +137,15 @@ export default function AdminLayouts() {
   const [cpDraft, setCpDraft] = useState<
     Record<string, { name: string; anchor: string; offset: string }>
   >({});
+  // Dropped-module notice + schematic highlight + replace flow (#158).
+  const [unavailNotice, setUnavailNotice] = useState<{ layoutId: string } | null>(null);
+  const unavailNotified = useRef<Set<string>>(new Set());
+  const [highlightMods, setHighlightMods] = useState<Record<string, string[]>>({});
+  const [replacing, setReplacing] = useState<{
+    layoutId: string;
+    placementId: string;
+    value: string;
+  } | null>(null);
   const [drag, setDrag] = useState<{ layoutId: string; from: number } | null>(
     null,
   );
@@ -176,6 +192,7 @@ export default function AdminLayouts() {
   }, []);
 
   async function toggleTree(id: string) {
+    const opening = !expanded.has(id);
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -183,6 +200,46 @@ export default function AdminLayouts() {
       return next;
     });
     if (!trees[id]) await reloadTree(id);
+    // Opening a layout that contains dropped modules pops a notice (#158) —
+    // once per layout per visit.
+    if (opening && !unavailNotified.current.has(id)) {
+      const tree =
+        trees[id] ??
+        (await apiGet<{ layout: LayoutTree }>(`/api/layouts/${id}`).then(
+          (r) => r.layout,
+          () => null,
+        ));
+      const dropped = (tree?.modules ?? []).filter((m) => moduleUnavailability(m));
+      if (dropped.length > 0) {
+        unavailNotified.current.add(id);
+        setUnavailNotice({ layoutId: id });
+      }
+    }
+  }
+
+  /** Highlight a dropped module in the operations schematic and scroll to it. */
+  function showInSchematic(layoutId: string, placementId: string) {
+    setUnavailNotice(null);
+    setHighlightMods((p) => ({ ...p, [layoutId]: [placementId] }));
+    setTimeout(() => {
+      document
+        .getElementById(`ops-schematic-${layoutId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }
+
+  /** Swap a placement to another catalog module, in place (#158). */
+  async function replaceModule(layoutId: string, placementId: string, rec: string) {
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/modules/${placementId}`, { moduleId: rec });
+      setReplacing(null);
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "replace failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const qOf = (id: string) => modQuery[id] ?? "";
@@ -463,6 +520,61 @@ export default function AdminLayouts() {
 
   return (
     <div className="max-w-3xl space-y-5">
+      {/* Dropped-modules notice (#158) */}
+      {unavailNotice && trees[unavailNotice.layoutId] && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setUnavailNotice(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-amber-800/60 bg-slate-900 p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-sm font-semibold text-amber-300">
+              This layout uses modules no longer offered by the Module Repository
+            </h3>
+            <p className="mb-3 text-xs text-slate-400">
+              The layout keeps their data, but they were removed, deactivated,
+              or archived upstream. Show one in the schematic, or replace it
+              from the module list.
+            </p>
+            <ul className="space-y-1.5">
+              {trees[unavailNotice.layoutId].modules
+                .filter((m) => moduleUnavailability(m))
+                .map((m) => {
+                  const why = moduleUnavailability(m)!;
+                  return (
+                    <li key={m.id} className="flex items-center gap-2 text-sm">
+                      <span className="min-w-0 flex-1 truncate text-slate-200">
+                        {m.moduleName ?? m.moduleId}
+                      </span>
+                      <span className="rounded bg-amber-900/60 px-1 py-px text-[10px] uppercase text-amber-400">
+                        {UNAVAILABLE_LABEL[why]}
+                      </span>
+                      <button
+                        onClick={() =>
+                          showInSchematic(unavailNotice.layoutId, m.id)
+                        }
+                        className="shrink-0 rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                      >
+                        Show in schematic
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+            <div className="mt-3 text-right">
+              <button
+                onClick={() => setUnavailNotice(null)}
+                className="rounded border border-slate-700 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-2xl font-bold">Layouts</h1>
       <p className="text-sm text-slate-400">
         A layout is the reusable track model — Districts, Sections and Blocks —
@@ -602,18 +714,71 @@ export default function AdminLayouts() {
                                     </span>
                                     <span className="min-w-0 flex-1 truncate text-slate-200">
                                       {m.moduleName ?? m.moduleId}
-                                      {m.removedFromRepoAt && (
-                                        <span
-                                          title="This module was removed from the Module Repository. The layout keeps its data, but it can't be re-added elsewhere."
-                                          className="ml-1.5 rounded bg-amber-900/60 px-1 py-px text-[10px] uppercase text-amber-400"
-                                        >
-                                          removed from repo
-                                        </span>
-                                      )}
+                                      {(() => {
+                                        const why = moduleUnavailability(m);
+                                        return why ? (
+                                          <span
+                                            title={UNAVAILABLE_HINT[why]}
+                                            className="ml-1.5 rounded bg-amber-900/60 px-1 py-px text-[10px] uppercase text-amber-400"
+                                          >
+                                            {UNAVAILABLE_LABEL[why]}
+                                          </span>
+                                        ) : null;
+                                      })()}
                                     </span>
                                     <span className="shrink-0 font-mono text-xs text-slate-500">
                                       {m.moduleId}
                                     </span>
+                                    {replacing?.placementId === m.id ? (
+                                      <span className="flex shrink-0 items-center gap-1">
+                                        <select
+                                          value={replacing.value}
+                                          onChange={(e) =>
+                                            setReplacing({ ...replacing, value: e.target.value })
+                                          }
+                                          className="max-w-44 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                        >
+                                          <option value="">Replace with…</option>
+                                          {catalog
+                                            .filter((c) => c.recordNumber !== m.moduleId)
+                                            .map((c) => (
+                                              <option key={c.recordNumber} value={c.recordNumber}>
+                                                {c.moduleName} · {c.recordNumber}
+                                              </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                          disabled={busy || !replacing.value}
+                                          onClick={() =>
+                                            replaceModule(l.id, m.id, replacing.value)
+                                          }
+                                          className="rounded bg-sky-700 px-1.5 py-0.5 text-xs text-white hover:bg-sky-600 disabled:opacity-40"
+                                        >
+                                          Swap
+                                        </button>
+                                        <button
+                                          onClick={() => setReplacing(null)}
+                                          className="rounded border border-slate-700 px-1 py-0.5 text-xs text-slate-400 hover:bg-slate-800"
+                                        >
+                                          ✕
+                                        </button>
+                                      </span>
+                                    ) : (
+                                      <button
+                                        disabled={busy}
+                                        title="Replace this placement with another catalog module (keeps its position)"
+                                        onClick={() =>
+                                          setReplacing({
+                                            layoutId: l.id,
+                                            placementId: m.id,
+                                            value: "",
+                                          })
+                                        }
+                                        className="shrink-0 rounded border border-slate-700 px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-800"
+                                      >
+                                        Replace
+                                      </button>
+                                    )}
                                     <select
                                       value={m.stagingEnd ?? ""}
                                       onChange={(e) =>
@@ -825,13 +990,14 @@ export default function AdminLayouts() {
                           </div>
 
                           {/* Operations schematic (straightened — primary) */}
-                          <div>
+                          <div id={`ops-schematic-${l.id}`}>
                             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
                               Operations schematic
                             </div>
                             <OperationsSchematic
                               modules={tree.modules}
                               districts={tree.districts}
+                              highlightModuleIds={highlightMods[l.id]}
                             />
                           </div>
 
