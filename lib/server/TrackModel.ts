@@ -217,6 +217,17 @@ class TrackModel {
     return db.select().from(layouts);
   }
 
+  /** Assign the layout's imported control points to districts (#138). */
+  async setControlPointDistricts(
+    layoutId: string,
+    map: Record<string, string>,
+  ): Promise<void> {
+    await db
+      .update(layouts)
+      .set({ controlPointDistricts: map })
+      .where(eq(layouts.id, layoutId));
+  }
+
   /** Full District→Section→Block tree for a layout, or null if missing. */
   async getLayout(layoutId: string): Promise<LayoutTree | null> {
     const [layout] = await db
