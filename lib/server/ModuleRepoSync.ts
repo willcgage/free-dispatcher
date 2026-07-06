@@ -1,4 +1,4 @@
-import { and, eq, isNull, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { appSettings, repoModules } from "@/lib/db/schema";
 import { config } from "@/lib/config";
@@ -33,6 +33,8 @@ export interface SyncResult {
   synced: number;
   /** Modules newly tombstoned this sync — gone from the repo (#155). */
   removed: number;
+  /** Tombstones cleared this sync — the record is back in the repo (#163). */
+  restored: number;
   lastSyncedAt: string;
 }
 
@@ -82,6 +84,9 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
   // endpoint is the function's own slug. (The earlier `/api/v1/modules/full`
   // path resolved to a non-existent `api` function and 404'd — issue #70.)
   const url = new URL(`${config.moduleRepo.url}/functions/v1/modules-full`);
+  // All statuses: FD mirrors inactive/archived so layouts can flag them
+  // (#158); the endpoint's default of active-only would hide those flips.
+  url.searchParams.set("status", "any");
   if (meta?.last_synced_at) {
     url.searchParams.set("updated_since", meta.last_synced_at);
   }
@@ -162,22 +167,81 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
       .onConflictDoUpdate({ target: repoModules.recordNumber, set: values });
   }
 
-  // Tombstone local records the repo no longer returns (#155). Guarded: an
-  // empty catalog is treated as an upstream problem, not a mass removal.
+  // Reconcile against the repo's COMPLETE id list (#163). The main fetch may
+  // be incremental (updated_since) — diffing tombstones against that partial
+  // set wrongly retired every unmodified module (the #156 bug). The id list is
+  // cheap ({record_number, status} only), always full, and also mirrors
+  // status flips that predate this sync's window. Best-effort: if the listing
+  // fails or comes back empty, skip — never mass-tombstone on bad data.
   let removed = 0;
-  if (modules.length > 0) {
-    const fetched = modules.map((m) => m.record_number);
-    const retired = await db
-      .update(repoModules)
-      .set({ removedFromRepoAt: new Date() })
-      .where(
-        and(
-          isNull(repoModules.removedFromRepoAt),
-          notInArray(repoModules.recordNumber, fetched),
-        ),
-      )
-      .returning({ recordNumber: repoModules.recordNumber });
-    removed = retired.length;
+  let restored = 0;
+  try {
+    const idsUrl = new URL(`${config.moduleRepo.url}/functions/v1/modules-full`);
+    idsUrl.searchParams.set("fields", "ids");
+    idsUrl.searchParams.set("status", "any");
+    const idsRes = await fetch(idsUrl.toString(), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: config.moduleRepo.anonKey,
+      },
+    });
+    if (idsRes.ok) {
+      const ids = (await idsRes.json()) as {
+        record_number: string;
+        status?: string | null;
+      }[];
+      if (Array.isArray(ids) && ids.length > 0) {
+        const present = ids.map((i) => i.record_number);
+
+        // Records the repo still lists: clear any tombstone (this also
+        // repairs rows wrongly retired by the pre-#163 logic)…
+        const back = await db
+          .update(repoModules)
+          .set({ removedFromRepoAt: null })
+          .where(
+            and(
+              isNotNull(repoModules.removedFromRepoAt),
+              inArray(repoModules.recordNumber, present),
+            ),
+          )
+          .returning({ recordNumber: repoModules.recordNumber });
+        restored = back.length;
+
+        // …and mirror status flips the incremental window missed.
+        const local = await db
+          .select({
+            recordNumber: repoModules.recordNumber,
+            status: repoModules.status,
+          })
+          .from(repoModules)
+          .where(inArray(repoModules.recordNumber, present));
+        const localStatus = new Map(local.map((r) => [r.recordNumber, r.status]));
+        for (const i of ids) {
+          if (!i.status) continue;
+          if ((localStatus.get(i.record_number) ?? null) === i.status) continue;
+          if (!localStatus.has(i.record_number)) continue; // never synced
+          await db
+            .update(repoModules)
+            .set({ status: i.status })
+            .where(eq(repoModules.recordNumber, i.record_number));
+        }
+
+        // Records the repo no longer lists at all: tombstone (#155).
+        const retired = await db
+          .update(repoModules)
+          .set({ removedFromRepoAt: new Date() })
+          .where(
+            and(
+              isNull(repoModules.removedFromRepoAt),
+              notInArray(repoModules.recordNumber, present),
+            ),
+          )
+          .returning({ recordNumber: repoModules.recordNumber });
+        removed = retired.length;
+      }
+    }
+  } catch {
+    // best-effort — the upserted catalog is still valid without the diff
   }
 
   const [{ count }] = await db
@@ -187,7 +251,7 @@ export async function syncModules(): Promise<SyncResult | SyncError> {
   const now = new Date().toISOString();
   await writeSyncMeta({ last_synced_at: now, module_count: Number(count) });
 
-  return { synced: modules.length, removed, lastSyncedAt: now };
+  return { synced: modules.length, removed, restored, lastSyncedAt: now };
 }
 
 export async function getSyncMeta(): Promise<SyncMeta | null> {
