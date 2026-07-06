@@ -45,6 +45,7 @@ export function OperationsSchematic({
   districts,
   signalAspects,
   highlightModuleIds,
+  branchBand,
 }: {
   modules: OpsModuleInput[];
   districts?: SectionAwareDistrict[];
@@ -54,6 +55,9 @@ export function OperationsSchematic({
   /** Placement ids (layout_modules row ids) to call out — e.g. a module no
    * longer offered by the repo (#158). Drawn with an amber outline. */
   highlightModuleIds?: string[];
+  /** This band is a branch spine (#170): its west end is the junction, so a
+   * loop in the first cell still opens outward (east), never west. */
+  branchBand?: boolean;
 }) {
   if (modules.length === 0) {
     return (
@@ -154,7 +158,7 @@ export function OperationsSchematic({
           // Main 2 directional return (#165): the balloon is a U joining the
           // two main lanes at the outward side — no bulb.
           const isUReturn = isLoop && cellFeat?.loopReturn === "main2";
-          const bulbWest = isLoop && ci === 0;
+          const bulbWest = isLoop && ci === 0 && !branchBand;
           const bulbR = Math.min(6, c.width * 0.06);
           const uR = (Y0 - Y1) / 2; // U-bend radius spans the two main lanes
           const mainX1 =

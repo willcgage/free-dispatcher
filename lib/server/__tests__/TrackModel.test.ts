@@ -36,6 +36,7 @@ describe("buildLayoutTree (#80)", () => {
     standard: "freemon",
     controlPointDistricts: null,
     layoutControlPoints: null,
+    branches: null,
     createdAt: new Date(),
   };
 

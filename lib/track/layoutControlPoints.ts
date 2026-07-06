@@ -46,6 +46,10 @@ export interface ControlPointRef {
   source: "module" | "layout";
   /** Inches from the module's A end, when the schematic positions it. */
   posInches: number | null;
+  /** Spine this point sits on (#170): null = the main spine, otherwise a
+   * branch id. Sections never derive across spines — a junction endplate
+   * terminates the section chain. */
+  spineId: string | null;
 }
 
 /** A module CP's representative position: its westmost signal or turnout. */
@@ -70,6 +74,7 @@ function cpPosInches(
 export function layoutControlPoints(
   modules: CpModuleInput[],
   layoutCps: LayoutCp[] = [],
+  spineId: string | null = null,
 ): ControlPointRef[] {
   const ordered = [...modules].sort(
     (a, b) => (a.positionIndex ?? 0) - (b.positionIndex ?? 0),
@@ -91,6 +96,7 @@ export function layoutControlPoints(
         name: cp.name?.trim() || cp.id,
         source: "module",
         posInches: cpPosInches(cp, doc!) ?? docIndex,
+        spineId,
       });
       docIndex += 1;
     }
@@ -104,6 +110,7 @@ export function layoutControlPoints(
         name: lc.name?.trim() || lc.id,
         source: "layout",
         posInches: lc.offsetInches,
+        spineId,
       });
     }
     refs.sort((a, b) => (a.posInches ?? 0) - (b.posInches ?? 0));
@@ -156,6 +163,9 @@ export function deriveSections(
   for (let i = 0; i < controlPoints.length - 1; i++) {
     const a = controlPoints[i];
     const b = controlPoints[i + 1];
+    // Adjacency is per-spine (#170): a junction terminates the chain — no
+    // section spans from a main-spine point onto a branch (or vice versa).
+    if ((a.spineId ?? null) !== (b.spineId ?? null)) continue;
     const da = assignments[a.key];
     const db = assignments[b.key];
     if (da && da === db) {
@@ -304,6 +314,41 @@ export function planBlockSync(
     plan.insert.push(...want);
   }
   return plan;
+}
+
+// ---- Branch spines (#170) --------------------------------------------------
+
+/** A branch spine attached at a junction endplate of a placed module. */
+export interface BranchDef {
+  id: string;
+  name: string;
+  origin: {
+    /** layout_modules row id of the junction module (on the main spine). */
+    placementId: string;
+    /** The junction endplate on that module (e.g. "C"). */
+    endplateId: string;
+  };
+}
+
+/** Parse a jsonb value into branch definitions, tolerating junk. */
+export function asBranches(x: unknown): BranchDef[] {
+  if (!Array.isArray(x)) return [];
+  const out: BranchDef[] = [];
+  for (const v of x) {
+    if (!v || typeof v !== "object") continue;
+    const b = v as Record<string, unknown>;
+    const origin = (b.origin ?? {}) as Record<string, unknown>;
+    if (typeof b.id !== "string" || typeof origin.placementId !== "string") continue;
+    out.push({
+      id: b.id,
+      name: typeof b.name === "string" && b.name ? b.name : b.id,
+      origin: {
+        placementId: origin.placementId,
+        endplateId: typeof origin.endplateId === "string" ? origin.endplateId : "C",
+      },
+    });
+  }
+  return out;
 }
 
 /** Parse a jsonb value into layout-level control points, tolerating junk. */

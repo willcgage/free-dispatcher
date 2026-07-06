@@ -12,7 +12,7 @@
  * is caught at the DB level by a partial unique index (one active allocation per
  * section per session); an allocation route must also stay within one District.
  */
-import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   layouts,
@@ -34,9 +34,11 @@ import {
   layoutControlPoints,
   deriveSections,
   asLayoutCps,
+  asBranches,
   planSectionSync,
   planBlockSync,
   derivedSectionKey,
+  type BranchDef,
   type SpannedModule,
 } from "@/lib/track/layoutControlPoints";
 
@@ -94,10 +96,15 @@ export interface LayoutModule {
   removedFromRepoAt: Date | null;
   /** Owner's repo status: active | inactive | archived (#158). */
   status: string | null;
+  /** Spine this placement sits on (#170): null = main spine. */
+  branchId: string | null;
 }
 
 export interface LayoutTree extends LayoutRow {
+  /** Main-spine placements (branchId null), in spine order. */
   modules: LayoutModule[];
+  /** Branch spines (#170): defs from layouts.branches with their placements. */
+  branchSpines: (BranchDef & { modules: LayoutModule[] })[];
   districts: (DistrictRow & {
     sections: (SectionRow & { blocks: BlockRow[] })[];
     turnouts: TurnoutRow[];
@@ -153,9 +160,16 @@ export function buildLayoutTree(
     arr.push(t);
     turnoutsByDistrict.set(t.districtId, arr);
   }
+  const sorted = [...moduleRows].sort((a, b) => a.positionIndex - b.positionIndex);
+  const branchDefs = asBranches((layout as { branches?: unknown }).branches);
   return {
     ...layout,
-    modules: [...moduleRows].sort((a, b) => a.positionIndex - b.positionIndex),
+    // Main spine = placements without a branchId (#170).
+    modules: sorted.filter((m) => m.branchId == null),
+    branchSpines: branchDefs.map((b) => ({
+      ...b,
+      modules: sorted.filter((m) => m.branchId === b.id),
+    })),
     districts: [...districtRows].sort(byPos).map((d) => ({
       ...d,
       sections: (sectionsByDistrict.get(d.id) ?? []).sort(byPos).map((s) => ({
@@ -264,6 +278,25 @@ class TrackModel {
       .where(eq(layouts.id, layoutId));
   }
 
+  /** Replace the layout's branch-spine definitions (#170). Placements on a
+   * deleted branch fall back to the main spine (branchId cleared). */
+  async setBranches(layoutId: string, branches: BranchDef[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.update(layouts).set({ branches }).where(eq(layouts.id, layoutId));
+      const keep = branches.map((b) => b.id);
+      await tx
+        .update(moduleLayouts)
+        .set({ branchId: null })
+        .where(
+          and(
+            eq(moduleLayouts.layoutId, layoutId),
+            isNotNull(moduleLayouts.branchId),
+            ...(keep.length ? [notInArray(moduleLayouts.branchId, keep)] : []),
+          ),
+        );
+    });
+  }
+
   /** Replace the layout-level control points (#144). */
   async setLayoutControlPoints(
     layoutId: string,
@@ -285,15 +318,23 @@ class TrackModel {
   async syncDerivedSections(layoutId: string): Promise<void> {
     const tree = await this.getLayout(layoutId);
     if (!tree) return;
-    const cps = layoutControlPoints(
-      tree.modules,
-      asLayoutCps(tree.layoutControlPoints),
-    );
+    const layoutCps = asLayoutCps(tree.layoutControlPoints);
     const assignments =
       tree.controlPointDistricts && typeof tree.controlPointDistricts === "object"
         ? (tree.controlPointDistricts as Record<string, string>)
         : {};
-    const derived = deriveSections(cps, assignments, tree.modules);
+    // Each spine derives independently (#170): main first, then branches.
+    const spines: { id: string | null; modules: typeof tree.modules }[] = [
+      { id: null, modules: tree.modules },
+      ...tree.branchSpines.map((b) => ({ id: b.id, modules: b.modules })),
+    ];
+    const derived = spines.flatMap((s) =>
+      deriveSections(
+        layoutControlPoints(s.modules, layoutCps, s.id),
+        assignments,
+        s.modules,
+      ),
+    );
     const existing = tree.districts.flatMap((d) =>
       d.sections.map((s) => ({
         id: s.id,
@@ -392,6 +433,7 @@ class TrackModel {
         schematic: repoModules.schematic,
         removedFromRepoAt: repoModules.removedFromRepoAt,
         status: repoModules.status,
+        branchId: moduleLayouts.branchId,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))

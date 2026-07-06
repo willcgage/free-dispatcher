@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { trackModel } from "@/lib/server/TrackModel";
+import { asBranches } from "@/lib/track/layoutControlPoints";
 import { requireRole } from "@/lib/server/guard";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,8 @@ export async function PATCH(
       anchor: string;
       offsetInches: number;
     }[];
+    /** Branch-spine definitions (#170). */
+    branches?: unknown;
   };
   try {
     body = await req.json();
@@ -76,6 +79,10 @@ export async function PATCH(
         Number.isFinite(c.offsetInches),
     );
     await trackModel.setLayoutControlPoints(id, cps);
+  }
+  if (body.branches !== undefined) {
+    // Branch-spine definitions (#170); junk entries are dropped by the parser.
+    await trackModel.setBranches(id, asBranches(body.branches));
   }
   // Re-materialize the sections the control points derive (#146).
   await trackModel.syncDerivedSections(id);

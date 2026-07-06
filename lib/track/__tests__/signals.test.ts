@@ -33,6 +33,7 @@ describe("cpSignalAspects (#151 live CTC panel)", () => {
     name: key,
     source: "module",
     posInches: null,
+    spineId: null,
   });
   // West — Mid — East along the spine; one derived section each side of Mid.
   const cps = [cp("M:west"), cp("M:mid"), cp("M:east")];

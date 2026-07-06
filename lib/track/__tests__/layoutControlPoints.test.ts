@@ -3,6 +3,7 @@ import {
   layoutControlPoints,
   deriveSections,
   asLayoutCps,
+  asBranches,
   planSectionSync,
   planBlockSync,
   DERIVED_POSITION_BASE,
@@ -284,6 +285,56 @@ describe("planSectionSync (#146)", () => {
   it("skips sections for districts that no longer exist", () => {
     const plan = planSectionSync([], derived, new Set<string>());
     expect(plan.insert).toEqual([]);
+  });
+});
+
+describe("branch spines (#170)", () => {
+  const main = [
+    mod("FMN-0001", 0, [{ id: "a", name: "A", pos: 10 }, { id: "b", name: "B", pos: 90 }]),
+  ];
+  const branch = [mod("FMN-0002", 0, [{ id: "c", name: "C", pos: 10 }])];
+
+  it("tags refs with their spine and keeps keys spine-agnostic", () => {
+    const cps = [
+      ...layoutControlPoints(main, []),
+      ...layoutControlPoints(branch, [], "br-1"),
+    ];
+    expect(cps.map((c) => `${c.key}@${c.spineId ?? "main"}`)).toEqual([
+      "FMN-0001:a@main",
+      "FMN-0001:b@main",
+      "FMN-0002:c@br-1",
+    ]);
+  });
+
+  it("sections never derive across the junction (spine boundary)", () => {
+    const cps = [
+      ...layoutControlPoints(main, []),
+      ...layoutControlPoints(branch, [], "br-1"),
+    ];
+    // Everything in one district — but B (main) → C (branch) must NOT pair.
+    const sections = deriveSections(cps, {
+      "FMN-0001:a": "d1",
+      "FMN-0001:b": "d1",
+      "FMN-0002:c": "d1",
+    });
+    expect(sections.map((s) => s.name)).toEqual(["A – B"]);
+  });
+});
+
+describe("asBranches", () => {
+  it("parses stored defs and tolerates junk", () => {
+    expect(asBranches(null)).toEqual([]);
+    expect(
+      asBranches([
+        { id: "br-1", name: "Bowl Idaho", origin: { placementId: "pl-1", endplateId: "C" } },
+        { id: "br-2", origin: { placementId: "pl-2" } }, // name + endplate default
+        { id: 5, origin: {} }, // dropped
+        "junk",
+      ]),
+    ).toEqual([
+      { id: "br-1", name: "Bowl Idaho", origin: { placementId: "pl-1", endplateId: "C" } },
+      { id: "br-2", name: "br-2", origin: { placementId: "pl-2", endplateId: "C" } },
+    ]);
   });
 });
 

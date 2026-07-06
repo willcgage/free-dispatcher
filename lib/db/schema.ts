@@ -64,6 +64,10 @@ export const layouts = pgTable("layouts", {
   // anchored to a layout_modules row at an offset from its A end. They
   // interleave with the imported ones and feed the same section derivation.
   layoutControlPoints: jsonb("layout_control_points"),
+  // Spine graph (#170): [{id, name, origin: {placementId, endplateId}}] —
+  // branch spines attached at a junction endplate of a placed module. The
+  // ordered module_layouts rows with branch_id null remain the main spine.
+  branches: jsonb("branches"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -223,6 +227,10 @@ export const moduleLayouts = pgTable(
     stagingEnd: text("staging_end").$type<StagingEnd>(),
     // Mirror this placement so curves bend the other way (#115 orientation).
     flipped: boolean("flipped").notNull().default(false),
+    // Spine graph (#170): null = the main spine; otherwise the id of a branch
+    // in layouts.branches this placement belongs to. positionIndex orders
+    // within its own spine.
+    branchId: text("branch_id"),
   },
   (t) => [index("module_layouts_layout_idx").on(t.layoutId)],
 );
