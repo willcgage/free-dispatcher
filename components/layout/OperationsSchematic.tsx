@@ -146,7 +146,8 @@ export function OperationsSchematic({
           // terminal bulb on the outward side — first cell opens west, any
           // other placement opens east.
           const cellDoc = asModuleSchematic(c.input.schematic);
-          const isLoop = !!cellDoc && moduleFeatures(cellDoc).loop;
+          const cellFeat = cellDoc ? moduleFeatures(cellDoc) : null;
+          const isLoop = !!cellFeat?.loop;
           const bulbWest = isLoop && ci === 0;
           const bulbR = Math.min(6, c.width * 0.06);
           const mainX1 = isLoop && bulbWest ? c.x + bulbR * 2 : c.x;
@@ -170,16 +171,45 @@ export function OperationsSchematic({
                 strokeLinecap="round"
               />
               {isLoop && (
-                <circle
-                  cx={bulbWest ? c.x + bulbR : c.x + c.width - bulbR}
-                  cy={Y0}
-                  r={bulbR}
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth={STROKE * 0.7}
-                >
-                  <title>Balloon loop — trains turn back</title>
-                </circle>
+                <>
+                  <circle
+                    cx={bulbWest ? c.x + bulbR : c.x + c.width - bulbR}
+                    cy={Y0}
+                    r={bulbR}
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={STROKE * 0.7}
+                  >
+                    <title>
+                      {cellFeat?.loopInterchange
+                        ? "Balloon loop with interchange — a second route connects here"
+                        : "Balloon loop — trains turn back"}
+                    </title>
+                  </circle>
+                  {/* Standard endplate B on the balloon = interchange branch */}
+                  {cellFeat?.loopInterchange && (
+                    <>
+                      <line
+                        x1={bulbWest ? c.x + bulbR : c.x + c.width - bulbR}
+                        y1={Y0 - bulbR}
+                        x2={bulbWest ? c.x + bulbR : c.x + c.width - bulbR}
+                        y2={Y0 - bulbR - 8}
+                        stroke={stroke}
+                        strokeWidth={STROKE * 0.7}
+                      />
+                      <line
+                        x1={(bulbWest ? c.x + bulbR : c.x + c.width - bulbR) - 4}
+                        y1={Y0 - bulbR - 8}
+                        x2={(bulbWest ? c.x + bulbR : c.x + c.width - bulbR) + 4}
+                        y2={Y0 - bulbR - 8}
+                        stroke="#94a3b8"
+                        strokeWidth={1.2}
+                      >
+                        <title>Interchange endplate (B)</title>
+                      </line>
+                    </>
+                  )}
+                </>
               )}
               {/* Main 2 + diverge/converge turnouts */}
               {hasSecond && (
