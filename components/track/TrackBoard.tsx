@@ -121,9 +121,17 @@ export function TrackBoard({
 
   // Live CTC panel (#151): control-point signal aspects from allocations.
   const allSections = layout.districts.flatMap((d) => d.sections);
-  const cps = layout.modules?.length
-    ? layoutControlPoints(layout.modules, asLayoutCps(layout.layoutControlPoints))
-    : [];
+  const layoutCps = asLayoutCps(layout.layoutControlPoints);
+  const branchSpines = layout.branchSpines ?? [];
+  // Main spine, then each branch (#170) — adjacency never crosses the junction.
+  const cps = [
+    ...(layout.modules?.length
+      ? layoutControlPoints(layout.modules, layoutCps)
+      : []),
+    ...branchSpines.flatMap((b) =>
+      layoutControlPoints(b.modules, layoutCps, b.id),
+    ),
+  ];
   const sectionsByDerivedKey = new Map(
     allSections
       .filter((s) => s.derivedKey != null)
@@ -143,9 +151,23 @@ export function TrackBoard({
 
   return (
     <div className="space-y-4">
-      {/* Live operations panel — signals show cleared routes (#151). */}
+      {/* Live operations panel — signals show cleared routes (#151); branch
+          spines stack as their own bands (#170). */}
       {layout.modules && layout.modules.length > 0 && (
-        <OperationsSchematic modules={layout.modules} signalAspects={aspects} />
+        <>
+          <OperationsSchematic modules={layout.modules} signalAspects={aspects} />
+          {branchSpines
+            .filter((b) => b.modules.length > 0)
+            .map((b) => (
+              <div key={b.id}>
+                <div className="mb-0.5 text-[11px] text-slate-500">
+                  ⤷ <span className="text-slate-300">{b.name}</span>
+                </div>
+                <OperationsSchematic modules={b.modules} signalAspects={aspects} branchBand
+                                  />
+              </div>
+            ))}
+        </>
       )}
 
       {/* Signal legend */}

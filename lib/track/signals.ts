@@ -71,6 +71,8 @@ export function cpSignalAspects(
   for (let i = 0; i < controlPoints.length - 1; i++) {
     const a = controlPoints[i];
     const b = controlPoints[i + 1];
+    // Per-spine adjacency (#170): no section spans a junction.
+    if ((a.spineId ?? null) !== (b.spineId ?? null)) continue;
     const sectionId = sectionsByDerivedKey.get(`${a.key}→${b.key}`);
     if (!sectionId) continue;
     const alloc = allocations[sectionId];

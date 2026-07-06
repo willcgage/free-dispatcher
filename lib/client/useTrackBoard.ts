@@ -55,6 +55,13 @@ export interface LayoutTree {
   districts: DistrictNode[];
   /** Module placements in spine order — for the live operations panel (#151). */
   modules?: LayoutModuleNode[];
+  /** Branch spines (#170) — defs + their placements. */
+  branchSpines?: {
+    id: string;
+    name: string;
+    origin: { placementId: string; endplateId: string };
+    modules: LayoutModuleNode[];
+  }[];
   controlPointDistricts?: Record<string, string> | null;
   layoutControlPoints?: unknown;
 }

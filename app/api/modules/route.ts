@@ -51,6 +51,8 @@ export async function POST(req: Request) {
     moduleId?: string;
     moduleIds?: string[];
     stagingEnd?: StagingEnd;
+    /** Target spine (#170): a branch id from layouts.branches; absent = main. */
+    branchId?: string;
   };
   try {
     body = await req.json();
@@ -73,11 +75,16 @@ export async function POST(req: Request) {
   }
 
   const layoutId = body.layoutId.trim();
+  const branchId = body.branchId?.trim() || null;
   const existing = await db
     .select()
     .from(moduleLayouts)
     .where(eq(moduleLayouts.layoutId, layoutId));
-  let pos = existing.reduce((m, r) => Math.max(m, r.positionIndex), -1) + 1;
+  // Position within the target spine (#170) — each spine orders independently.
+  let pos =
+    existing
+      .filter((r) => (r.branchId ?? null) === branchId)
+      .reduce((m, r) => Math.max(m, r.positionIndex), -1) + 1;
 
   const rows = await db
     .insert(moduleLayouts)
@@ -87,6 +94,7 @@ export async function POST(req: Request) {
         moduleId,
         positionIndex: pos++,
         stagingEnd: body.stagingEnd ?? null,
+        branchId,
       })),
     )
     .returning();

@@ -80,8 +80,16 @@ interface LayoutModuleNode {
   /** Owner's repo status: active | inactive | archived (#158). */
   status: string | null;
 }
+interface BranchSpine {
+  id: string;
+  name: string;
+  origin: { placementId: string; endplateId: string };
+  modules: LayoutModuleNode[];
+}
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
+  /** Branch spines (#170) — defs + their placements. */
+  branchSpines: BranchSpine[];
   districts: DistrictNode[];
 }
 
@@ -138,6 +146,11 @@ export default function AdminLayouts() {
   // Add-form draft for a layout-level control point, keyed by layout id (#144).
   const [cpDraft, setCpDraft] = useState<
     Record<string, { name: string; anchor: string; offset: string }>
+  >({});
+  // Branch spines (#170): picker target + new-branch draft, keyed by layout id.
+  const [addTarget, setAddTarget] = useState<Record<string, string>>({});
+  const [branchDraft, setBranchDraft] = useState<
+    Record<string, { name: string; placementId: string }>
   >({});
   // Dropped-module notice + schematic highlight + replace flow (#158).
   const [unavailNotice, setUnavailNotice] = useState<{ layoutId: string } | null>(null);
@@ -262,11 +275,29 @@ export default function AdminLayouts() {
     if (ids.length === 0) return;
     setBusy(true);
     try {
-      await apiSend("POST", "/api/modules", { layoutId, moduleIds: ids });
+      // Target spine (#170): the picker's "Add to" select — main or a branch.
+      const branchId = addTarget[layoutId] || undefined;
+      await apiSend("POST", "/api/modules", { layoutId, moduleIds: ids, branchId });
       setModChecked((p) => ({ ...p, [layoutId]: [] }));
       await Promise.all([reloadTree(layoutId), load()]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "add failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Create / delete branch spines (#170). */
+  async function saveBranches(
+    layoutId: string,
+    branches: { id: string; name: string; origin: { placementId: string; endplateId: string } }[],
+  ) {
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/layouts/${layoutId}`, { branches });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "save failed");
     } finally {
       setBusy(false);
     }
@@ -886,6 +917,126 @@ export default function AdminLayouts() {
                               </p>
                             )}
 
+                            {/* Branch spines (#170) */}
+                            {tree.branchSpines.map((b) => (
+                              <div key={b.id} className="mb-2 rounded border border-slate-800 bg-slate-900/40 p-1.5">
+                                <div className="mb-1 flex items-center gap-2 text-xs">
+                                  <span className="text-slate-400">⤷</span>
+                                  <span className="font-medium text-slate-200">{b.name}</span>
+                                  <span className="text-slate-500">
+                                    from{" "}
+                                    {tree.modules.find((m) => m.id === b.origin.placementId)
+                                      ?.moduleName ?? "?"}{" "}
+                                    ({b.origin.endplateId})
+                                  </span>
+                                  <button
+                                    disabled={busy}
+                                    title="Delete branch — its modules return to the main line"
+                                    onClick={() =>
+                                      saveBranches(
+                                        l.id,
+                                        tree.branchSpines
+                                          .filter((x) => x.id !== b.id)
+                                          .map(({ id, name, origin }) => ({ id, name, origin })),
+                                      )
+                                    }
+                                    className="ml-auto rounded px-1 text-xs text-slate-500 hover:text-red-400"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                                {b.modules.length === 0 ? (
+                                  <p className="text-[11px] text-slate-600">
+                                    No modules — pick “→ {b.name}” in the catalog’s Add-to select.
+                                  </p>
+                                ) : (
+                                  <ul className="space-y-0.5">
+                                    {b.modules.map((m, bi) => (
+                                      <li key={m.id} className="flex items-center gap-2 text-sm">
+                                        <span className="w-5 shrink-0 text-right text-xs text-slate-500">
+                                          {bi + 1}
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate text-slate-200">
+                                          {m.moduleName ?? m.moduleId}
+                                        </span>
+                                        <span className="shrink-0 font-mono text-xs text-slate-500">
+                                          {m.moduleId}
+                                        </span>
+                                        <button
+                                          disabled={busy}
+                                          onClick={() => removeModule(l.id, m.id)}
+                                          className="shrink-0 rounded px-1 text-xs text-slate-500 hover:text-red-400"
+                                        >
+                                          ✕
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            ))}
+                            {/* New branch: anchored at a main-spine module */}
+                            {tree.modules.length > 0 && (
+                              <div className="mb-2 flex items-center gap-1.5">
+                                <input
+                                  value={branchDraft[l.id]?.name ?? ""}
+                                  placeholder="New branch (e.g. Bowl Idaho)"
+                                  onChange={(e) =>
+                                    setBranchDraft((p) => ({
+                                      ...p,
+                                      [l.id]: {
+                                        name: e.target.value,
+                                        placementId:
+                                          p[l.id]?.placementId ?? tree.modules[0].id,
+                                      },
+                                    }))
+                                  }
+                                  className="w-44 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-200"
+                                />
+                                <span className="text-xs text-slate-500">from</span>
+                                <select
+                                  value={branchDraft[l.id]?.placementId ?? tree.modules[0].id}
+                                  onChange={(e) =>
+                                    setBranchDraft((p) => ({
+                                      ...p,
+                                      [l.id]: {
+                                        name: p[l.id]?.name ?? "",
+                                        placementId: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                >
+                                  {tree.modules.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.moduleName ?? m.moduleId}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  disabled={busy || !(branchDraft[l.id]?.name ?? "").trim()}
+                                  onClick={() => {
+                                    const d = branchDraft[l.id]!;
+                                    setBranchDraft((p) => ({
+                                      ...p,
+                                      [l.id]: { name: "", placementId: d.placementId },
+                                    }));
+                                    saveBranches(l.id, [
+                                      ...tree.branchSpines.map(({ id, name, origin }) => ({ id, name, origin })),
+                                      {
+                                        id: `br-${Date.now().toString(36)}`,
+                                        name: d.name.trim(),
+                                        origin: { placementId: d.placementId, endplateId: "C" },
+                                      },
+                                    ]);
+                                  }}
+                                  className="rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                                >
+                                  + Branch
+                                </button>
+                              </div>
+                            )}
+
                             {/* Add from the catalog (multi-select) */}
                             {catalog.length === 0 ? (
                               <p className="text-xs text-slate-600">
@@ -912,6 +1063,23 @@ export default function AdminLayouts() {
                                       }))
                                     }
                                   />
+                                  {tree.branchSpines.length > 0 && (
+                                    <select
+                                      value={addTarget[l.id] ?? ""}
+                                      onChange={(e) =>
+                                        setAddTarget((p) => ({ ...p, [l.id]: e.target.value }))
+                                      }
+                                      title="Which spine new modules join (#170)"
+                                      className="shrink-0 rounded border border-slate-700 bg-slate-800 px-1 py-1 text-xs text-slate-300"
+                                    >
+                                      <option value="">→ Main line</option>
+                                      {tree.branchSpines.map((b) => (
+                                        <option key={b.id} value={b.id}>
+                                          → {b.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
                                   <button
                                     disabled={busy || checkedOf(l.id).length === 0}
                                     onClick={() => addModules(l.id)}
@@ -1007,7 +1175,9 @@ export default function AdminLayouts() {
                             )}
                           </div>
 
-                          {/* Operations schematic (straightened — primary) */}
+                          {/* Operations schematic (straightened — primary).
+                              Branch spines stack as their own bands below the
+                              main line, the CATS/US&S multi-band idiom (#170). */}
                           <div id={`ops-schematic-${l.id}`}>
                             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
                               Operations schematic
@@ -1017,6 +1187,26 @@ export default function AdminLayouts() {
                               districts={tree.districts}
                               highlightModuleIds={highlightMods[l.id]}
                             />
+                            {tree.branchSpines
+                              .filter((b) => b.modules.length > 0)
+                              .map((b) => (
+                                <div key={b.id} className="mt-2">
+                                  <div className="mb-0.5 text-[11px] text-slate-500">
+                                    ⤷ <span className="text-slate-300">{b.name}</span>{" "}
+                                    — from{" "}
+                                    {tree.modules.find(
+                                      (m) => m.id === b.origin.placementId,
+                                    )?.moduleName ?? "the main line"}{" "}
+                                    ({b.origin.endplateId})
+                                  </div>
+                                  <OperationsSchematic
+                                    modules={b.modules}
+                                    districts={tree.districts}
+                                    highlightModuleIds={highlightMods[l.id]}
+                                  branchBand
+                                  />
+                                </div>
+                              ))}
                           </div>
 
                           {/* Footprint (to-scale, physical shape) */}
@@ -1038,7 +1228,14 @@ export default function AdminLayouts() {
                             </div>
                             {(() => {
                               const layoutCps = asLayoutCps(tree.layoutControlPoints);
-                              const cps = layoutControlPoints(tree.modules, layoutCps);
+                              // Main spine first, then each branch (#170) —
+                              // sections never derive across the junction.
+                              const cps = [
+                                ...layoutControlPoints(tree.modules, layoutCps),
+                                ...tree.branchSpines.flatMap((b) =>
+                                  layoutControlPoints(b.modules, layoutCps, b.id),
+                                ),
+                              ];
                               const draft = cpDraft[l.id] ?? {
                                 name: "",
                                 anchor: tree.modules[0]?.id ?? "",
