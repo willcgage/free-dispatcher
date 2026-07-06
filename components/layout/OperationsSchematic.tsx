@@ -148,11 +148,18 @@ export function OperationsSchematic({
           const cellDoc = asModuleSchematic(c.input.schematic);
           const cellFeat = cellDoc ? moduleFeatures(cellDoc) : null;
           const isLoop = !!cellFeat?.loop;
+          // Main 2 directional return (#165): the balloon is a U joining the
+          // two main lanes at the outward side — no bulb.
+          const isUReturn = isLoop && cellFeat?.loopReturn === "main2";
           const bulbWest = isLoop && ci === 0;
           const bulbR = Math.min(6, c.width * 0.06);
-          const mainX1 = isLoop && bulbWest ? c.x + bulbR * 2 : c.x;
+          const uR = (Y0 - Y1) / 2; // U-bend radius spans the two main lanes
+          const mainX1 =
+            isLoop && bulbWest ? c.x + (isUReturn ? uR : bulbR * 2) : c.x;
           const mainX2 =
-            isLoop && !bulbWest ? c.x + c.width - bulbR * 2 : c.x + c.width;
+            isLoop && !bulbWest
+              ? c.x + c.width - (isUReturn ? uR : bulbR * 2)
+              : c.x + c.width;
           const hasSecond = !isLoop && (c.leftTracks >= 2 || c.rightTracks >= 2);
           const inSwitch = Math.min(c.width * 0.3, 30);
           const lane1Start = c.leftTracks >= 2 ? c.x : c.x + inSwitch + LANE_GAP;
@@ -170,7 +177,34 @@ export function OperationsSchematic({
                 strokeWidth={STROKE}
                 strokeLinecap="round"
               />
-              {isLoop && (
+              {isUReturn && (
+                <>
+                  {/* Main 2 runs the lead; the balloon is the U between the mains */}
+                  <line
+                    x1={bulbWest ? mainX1 : c.x}
+                    y1={Y1}
+                    x2={bulbWest ? c.x + c.width : mainX2}
+                    y2={Y1}
+                    stroke={stroke}
+                    strokeWidth={STROKE}
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d={
+                      bulbWest
+                        ? `M ${mainX1} ${Y0} A ${uR} ${uR} 0 0 1 ${mainX1} ${Y1}`
+                        : `M ${mainX2} ${Y0} A ${uR} ${uR} 0 0 0 ${mainX2} ${Y1}`
+                    }
+                    fill="none"
+                    stroke={stroke}
+                    strokeWidth={STROKE}
+                    strokeLinecap="round"
+                  >
+                    <title>Directional return — out on Main 1, back on Main 2</title>
+                  </path>
+                </>
+              )}
+              {isLoop && !isUReturn && (
                 <>
                   <circle
                     cx={bulbWest ? c.x + bulbR : c.x + c.width - bulbR}
