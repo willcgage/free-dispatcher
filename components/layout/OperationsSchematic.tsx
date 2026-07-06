@@ -81,7 +81,10 @@ export function OperationsSchematic({
     0,
     ...schem.cells.map((c) => {
       const doc = asModuleSchematic(c.input.schematic);
-      return doc ? moduleFeatures(doc).laneMin : 0;
+      if (!doc) return 0;
+      const f = moduleFeatures(doc);
+      // A down-side branch connector (#170) hangs a lane below the lowest track.
+      return f.laneMin - (f.branchConnectors.some((b) => b.side === "down") ? 1 : 0);
     }),
   );
   const LABEL_Y = Y0 - minLane * LANE_GAP + 10;
@@ -397,6 +400,49 @@ export function OperationsSchematic({
                   <title>{`Turnout${t.name ? ` · ${t.name}` : ""}`}</title>
                 </circle>
               ))}
+              {/* Crossings (diamonds) — an X spanning the two lanes (#170) */}
+              {feat.crossings.map((x) => {
+                const cx = px(x.posFrac);
+                const yA = laneY(x.laneA);
+                const yB = laneY(x.laneB);
+                const cy = (yA + yB) / 2;
+                const h = Math.max(Math.abs(yA - yB) / 2, 3);
+                return (
+                  <g key={x.id} stroke="#f87171" strokeWidth={1.4} strokeLinecap="round">
+                    <line x1={cx - 3} y1={cy - h} x2={cx + 3} y2={cy + h} />
+                    <line x1={cx - 3} y1={cy + h} x2={cx + 3} y2={cy - h} />
+                    <title>{`Crossing${x.name ? ` · ${x.name}` : ""}`}</title>
+                  </g>
+                );
+              })}
+              {/* Branch endplates — named connector arrows (#170) */}
+              {feat.branchConnectors.map((b) => {
+                const bx = px(b.posFrac);
+                const dir = b.side === "down" ? 1 : -1;
+                const y0g = laneY(0);
+                const yTip = y0g + dir * (LANE_GAP - 1);
+                return (
+                  <g key={b.id}>
+                    <line x1={bx} y1={y0g} x2={bx + 4} y2={yTip} stroke="#94a3b8" strokeWidth={1.4} strokeLinecap="round" />
+                    <polygon
+                      points={`${bx + 4 - 2.4},${yTip} ${bx + 4 + 2.4},${yTip} ${bx + 4},${yTip + dir * 3.2}`}
+                      fill="#94a3b8"
+                    />
+                    {c.width > 30 && (
+                      <text
+                        x={bx + 7}
+                        y={yTip + dir * 4}
+                        fontSize="5.5"
+                        className="fill-slate-500"
+                        dominantBaseline={b.side === "down" ? "hanging" : "auto"}
+                      >
+                        {`to ${b.label}`}
+                      </text>
+                    )}
+                    <title>{`Branch endplate — to ${b.label}`}</title>
+                  </g>
+                );
+              })}
               {feat.signals.map((s) => {
                 // Draw the signal parallel to the track, pointing in its facing
                 // direction, so two signals at the same spot (opposite ways)
