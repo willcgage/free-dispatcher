@@ -140,25 +140,47 @@ export function OperationsSchematic({
           })}
 
         {/* Per-module: Main 1 (continuous) + Main 2 (where double) + turnouts */}
-        {schem.cells.map((c) => {
+        {schem.cells.map((c, ci) => {
           const stroke = colorFor(c.input.moduleId);
-          const hasSecond = c.leftTracks >= 2 || c.rightTracks >= 2;
+          // A loop module (single-endplate turnback, #165): the main ends in a
+          // terminal bulb on the outward side — first cell opens west, any
+          // other placement opens east.
+          const cellDoc = asModuleSchematic(c.input.schematic);
+          const isLoop = !!cellDoc && moduleFeatures(cellDoc).loop;
+          const bulbWest = isLoop && ci === 0;
+          const bulbR = Math.min(6, c.width * 0.06);
+          const mainX1 = isLoop && bulbWest ? c.x + bulbR * 2 : c.x;
+          const mainX2 =
+            isLoop && !bulbWest ? c.x + c.width - bulbR * 2 : c.x + c.width;
+          const hasSecond = !isLoop && (c.leftTracks >= 2 || c.rightTracks >= 2);
           const inSwitch = Math.min(c.width * 0.3, 30);
           const lane1Start = c.leftTracks >= 2 ? c.x : c.x + inSwitch + LANE_GAP;
           const lane1End =
             c.rightTracks >= 2 ? c.x + c.width : c.x + c.width - inSwitch - LANE_GAP;
           return (
             <g key={c.input.id}>
-              {/* Main 1 — always continuous */}
+              {/* Main 1 — continuous; loops turn back at the bulb */}
               <line
-                x1={c.x}
+                x1={mainX1}
                 y1={Y0}
-                x2={c.x + c.width}
+                x2={mainX2}
                 y2={Y0}
                 stroke={stroke}
                 strokeWidth={STROKE}
                 strokeLinecap="round"
               />
+              {isLoop && (
+                <circle
+                  cx={bulbWest ? c.x + bulbR : c.x + c.width - bulbR}
+                  cy={Y0}
+                  r={bulbR}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={STROKE * 0.7}
+                >
+                  <title>Balloon loop — trains turn back</title>
+                </circle>
+              )}
               {/* Main 2 + diverge/converge turnouts */}
               {hasSecond && (
                 <>
