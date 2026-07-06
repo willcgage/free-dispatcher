@@ -42,7 +42,7 @@ export default function AdminModules() {
     setSyncMsg(null);
     try {
       const result = await apiSend<
-        | { synced: number; removed?: number; lastSyncedAt: string }
+        | { synced: number; removed?: number; restored?: number; lastSyncedAt: string }
         | { error: string; message: string }
       >("POST", "/api/modules/sync", undefined);
 
@@ -61,7 +61,7 @@ export default function AdminModules() {
           ok: true,
           text: `Synced ${result.synced} module(s)${
             result.removed ? ` · ${result.removed} removed from the repo` : ""
-          }`,
+          }${result.restored ? ` · ${result.restored} restored` : ""}`,
         });
       }
     } catch (err) {

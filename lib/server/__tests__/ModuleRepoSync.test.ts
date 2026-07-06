@@ -167,6 +167,48 @@ describe("syncModules — happy path", () => {
     expect(mockOnConflict).toHaveBeenCalledTimes(3); // 2 modules + 1 sync meta write
   });
 
+  it("requests all statuses and reconciles against the full id list (#163)", async () => {
+    // The reconcile adds a local-status select between the meta read and the
+    // final count query — give the order-sensitive from() mock a third result.
+    mockFrom.mockReturnValueOnce(makeFromResult([{ count: 2 }]));
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([makeModule(1)]), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            { record_number: "FMN-0001", status: "active" },
+            { record_number: "FMN-0002", status: "inactive" },
+          ]),
+          { status: 200 },
+        ),
+      );
+
+    await syncModules();
+
+    // Main fetch mirrors every status (not just active)…
+    const mainUrl = vi.mocked(fetch).mock.calls[0][0] as string;
+    expect(mainUrl).toContain("status=any");
+    // …and the tombstone diff uses a SECOND, complete id listing — never the
+    // (possibly incremental) main fetch (the #156 mass-tombstone bug).
+    const idsUrl = vi.mocked(fetch).mock.calls[1][0] as string;
+    expect(idsUrl).toContain("fields=ids");
+    expect(idsUrl).toContain("status=any");
+  });
+
+  it("skips the tombstone diff when the id listing fails", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([makeModule(1)]), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response("oops", { status: 500 }));
+
+    const result = await syncModules();
+
+    expect(result).toMatchObject({ synced: 1, removed: 0, restored: 0 });
+  });
+
   it("appends updated_since param when a previous sync exists", async () => {
     // Override: first from() returns existing sync meta
     mockFrom.mockReset();
