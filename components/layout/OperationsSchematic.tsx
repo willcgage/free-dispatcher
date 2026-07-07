@@ -169,9 +169,19 @@ export function OperationsSchematic({
               : c.x + c.width;
           const hasSecond = !isLoop && (c.leftTracks >= 2 || c.rightTracks >= 2);
           const inSwitch = Math.min(c.width * 0.3, 30);
-          const lane1Start = c.leftTracks >= 2 ? c.x : c.x + inSwitch + LANE_GAP;
-          const lane1End =
-            c.rightTracks >= 2 ? c.x + c.width : c.x + c.width - inSwitch - LANE_GAP;
+          // Authored transition (FMN-0038): Main 2's extent comes from the
+          // schematic's mainline turnout, not the default inset.
+          const m2 = cellFeat?.main2Extent ?? null;
+          const lane1Start = m2
+            ? c.x + m2.fromFrac * c.width + (c.leftTracks < 2 ? LANE_GAP : 0)
+            : c.leftTracks >= 2
+              ? c.x
+              : c.x + inSwitch + LANE_GAP;
+          const lane1End = m2
+            ? c.x + m2.toFrac * c.width - (c.rightTracks < 2 ? LANE_GAP : 0)
+            : c.rightTracks >= 2
+              ? c.x + c.width
+              : c.x + c.width - inSwitch - LANE_GAP;
           return (
             <g key={c.input.id}>
               {/* Main 1 — continuous; loops turn back at the bulb */}
@@ -268,7 +278,7 @@ export function OperationsSchematic({
                   )}
                   {c.leftTracks < 2 && (
                     <line
-                      x1={c.x + inSwitch}
+                      x1={lane1Start - LANE_GAP}
                       y1={Y0}
                       x2={lane1Start}
                       y2={Y1}
@@ -281,7 +291,7 @@ export function OperationsSchematic({
                     <line
                       x1={lane1End}
                       y1={Y1}
-                      x2={c.x + c.width - inSwitch}
+                      x2={lane1End + LANE_GAP}
                       y2={Y0}
                       stroke={stroke}
                       strokeWidth={STROKE}
