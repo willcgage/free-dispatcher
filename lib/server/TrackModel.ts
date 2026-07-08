@@ -41,6 +41,13 @@ import {
   type BranchDef,
   type SpannedModule,
 } from "@/lib/track/layoutControlPoints";
+import {
+  layoutJoins,
+  asJoins,
+  joinStatus,
+  type LayoutJoin,
+  type JoinStatus,
+} from "@/lib/track/layoutJoins";
 
 // ---- Authoring input/output shapes ---------------------------------------
 
@@ -98,6 +105,8 @@ export interface LayoutModule {
   status: string | null;
   /** Spine this placement sits on (#170): null = main spine. */
   branchId: string | null;
+  /** Mirrored/flipped placement (#175). */
+  mirrored: boolean;
 }
 
 export interface LayoutTree extends LayoutRow {
@@ -105,6 +114,9 @@ export interface LayoutTree extends LayoutRow {
   modules: LayoutModule[];
   /** Branch spines (#170): defs from layouts.branches with their placements. */
   branchSpines: (BranchDef & { modules: LayoutModule[] })[];
+  /** Endplate joins (#175): implicit spine joins + stored explicit ones, each
+   * tagged with its compatibility status. */
+  joins: (LayoutJoin & { status: JoinStatus })[];
   districts: (DistrictRow & {
     sections: (SectionRow & { blocks: BlockRow[] })[];
     turnouts: TurnoutRow[];
@@ -162,14 +174,31 @@ export function buildLayoutTree(
   }
   const sorted = [...moduleRows].sort((a, b) => a.positionIndex - b.positionIndex);
   const branchDefs = asBranches((layout as { branches?: unknown }).branches);
+  const mainSpine = sorted.filter((m) => m.branchId == null);
+  const branchSpines = branchDefs.map((b) => ({
+    ...b,
+    modules: sorted.filter((m) => m.branchId === b.id),
+  }));
+  // Endplate joins (#175): implicit spine chaining + stored explicit joins,
+  // each tagged with per-join compatibility.
+  const byId = new Map(sorted.map((m) => [m.id, m]));
+  const joins = layoutJoins(
+    [
+      { branchId: null, modules: mainSpine },
+      ...branchSpines.map((b) => ({
+        branchId: b.id,
+        origin: b.origin,
+        modules: b.modules,
+      })),
+    ],
+    asJoins((layout as { joins?: unknown }).joins),
+  ).map((j) => ({ ...j, status: joinStatus(j, byId) }));
   return {
     ...layout,
     // Main spine = placements without a branchId (#170).
-    modules: sorted.filter((m) => m.branchId == null),
-    branchSpines: branchDefs.map((b) => ({
-      ...b,
-      modules: sorted.filter((m) => m.branchId === b.id),
-    })),
+    modules: mainSpine,
+    branchSpines,
+    joins,
     districts: [...districtRows].sort(byPos).map((d) => ({
       ...d,
       sections: (sectionsByDistrict.get(d.id) ?? []).sort(byPos).map((s) => ({
@@ -276,6 +305,11 @@ class TrackModel {
       .update(layouts)
       .set({ controlPointDistricts: map })
       .where(eq(layouts.id, layoutId));
+  }
+
+  /** Replace the layout's explicit endplate joins (#175). */
+  async setJoins(layoutId: string, joins: LayoutJoin[]): Promise<void> {
+    await db.update(layouts).set({ joins }).where(eq(layouts.id, layoutId));
   }
 
   /** Replace the layout's branch-spine definitions (#170). Placements on a
@@ -434,6 +468,7 @@ class TrackModel {
         removedFromRepoAt: repoModules.removedFromRepoAt,
         status: repoModules.status,
         branchId: moduleLayouts.branchId,
+        mirrored: moduleLayouts.mirrored,
       })
       .from(moduleLayouts)
       .leftJoin(repoModules, eq(moduleLayouts.moduleId, repoModules.recordNumber))

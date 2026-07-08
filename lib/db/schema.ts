@@ -68,6 +68,10 @@ export const layouts = pgTable("layouts", {
   // branch spines attached at a junction endplate of a placed module. The
   // ordered module_layouts rows with branch_id null remain the main spine.
   branches: jsonb("branches"),
+  // Explicit endplate joins (#175): [{id, a:{placementId,endplateId},
+  // b:{...}}] beyond the spine's implicit B→A chaining — closing a circuit,
+  // connecting a loop's second endplate, any endplate-to-any-endplate.
+  joins: jsonb("joins"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -231,6 +235,10 @@ export const moduleLayouts = pgTable(
     // in layouts.branches this placement belongs to. positionIndex orders
     // within its own spine.
     branchId: text("branch_id"),
+    // Mirrored/flipped placement (#175): the footprint solver reflects the
+    // module's poses (Free-mo modules are two-sided). Distinct from `flipped`
+    // (the older curve-direction hint).
+    mirrored: boolean("mirrored").notNull().default(false),
   },
   (t) => [index("module_layouts_layout_idx").on(t.layoutId)],
 );

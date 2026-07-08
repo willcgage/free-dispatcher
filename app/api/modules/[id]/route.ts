@@ -25,6 +25,8 @@ export async function PATCH(
     positionIndex?: number;
     stagingEnd?: StagingEnd | null;
     flipped?: boolean;
+    /** Mirrored/flipped placement for the footprint solver (#175). */
+    mirrored?: boolean;
     /** Replace the placement with another catalog module (#158). */
     moduleId?: string;
   };
@@ -38,6 +40,7 @@ export async function PATCH(
   if (typeof body.positionIndex === "number") set.positionIndex = body.positionIndex;
   if (body.stagingEnd !== undefined) set.stagingEnd = body.stagingEnd;
   if (typeof body.flipped === "boolean") set.flipped = body.flipped;
+  if (typeof body.mirrored === "boolean") set.mirrored = body.mirrored;
   if (typeof body.moduleId === "string" && body.moduleId.trim()) {
     const rec = body.moduleId.trim();
     const [target] = await db

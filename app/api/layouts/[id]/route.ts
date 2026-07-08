@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { trackModel } from "@/lib/server/TrackModel";
 import { asBranches } from "@/lib/track/layoutControlPoints";
+import { asJoins } from "@/lib/track/layoutJoins";
 import { requireRole } from "@/lib/server/guard";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,8 @@ export async function PATCH(
     }[];
     /** Branch-spine definitions (#170). */
     branches?: unknown;
+    /** Explicit endplate joins (#175). */
+    joins?: unknown;
   };
   try {
     body = await req.json();
@@ -83,6 +86,10 @@ export async function PATCH(
   if (body.branches !== undefined) {
     // Branch-spine definitions (#170); junk entries are dropped by the parser.
     await trackModel.setBranches(id, asBranches(body.branches));
+  }
+  if (body.joins !== undefined) {
+    // Explicit endplate joins (#175); junk entries dropped by the parser.
+    await trackModel.setJoins(id, asJoins(body.joins));
   }
   // Re-materialize the sections the control points derive (#146).
   await trackModel.syncDerivedSections(id);
