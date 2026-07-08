@@ -79,6 +79,8 @@ interface LayoutModuleNode {
   removedFromRepoAt: string | null;
   /** Owner's repo status: active | inactive | archived (#158). */
   status: string | null;
+  /** Mirrored/flipped placement for the footprint solver (#175). */
+  mirrored: boolean;
 }
 interface BranchSpine {
   id: string;
@@ -86,10 +88,23 @@ interface BranchSpine {
   origin: { placementId: string; endplateId: string };
   modules: LayoutModuleNode[];
 }
+interface EndplateRefNode {
+  placementId: string;
+  endplateId: string;
+}
+interface JoinNode {
+  id: string;
+  a: EndplateRefNode;
+  b: EndplateRefNode;
+  implicit?: boolean;
+  status: "ok" | "mismatch" | "unknown" | "dangling";
+}
 interface LayoutTree extends LayoutRow {
   modules: LayoutModuleNode[];
   /** Branch spines (#170) — defs + their placements. */
   branchSpines: BranchSpine[];
+  /** Endplate joins (#175) — implicit + explicit, with compatibility. */
+  joins: JoinNode[];
   districts: DistrictNode[];
 }
 
@@ -152,6 +167,8 @@ export default function AdminLayouts() {
   const [branchDraft, setBranchDraft] = useState<
     Record<string, { name: string; placementId: string }>
   >({});
+  // Explicit-join draft (#175), keyed by layout id: "<placementId>:<endplateId>".
+  const [joinDraft, setJoinDraft] = useState<Record<string, { a: string; b: string }>>({});
   // Dropped-module notice + schematic highlight + replace flow (#158).
   const [unavailNotice, setUnavailNotice] = useState<{ layoutId: string } | null>(null);
   const unavailNotified = useRef<Set<string>>(new Set());
@@ -282,6 +299,35 @@ export default function AdminLayouts() {
       await Promise.all([reloadTree(layoutId), load()]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "add failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Replace the explicit endplate joins (#175). */
+  async function saveJoins(
+    layoutId: string,
+    joins: { id: string; a: EndplateRefNode; b: EndplateRefNode }[],
+  ) {
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/layouts/${layoutId}`, { joins });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Toggle a placement's mirrored flag (#175). */
+  async function toggleMirror(layoutId: string, placementId: string, mirrored: boolean) {
+    setBusy(true);
+    try {
+      await apiSend("PATCH", `/api/modules/${placementId}`, { mirrored: !mirrored });
+      await reloadTree(layoutId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "update failed");
     } finally {
       setBusy(false);
     }
@@ -828,6 +874,18 @@ export default function AdminLayouts() {
                                         Replace
                                       </button>
                                     )}
+                                    <button
+                                      disabled={busy}
+                                      title="Mirror this placement (flip it for the footprint — Free-mo modules are two-sided)"
+                                      onClick={() => toggleMirror(l.id, m.id, m.mirrored)}
+                                      className={`shrink-0 rounded border px-1.5 py-0.5 text-xs ${
+                                        m.mirrored
+                                          ? "border-sky-700 bg-sky-900/40 text-sky-300"
+                                          : "border-slate-700 text-slate-400 hover:bg-slate-800"
+                                      }`}
+                                    >
+                                      ⇋
+                                    </button>
                                     <select
                                       value={m.stagingEnd ?? ""}
                                       onChange={(e) =>
@@ -1219,6 +1277,148 @@ export default function AdminLayouts() {
                               districts={tree.districts}
                               onDropModule={(rec) => dropAddModule(l.id, rec)}
                             />
+                          </div>
+
+                          {/* Endplate joins (#175) */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Endplate joins
+                            </div>
+                            {(() => {
+                              const allMods = [
+                                ...tree.modules,
+                                ...tree.branchSpines.flatMap((b) => b.modules),
+                              ];
+                              const modById = new Map(allMods.map((m) => [m.id, m]));
+                              const epsOf = (m?: LayoutModuleNode): string[] => {
+                                const doc = m?.schematic as
+                                  | { endplates?: { id?: string }[] }
+                                  | null
+                                  | undefined;
+                                const ids = (doc?.endplates ?? [])
+                                  .map((e) => e?.id)
+                                  .filter((x): x is string => !!x);
+                                return ids.length ? ids : ["A", "B"];
+                              };
+                              const label = (r: EndplateRefNode) => {
+                                const m = modById.get(r.placementId);
+                                return `${m?.moduleName ?? m?.moduleId ?? "?"} · ${r.endplateId}`;
+                              };
+                              const statusColor: Record<string, string> = {
+                                ok: "text-emerald-400",
+                                mismatch: "text-amber-400",
+                                unknown: "text-slate-500",
+                                dangling: "text-red-400",
+                              };
+                              const draft = joinDraft[l.id] ?? { a: "", b: "" };
+                              const epOptions = allMods.flatMap((m) =>
+                                epsOf(m).map((ep) => ({
+                                  value: `${m.id}:${ep}`,
+                                  text: `${m.moduleName ?? m.moduleId} · ${ep}`,
+                                })),
+                              );
+                              if (allMods.length === 0)
+                                return (
+                                  <p className="text-xs text-slate-600">
+                                    Add modules to see how their endplates connect.
+                                  </p>
+                                );
+                              return (
+                                <>
+                                  <ul className="space-y-0.5">
+                                    {tree.joins.map((j) => (
+                                      <li key={j.id} className="flex items-center gap-2 text-xs">
+                                        <span className={statusColor[j.status]} title={j.status}>
+                                          {j.status === "ok"
+                                            ? "●"
+                                            : j.status === "mismatch"
+                                              ? "▲"
+                                              : j.status === "dangling"
+                                                ? "✕"
+                                                : "○"}
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate text-slate-300">
+                                          {label(j.a)} ↔ {label(j.b)}
+                                        </span>
+                                        {j.implicit ? (
+                                          <span className="shrink-0 rounded bg-slate-800 px-1 py-px text-[10px] uppercase text-slate-500">
+                                            spine
+                                          </span>
+                                        ) : (
+                                          <button
+                                            disabled={busy}
+                                            title="Remove this join"
+                                            onClick={() =>
+                                              saveJoins(
+                                                l.id,
+                                                tree.joins
+                                                  .filter((x) => !x.implicit && x.id !== j.id)
+                                                  .map(({ id, a, b }) => ({ id, a, b })),
+                                              )
+                                            }
+                                            className="shrink-0 rounded px-1 text-slate-500 hover:text-red-400"
+                                          >
+                                            ✕
+                                          </button>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                  {/* Add an explicit join — close a circuit, connect any two endplates */}
+                                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                    <select
+                                      value={draft.a}
+                                      onChange={(e) =>
+                                        setJoinDraft((p) => ({ ...p, [l.id]: { ...draft, a: e.target.value } }))
+                                      }
+                                      className="max-w-40 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                    >
+                                      <option value="">endplate…</option>
+                                      {epOptions.map((o) => (
+                                        <option key={o.value} value={o.value}>{o.text}</option>
+                                      ))}
+                                    </select>
+                                    <span className="text-xs text-slate-500">↔</span>
+                                    <select
+                                      value={draft.b}
+                                      onChange={(e) =>
+                                        setJoinDraft((p) => ({ ...p, [l.id]: { ...draft, b: e.target.value } }))
+                                      }
+                                      className="max-w-40 rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-300"
+                                    >
+                                      <option value="">endplate…</option>
+                                      {epOptions.map((o) => (
+                                        <option key={o.value} value={o.value}>{o.text}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      disabled={busy || !draft.a || !draft.b || draft.a === draft.b}
+                                      onClick={() => {
+                                        const [pa, ea] = draft.a.split(":");
+                                        const [pb, eb] = draft.b.split(":");
+                                        setJoinDraft((p) => ({ ...p, [l.id]: { a: "", b: "" } }));
+                                        saveJoins(l.id, [
+                                          ...tree.joins
+                                            .filter((x) => !x.implicit)
+                                            .map(({ id, a, b }) => ({ id, a, b })),
+                                          {
+                                            id: `join-${Date.now().toString(36)}`,
+                                            a: { placementId: pa, endplateId: ea },
+                                            b: { placementId: pb, endplateId: eb },
+                                          },
+                                        ]);
+                                      }}
+                                      className="rounded border border-slate-600 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                                    >
+                                      + Join
+                                    </button>
+                                    <span className="text-[11px] text-slate-600">
+                                      spine joins are automatic — add one to close a loop or link any two ends
+                                    </span>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
 
                           {/* Control Points → Districts (#138) */}

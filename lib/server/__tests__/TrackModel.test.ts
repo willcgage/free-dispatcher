@@ -37,6 +37,7 @@ describe("buildLayoutTree (#80)", () => {
     controlPointDistricts: null,
     layoutControlPoints: null,
     branches: null,
+    joins: null,
     createdAt: new Date(),
   };
 
