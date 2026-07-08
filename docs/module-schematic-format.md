@@ -156,3 +156,20 @@ current operations renderer does, so un-authored modules render unchanged.
 - [x] Import + overlay module graphs (sidings/spurs, turnouts, signals) on the
       operations schematic, with the field-derived fallback above.
 - [ ] Seed layout turnouts/signals/blocks (occupancy/allocation) from imported graphs.
+
+## Endplate equality (Free-moN standard)
+
+The Free-moN standard defines **one** endplate interface — minimum 12" wide,
+track crossing in the central third, perpendicular and level at the plate,
+single or double track. There is **no "mainline endplate" vs "branch
+endplate"**: main and branch are *layout-time roles* assigned when a setup is
+composed, never properties of a module.
+
+In this format, endplate ids `A`/`B` mark only the pair the **straightened
+schematic uses as its drawing axis** (positions are measured in inches from
+`A`). Additional endplates (`C`, `D`, …, placed with `at: {pos, side}`) are the
+same standard interface — a set that carries a second railroad through simply
+has more of them. Layout composition (joins, the footprint solver, endplate
+compatibility checks) must treat every endplate as an equal node: any endplate
+may mate with any compatible endplate, and the dispatching "main" follows the
+layout's actual route, not the letters.
