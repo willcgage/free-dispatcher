@@ -14,6 +14,7 @@
  */
 import {
   deriveEndplatePoses,
+  poseOverridesFromDoc,
   type EndplatePose,
 } from "@willcgage/module-schematic";
 import {
@@ -165,6 +166,8 @@ function poseInput(m: FootprintModule) {
     geometryOffsetInches: m.geometryOffsetInches,
     endplateConfigs: [cfg("A"), cfg("B")],
     branches,
+    // Manual overrides (#175 phase 1b) win over derivation for wye/freeform.
+    poseOverrides: doc ? poseOverridesFromDoc(doc) : undefined,
   };
 }
 
