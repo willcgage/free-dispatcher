@@ -462,7 +462,10 @@ export function OperationsSchematic({
                 // direction, so two signals at the same spot (opposite ways)
                 // separate instead of stacking.
                 const sx = px(s.posFrac);
-                const sy = s.side === "below" ? laneY(s.lane) + 3 : laneY(s.lane) - 3;
+                // Fan stacked signals (several at one interlocking) away from
+                // the track so they don't overlap (#151 / stack).
+                const off = 3 + s.stack * 3.5;
+                const sy = s.side === "below" ? laneY(s.lane) + off : laneY(s.lane) - off;
                 const dir = s.facing === "BtoA" ? -1 : 1;
                 const L = Math.max(4, c.width * 0.02);
                 // Live aspect: join back to the control point (#151).
