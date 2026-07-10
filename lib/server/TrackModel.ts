@@ -96,6 +96,7 @@ export interface LayoutModule {
   hasMss: boolean | null;
   geometryType: string | null;
   geometryDegrees: number | null;
+  geometryOffsetInches: number | null;
   flipped: boolean;
   endplates: unknown;
   schematic: unknown;
@@ -463,6 +464,7 @@ class TrackModel {
         hasMss: repoModules.hasMss,
         geometryType: repoModules.geometryType,
         geometryDegrees: repoModules.geometryDegrees,
+        geometryOffsetInches: repoModules.geometryOffsetInches,
         endplates: repoModules.endplates,
         schematic: repoModules.schematic,
         removedFromRepoAt: repoModules.removedFromRepoAt,

@@ -14,6 +14,7 @@ import {
   MODULE_DRAG_MIME,
 } from "@/components/layout/LayoutSchematic";
 import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
+import { FootprintMap } from "@/components/layout/FootprintMap";
 import {
   layoutControlPoints,
   deriveSections,
@@ -72,6 +73,7 @@ interface LayoutModuleNode {
   hasMss: boolean | null;
   geometryType: string | null;
   geometryDegrees: number | null;
+  geometryOffsetInches: number | null;
   flipped: boolean;
   endplates: { label?: string | null; track_config?: string | null }[] | null;
   schematic: unknown;
@@ -1276,6 +1278,31 @@ export default function AdminLayouts() {
                               modules={tree.modules}
                               districts={tree.districts}
                               onDropModule={(rec) => dropAddModule(l.id, rec)}
+                            />
+                          </div>
+
+                          {/* Solved layout map (#175 phase 3) */}
+                          <div>
+                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                              Layout map (solved)
+                            </div>
+                            <FootprintMap
+                              modules={[
+                                ...tree.modules,
+                                ...tree.branchSpines.flatMap((b) => b.modules),
+                              ].map((m) => ({
+                                id: m.id,
+                                moduleName: m.moduleName,
+                                moduleId: m.moduleId,
+                                lengthTotalInches: m.lengthTotalInches,
+                                mainlineLengthInches: m.mainlineLengthInches,
+                                geometryType: m.geometryType,
+                                geometryDegrees: m.geometryDegrees,
+                                geometryOffsetInches: m.geometryOffsetInches,
+                                mirrored: m.mirrored,
+                                schematic: m.schematic,
+                              }))}
+                              joins={tree.joins}
                             />
                           </div>
 
