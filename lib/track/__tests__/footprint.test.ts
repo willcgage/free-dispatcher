@@ -89,6 +89,26 @@ describe("composeFootprint", () => {
     expect(ep(mirrored.placed[0], "B").y).toBeCloseTo(-r, 2); // south
   });
 
+  it("honours a manual endplate pose override from the module's doc (#175 1b)", () => {
+    // A wye-ish module: B hand-placed at (10, 90) heading 90 via doc.pose.
+    const m: FootprintModule = {
+      id: "w",
+      moduleName: "wye",
+      lengthTotalInches: 100,
+      geometryType: "wye",
+      schematic: {
+        version: 1,
+        endplates: [
+          { id: "A" },
+          { id: "B", pose: { x: 10, y: 90, heading: 90 } },
+        ],
+        tracks: [{ id: "main", role: "main", lane: 0 }],
+      },
+    };
+    const fp = composeFootprint([m], []);
+    expect(ep(fp.placed[0], "B")).toMatchObject({ x: 10, y: 90 });
+  });
+
   it("disconnected modules are reported as unplaced", () => {
     const fp = composeFootprint([straight("m1"), straight("island")], [
       // island has no join
