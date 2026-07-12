@@ -381,17 +381,20 @@ export function OperationsSchematic({
               {feat.extraTracks.map((t) => {
                 // A siding is a passing loop: it dips down to the mainline at a
                 // turnout at each end. A spur rises at one end and ends in a stub.
-                const x1 = px(t.fromFrac);
-                const x2 = px(t.toFrac);
                 const yl = laneY(t.lane);
                 // Diverge from the main this track's turnout sits on — a team
                 // track off Main 2 starts at lane 1, not a crossover from Main 1.
                 const ym = laneY(t.divergesFromLane);
-                const thr = Math.max(6, c.width * 0.04);
-                const pts =
-                  t.role === "spur"
-                    ? `${x1},${ym} ${x1 + thr},${yl} ${x2},${yl}`
-                    : `${x1},${ym} ${x1 + thr},${yl} ${x2 - thr},${yl} ${x2},${ym}`;
+                const isSpur = t.role === "spur";
+                // A spur's throat is at its turnout (either end, #bug3); its stub
+                // runs to the far end. A siding dips to the main at both ends.
+                const tx = px(isSpur ? t.throatFrac : t.fromFrac);
+                const ex = px(isSpur ? t.stubFrac : t.toFrac);
+                const dir = ex >= tx ? 1 : -1;
+                const thr = Math.min(Math.max(6, c.width * 0.04), Math.abs(ex - tx));
+                const pts = isSpur
+                  ? `${tx},${ym} ${tx + dir * thr},${yl} ${ex},${yl}`
+                  : `${tx},${ym} ${tx + thr},${yl} ${ex - thr},${yl} ${ex},${ym}`;
                 return (
                   <polyline
                     key={t.id}
@@ -401,7 +404,7 @@ export function OperationsSchematic({
                     strokeWidth={STROKE * 0.8}
                     strokeLinejoin="round"
                     strokeLinecap="round"
-                    strokeDasharray={t.role === "spur" ? "2 2" : undefined}
+                    strokeDasharray={isSpur ? "2 2" : undefined}
                   >
                     <title>
                       {`${t.role}${t.capacityFeet ? ` · ${t.capacityFeet} ft` : ""}`}
@@ -409,6 +412,21 @@ export function OperationsSchematic({
                   </polyline>
                 );
               })}
+              {/* Crossovers — a straight diagonal joining the two mains (#bug2) */}
+              {feat.crossovers.map((x) => (
+                <line
+                  key={x.id}
+                  x1={px(x.fromPosFrac)}
+                  y1={laneY(x.fromLane)}
+                  x2={px(x.toPosFrac)}
+                  y2={laneY(x.toLane)}
+                  stroke={stroke}
+                  strokeWidth={STROKE * 0.8}
+                  strokeLinecap="round"
+                >
+                  <title>{x.name || "Crossover"}</title>
+                </line>
+              ))}
               {feat.turnouts.map((t) => (
                 <circle key={t.id} cx={px(t.posFrac)} cy={laneY(t.onLane)} r={1.2} fill={stroke}>
                   <title>{`Turnout${t.name ? ` · ${t.name}` : ""}`}</title>
