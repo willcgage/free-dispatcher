@@ -27,6 +27,7 @@ describe("deriveSectionAspect (#83 virtual signals)", () => {
 describe("cpSignalAspects (#151 live CTC panel)", () => {
   const cp = (key: string): ControlPointRef => ({
     key,
+    legacyKey: key,
     moduleId: key.split(":")[0],
     moduleName: null,
     cpId: key.split(":")[1] ?? key,

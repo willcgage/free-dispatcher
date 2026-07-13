@@ -19,8 +19,10 @@ const doc: ModuleSchematicDoc = {
     { id: "spur", role: "spur", lane: 2, from: "swW", to: "spurEnd", fromPos: 6, toPos: 15 },
   ],
   turnouts: [
-    { id: "swW", pos: 6, onTrack: "main", divergeTrack: "sid", kind: "right", name: "West Siding" },
-    { id: "swE", pos: 24, onTrack: "main", divergeTrack: "sid", kind: "left", name: "East Siding" },
+    // Siding above the main: west turnout throws left, east throws right (both
+    // resolve to the "above" side — the hand drives the drawn side, 0.13.0+).
+    { id: "swW", pos: 6, onTrack: "main", divergeTrack: "sid", kind: "left", name: "West Siding" },
+    { id: "swE", pos: 24, onTrack: "main", divergeTrack: "sid", kind: "right", name: "East Siding" },
   ],
   signals: [{ id: "sW", pos: 3, track: "main", facing: "AtoB", name: "CP West" }],
 };
