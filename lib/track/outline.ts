@@ -10,8 +10,12 @@
  */
 import type { Pt } from "./footprint";
 
-/** Standard Free-moN endplate width (module depth in plan view), inches. */
-export const FREEMON_ENDPLATE_WIDTH_INCHES = 12;
+/**
+ * Standard Free-moN endplate width (module depth in plan view), inches — the
+ * connection interface. 12″ is the spec minimum, 24″ the recommended default;
+ * we render the recommended width until a module authors its own.
+ */
+export const FREEMON_ENDPLATE_WIDTH_INCHES = 24;
 
 /** Unit perpendicular (left normal) of the local direction at each vertex. */
 function normals(center: Pt[]): Pt[] {
