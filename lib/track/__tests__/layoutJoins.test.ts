@@ -17,10 +17,12 @@ const mod = (
     { id: "A" },
     { id: "B" },
   ],
+  flipped = false,
 ): JoinPlacement => ({
   id,
   positionIndex,
   moduleId: id,
+  flipped,
   schematic: {
     version: 1,
     endplates: endplates.map((e) => ({
@@ -48,6 +50,30 @@ describe("implicitJoins", () => {
       "p2:B-p3:A",
     ]);
     expect(joins.every((j) => j.implicit)).toBe(true);
+  });
+
+  it("a reversed module mates its FACING endplates (turned end-for-end)", () => {
+    // p2 reversed: its B faces west (toward p1), its A faces east (toward p3).
+    const joins = implicitJoins([
+      { branchId: null, modules: [mod("p1", 0), mod("p2", 1, undefined, true), mod("p3", 2)] },
+    ]);
+    expect(joins.map((j) => `${j.a.placementId}:${j.a.endplateId}-${j.b.placementId}:${j.b.endplateId}`)).toEqual([
+      "p1:B-p2:B",
+      "p2:A-p3:A",
+    ]);
+  });
+
+  it("reversing resolves a single↔double endplate mismatch", () => {
+    // p1 ends double at B; p2 is A=double, B=single. Facing p1 with A (double)
+    // matches; reverse p2 → its B (single) faces p1 → still needs p1 single…
+    // the useful case: p2 single end should face its single neighbour.
+    const p1 = mod("p1", 0, [{ id: "A" }, { id: "B", config: "single" }]);
+    const p2 = mod("p2", 1, [{ id: "A", config: "double" }, { id: "B", config: "single" }], true);
+    const byId = new Map([["p1", p1], ["p2", p2]] as const);
+    const [join] = implicitJoins([{ branchId: null, modules: [p1, p2] }]);
+    // reversed p2 presents B (single) west → single↔single = ok
+    expect(join.b.endplateId).toBe("B");
+    expect(joinStatus(join, byId)).toBe("ok");
   });
 
   it("attaches a branch at its origin endplate ↔ the branch's first A", () => {

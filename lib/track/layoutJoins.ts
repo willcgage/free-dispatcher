@@ -35,6 +35,8 @@ export interface JoinPlacement {
   moduleName?: string | null;
   positionIndex?: number;
   schematic?: unknown;
+  /** Reversed end-for-end (turned around): its A end faces east, B faces west. */
+  flipped?: boolean | null;
 }
 export interface JoinSpine {
   /** null = main spine, otherwise a branch id. */
@@ -66,24 +68,32 @@ export function joinKey(j: { a: EndplateRef; b: EndplateRef }): string {
  */
 export function implicitJoins(spines: JoinSpine[]): LayoutJoin[] {
   const out: LayoutJoin[] = [];
+  // A reversed (turned-around) module presents its B end to the west and A to
+  // the east, so the spine mates the FACING endplates, not always B→A.
+  const westEnd = (m: JoinPlacement) => (m.flipped ? "B" : "A");
+  const eastEnd = (m: JoinPlacement) => (m.flipped ? "A" : "B");
   for (const s of spines) {
     const ordered = [...s.modules].sort(
       (a, b) => (a.positionIndex ?? 0) - (b.positionIndex ?? 0),
     );
-    // Branch attaches at its origin endplate ↔ the branch's first module's A.
+    // Branch attaches at its origin endplate ↔ the branch's first module's
+    // west-facing endplate.
     if (s.origin && ordered[0]) {
+      const w = westEnd(ordered[0]);
       out.push({
-        id: `imp:${s.origin.placementId}:${s.origin.endplateId}-${ordered[0].id}:A`,
+        id: `imp:${s.origin.placementId}:${s.origin.endplateId}-${ordered[0].id}:${w}`,
         a: { placementId: s.origin.placementId, endplateId: s.origin.endplateId },
-        b: { placementId: ordered[0].id, endplateId: "A" },
+        b: { placementId: ordered[0].id, endplateId: w },
         implicit: true,
       });
     }
     for (let i = 0; i < ordered.length - 1; i++) {
+      const e = eastEnd(ordered[i]);
+      const w = westEnd(ordered[i + 1]);
       out.push({
-        id: `imp:${ordered[i].id}:B-${ordered[i + 1].id}:A`,
-        a: { placementId: ordered[i].id, endplateId: "B" },
-        b: { placementId: ordered[i + 1].id, endplateId: "A" },
+        id: `imp:${ordered[i].id}:${e}-${ordered[i + 1].id}:${w}`,
+        a: { placementId: ordered[i].id, endplateId: e },
+        b: { placementId: ordered[i + 1].id, endplateId: w },
         implicit: true,
       });
     }
