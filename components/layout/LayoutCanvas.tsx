@@ -13,6 +13,7 @@
 import { useMemo, useRef, useState } from "react";
 import { composeFootprint, type FootprintModule } from "@/lib/track/footprint";
 import { endplateConfig, type LayoutJoin } from "@/lib/track/layoutJoins";
+import { bandOutline, endplateFaces } from "@/lib/track/outline";
 import { findSnap, type CanvasEndplate, type SnapHit } from "@/lib/track/snap";
 
 const SNAP_RADIUS = 10; // layout inches
@@ -135,13 +136,42 @@ export function LayoutCanvas({
           const stroke = colorFor?.(m.id) ?? "#64748b";
           const off = drag?.id === m.id ? { dx: drag.dx, dy: drag.dy } : { dx: 0, dy: 0 };
           const pts = m.centerline.map((p) => `${p.x + off.dx},${sy(p.y) + off.dy}`).join(" ");
+          const bandPts = bandOutline(m.centerline)
+            .map((p) => `${p.x + off.dx},${sy(p.y) + off.dy}`)
+            .join(" ");
+          const dragging = drag?.id === m.id;
           const mid = m.centerline[Math.floor(m.centerline.length / 2)];
           return (
             <g
               key={m.id}
               onPointerDown={(e) => onDown(e, m.id)}
-              style={{ cursor: drag?.id === m.id ? "grabbing" : "grab" }}
+              style={{ cursor: dragging ? "grabbing" : "grab" }}
             >
+              {/* Physical benchwork footprint — the solid piece you grab. */}
+              {bandPts && (
+                <polygon
+                  points={bandPts}
+                  fill={stroke}
+                  fillOpacity={dragging ? 0.28 : 0.16}
+                  stroke={stroke}
+                  strokeOpacity={dragging ? 0.9 : 0.5}
+                  strokeWidth={0.8}
+                  strokeLinejoin="round"
+                  opacity={drag && !dragging ? 0.6 : 1}
+                />
+              )}
+              {endplateFaces(m.centerline).map((f, i) => (
+                <line
+                  key={`face${i}`}
+                  x1={f.p1.x + off.dx}
+                  y1={sy(f.p1.y) + off.dy}
+                  x2={f.p2.x + off.dx}
+                  y2={sy(f.p2.y) + off.dy}
+                  stroke={stroke}
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                />
+              ))}
               <polyline
                 points={pts}
                 fill="none"
@@ -153,22 +183,24 @@ export function LayoutCanvas({
               >
                 <title>{m.moduleName ?? m.id} — drag to connect</title>
               </polyline>
-              {m.endplates.map((e) => {
-                const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
-                const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
-                const half = 3.2;
-                return (
-                  <line
-                    key={e.id}
-                    x1={e.x - nx * half + off.dx}
-                    y1={sy(e.y - ny * half) + off.dy}
-                    x2={e.x + nx * half + off.dx}
-                    y2={sy(e.y + ny * half) + off.dy}
-                    stroke="#94a3b8"
-                    strokeWidth={1.4}
-                  />
-                );
-              })}
+              {m.endplates
+                .filter((e) => e.id !== "A" && e.id !== "B")
+                .map((e) => {
+                  const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
+                  const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
+                  const half = 6;
+                  return (
+                    <line
+                      key={e.id}
+                      x1={e.x - nx * half + off.dx}
+                      y1={sy(e.y - ny * half) + off.dy}
+                      x2={e.x + nx * half + off.dx}
+                      y2={sy(e.y + ny * half) + off.dy}
+                      stroke="#94a3b8"
+                      strokeWidth={1.6}
+                    />
+                  );
+                })}
               {mid && (
                 <text
                   x={mid.x + off.dx}
