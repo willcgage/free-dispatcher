@@ -1,21 +1,36 @@
 /**
- * LayoutCanvas (drag-and-drop snap, phase 1) — the merged Layout Map made
- * interactive. Modules are drawn at their solved-from-joins positions; drag one
- * and, when an endplate comes within snapping distance of another module's
- * endplate, the pair highlights (green = configs match, rose = mismatch). Drop
- * to write an endplate join — the footprint solver then mates them exactly.
+ * LayoutCanvas (drag-and-drop, face-to-face snap) — the merged Layout Map made
+ * interactive. Modules are physical benchwork pieces; drag one and, when its
+ * endplate FACE comes alongside another module's face pointing back at it, the
+ * module magnetically MATES — rotating and sliding so the two 24″ faces clamp
+ * together (the way real modules connect). Release writes the endplate join and
+ * the footprint solver locks it in.
  *
- * Positions still come from the join graph (composeFootprint); a drag is a
- * transient on-screen offset used only to CHOOSE which endplates to connect.
+ * All drag math is in world coordinates (y-up); the SVG flips y once at render.
  */
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { composeFootprint, type FootprintModule } from "@/lib/track/footprint";
+import { composeFootprint, type FootprintModule, type Pt } from "@/lib/track/footprint";
 import { endplateConfig, type LayoutJoin } from "@/lib/track/layoutJoins";
-import { findSnap, type CanvasEndplate, type SnapHit } from "@/lib/track/snap";
+import { bandOutline, endplateFaces } from "@/lib/track/outline";
+import { findFaceSnap, type CanvasEndplate, type SnapHit } from "@/lib/track/snap";
 
-const SNAP_RADIUS = 10; // layout inches
+const SNAP_RADIUS = 14; // world inches — endplate faces within this mate
+
+type Pose =
+  | { kind: "free"; dx: number; dy: number }
+  | { kind: "mate"; rot: number; px: number; py: number; tx: number; ty: number };
+
+function applyPose(p: Pt, pose: Pose): Pt {
+  if (pose.kind === "free") return { x: p.x + pose.dx, y: p.y + pose.dy };
+  const a = (pose.rot * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const rx = (p.x - pose.px) * c - (p.y - pose.py) * s;
+  const ry = (p.x - pose.px) * s + (p.y - pose.py) * c;
+  return { x: rx + pose.tx, y: ry + pose.ty };
+}
 
 export function LayoutCanvas({
   modules,
@@ -25,19 +40,35 @@ export function LayoutCanvas({
 }: {
   modules: FootprintModule[];
   joins: (LayoutJoin & { status?: string })[];
-  /** Create an endplate join (a snapped drop). */
   onAddJoin: (join: LayoutJoin) => void;
   colorFor?: (placementId: string) => string | undefined;
 }) {
   const fp = useMemo(() => composeFootprint(modules, joins), [modules, joins]);
-  const modById = useMemo(
-    () => new Map(modules.map((m) => [m.id, m])),
-    [modules],
-  );
+  const modById = useMemo(() => new Map(modules.map((m) => [m.id, m])), [modules]);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   const startRef = useRef<{ x: number; y: number } | null>(null);
-  const [hit, setHit] = useState<SnapHit | null>(null);
+  const [state, setState] = useState<{ id: string; pose: Pose; hit: SnapHit | null } | null>(null);
+
+  // Every placed module's endplates in WORLD coords, with heading + config.
+  const worldEndplates: CanvasEndplate[] = useMemo(
+    () =>
+      fp.placed.flatMap((m) =>
+        m.endplates.map((e) => ({
+          placementId: m.id,
+          endplateId: e.id,
+          x: e.x,
+          y: e.y,
+          heading: e.heading,
+          config: endplateConfig(modById.get(m.id), e.id),
+        })),
+      ),
+    [fp.placed, modById],
+  );
+  const solvedByKey = useMemo(() => {
+    const m = new Map<string, CanvasEndplate>();
+    for (const e of worldEndplates) m.set(`${e.placementId}:${e.endplateId}`, e);
+    return m;
+  }, [worldEndplates]);
 
   if (modules.length === 0) {
     return (
@@ -47,76 +78,79 @@ export function LayoutCanvas({
     );
   }
 
-  // SVG space: y-up layout → y-down screen.
   const sy = (y: number) => -y;
-  // Endplates of every placed module, in SVG coords, with config.
-  const placedEndplates: (CanvasEndplate & { sx: number; syy: number })[] = fp.placed.flatMap(
-    (m) =>
-      m.endplates.map((e) => ({
-        placementId: m.id,
-        endplateId: e.id,
-        x: e.x,
-        y: sy(e.y),
-        config: endplateConfig(modById.get(m.id), e.id),
-        sx: e.x,
-        syy: sy(e.y),
-      })),
-  );
-
   const { minX, minY, maxX, maxY } = fp.bbox;
-  const pad = Math.max(24, (maxX - minX) * 0.12);
+  const pad = Math.max(30, (maxX - minX) * 0.12);
   const w = Math.max(1, maxX - minX);
   const h = Math.max(1, maxY - minY);
   const vb = `${minX - pad} ${-(maxY + pad)} ${w + pad * 2} ${h + pad * 2}`;
+  const font = Math.max(w, h) * 0.03 + 2;
 
-  const clientToUser = (e: React.PointerEvent) => {
+  // Pointer → world (SVG user space is screen space with y flipped).
+  const toWorld = (e: React.PointerEvent) => {
     const svg = svgRef.current!;
     const p = svg.createSVGPoint();
     p.x = e.clientX;
     p.y = e.clientY;
     const m = svg.getScreenCTM();
-    return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+    const u = m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+    return { x: u.x, y: -u.y };
   };
 
   const onDown = (e: React.PointerEvent, id: string) => {
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-    startRef.current = clientToUser(e);
-    setDrag({ id, dx: 0, dy: 0 });
-    setHit(null);
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* capture is best-effort; a synthetic or already-released pointer is fine */
+    }
+    startRef.current = toWorld(e);
+    setState({ id, pose: { kind: "free", dx: 0, dy: 0 }, hit: null });
   };
   const onMove = (e: React.PointerEvent) => {
-    if (!drag || !startRef.current) return;
-    const cur = clientToUser(e);
+    if (!state || !startRef.current) return;
+    const cur = toWorld(e);
     const dx = cur.x - startRef.current.x;
     const dy = cur.y - startRef.current.y;
-    // Dragged module's endplates, shifted; targets are everyone else's.
-    const dragEps = placedEndplates
-      .filter((p) => p.placementId === drag.id)
-      .map((p) => ({ ...p, x: p.sx + dx, y: p.syy + dy }));
-    const targetEps = placedEndplates.filter((p) => p.placementId !== drag.id);
-    setHit(findSnap(dragEps, targetEps, SNAP_RADIUS));
-    setDrag({ id: drag.id, dx, dy });
+    // Dragged module's faces, shifted by the raw drag; targets are the rest.
+    const dragged = worldEndplates
+      .filter((p) => p.placementId === state.id)
+      .map((p) => ({ ...p, x: p.x + dx, y: p.y + dy }));
+    const targets = worldEndplates.filter((p) => p.placementId !== state.id);
+    const hit = findFaceSnap(dragged, targets, SNAP_RADIUS);
+    if (hit) {
+      // Magnetic mate: rotate the solved module so its face opposes the target,
+      // and slide that face onto the target face.
+      const solvedD = solvedByKey.get(`${hit.drag.placementId}:${hit.drag.endplateId}`)!;
+      const rot = (hit.target.heading ?? 0) + 180 - (solvedD.heading ?? 0);
+      setState({
+        id: state.id,
+        hit,
+        pose: { kind: "mate", rot, px: solvedD.x, py: solvedD.y, tx: hit.target.x, ty: hit.target.y },
+      });
+    } else {
+      setState({ id: state.id, hit: null, pose: { kind: "free", dx, dy } });
+    }
   };
   const onUp = () => {
-    if (drag && hit) {
+    if (state?.hit) {
+      const { drag, target } = state.hit;
       onAddJoin({
-        id: `usr:${hit.drag.placementId}:${hit.drag.endplateId}-${hit.target.placementId}:${hit.target.endplateId}`,
-        a: { placementId: hit.drag.placementId, endplateId: hit.drag.endplateId },
-        b: { placementId: hit.target.placementId, endplateId: hit.target.endplateId },
+        id: `usr:${drag.placementId}:${drag.endplateId}-${target.placementId}:${target.endplateId}`,
+        a: { placementId: drag.placementId, endplateId: drag.endplateId },
+        b: { placementId: target.placementId, endplateId: target.endplateId },
       });
     }
-    setDrag(null);
-    setHit(null);
+    setState(null);
     startRef.current = null;
   };
 
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-        <span>Arrange · drag a module, endplates snap to connect</span>
-        {hit && (
-          <span className={hit.compatible ? "text-emerald-400" : "text-rose-400"}>
-            {hit.compatible ? "Release to connect" : "Mismatch — connect anyway, then Reverse"}
+        <span>Arrange · drag a module; endplate faces clamp together</span>
+        {state?.hit && (
+          <span className={state.hit.compatible ? "text-emerald-400" : "text-rose-400"}>
+            {state.hit.compatible ? "Release to connect" : "Faces mate, but track counts differ — Reverse to fix"}
           </span>
         )}
       </div>
@@ -124,7 +158,7 @@ export function LayoutCanvas({
         ref={svgRef}
         viewBox={vb}
         width="100%"
-        height="300"
+        height="320"
         preserveAspectRatio="xMidYMid meet"
         className="touch-none rounded-md border border-slate-700 bg-slate-950/40"
         onPointerMove={onMove}
@@ -133,89 +167,106 @@ export function LayoutCanvas({
       >
         {fp.placed.map((m) => {
           const stroke = colorFor?.(m.id) ?? "#64748b";
-          const off = drag?.id === m.id ? { dx: drag.dx, dy: drag.dy } : { dx: 0, dy: 0 };
-          const pts = m.centerline.map((p) => `${p.x + off.dx},${sy(p.y) + off.dy}`).join(" ");
-          const mid = m.centerline[Math.floor(m.centerline.length / 2)];
+          const dragging = state?.id === m.id;
+          const pose: Pose | null = dragging ? state!.pose : null;
+          const tp = (p: Pt) => (pose ? applyPose(p, pose) : p);
+          const bandPts = bandOutline(m.centerline)
+            .map(tp)
+            .map((p) => `${p.x},${sy(p.y)}`)
+            .join(" ");
+          const track = m.centerline
+            .map(tp)
+            .map((p) => `${p.x},${sy(p.y)}`)
+            .join(" ");
+          const mid = tp(m.centerline[Math.floor(m.centerline.length / 2)]);
+          const mating = dragging && state!.hit;
           return (
             <g
               key={m.id}
               onPointerDown={(e) => onDown(e, m.id)}
-              style={{ cursor: drag?.id === m.id ? "grabbing" : "grab" }}
+              style={{ cursor: dragging ? "grabbing" : "grab" }}
             >
-              <polyline
-                points={pts}
-                fill="none"
-                stroke={stroke}
-                strokeWidth={drag?.id === m.id ? 3 : 2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                opacity={drag && drag.id !== m.id ? 0.6 : 1}
-              >
-                <title>{m.moduleName ?? m.id} — drag to connect</title>
-              </polyline>
-              {m.endplates.map((e) => {
-                const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
-                const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
-                const half = 3.2;
+              {bandPts && (
+                <polygon
+                  points={bandPts}
+                  fill={stroke}
+                  fillOpacity={dragging ? 0.3 : 0.16}
+                  stroke={stroke}
+                  strokeOpacity={dragging ? 0.95 : 0.5}
+                  strokeWidth={0.8}
+                  strokeLinejoin="round"
+                  opacity={state && !dragging ? 0.6 : 1}
+                >
+                  <title>{m.moduleName ?? m.id} — drag to connect</title>
+                </polygon>
+              )}
+              {/* Endplate faces (24″ Free-moN interface) */}
+              {endplateFaces(m.centerline).map((f, i) => {
+                const p1 = tp(f.p1);
+                const p2 = tp(f.p2);
                 return (
                   <line
-                    key={e.id}
-                    x1={e.x - nx * half + off.dx}
-                    y1={sy(e.y - ny * half) + off.dy}
-                    x2={e.x + nx * half + off.dx}
-                    y2={sy(e.y + ny * half) + off.dy}
-                    stroke="#94a3b8"
-                    strokeWidth={1.4}
+                    key={`face${i}`}
+                    x1={p1.x}
+                    y1={sy(p1.y)}
+                    x2={p2.x}
+                    y2={sy(p2.y)}
+                    stroke={stroke}
+                    strokeWidth={2}
+                    strokeLinecap="round"
                   />
                 );
               })}
+              <polyline
+                points={track}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={1.4}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {/* Branch endplates (C/D…) — the A/B are the band ends */}
+              {m.endplates
+                .filter((e) => e.id !== "A" && e.id !== "B")
+                .map((e) => {
+                  const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
+                  const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
+                  const a = tp({ x: e.x - nx * 12, y: e.y - ny * 12 });
+                  const b = tp({ x: e.x + nx * 12, y: e.y + ny * 12 });
+                  return (
+                    <line key={e.id} x1={a.x} y1={sy(a.y)} x2={b.x} y2={sy(b.y)} stroke="#94a3b8" strokeWidth={1.6} />
+                  );
+                })}
               {mid && (
                 <text
-                  x={mid.x + off.dx}
-                  y={sy(mid.y) + off.dy - 4}
+                  x={mid.x}
+                  y={sy(mid.y) - 4}
                   textAnchor="middle"
-                  fontSize={Math.max(w, h) * 0.03 + 2}
+                  fontSize={font}
                   fill="#cbd5e1"
                   style={{ paintOrder: "stroke", stroke: "#0b1220", strokeWidth: 1, pointerEvents: "none" }}
                 >
                   {m.moduleName ?? m.id}
                 </text>
               )}
+              {/* Highlight the joined face (where the two clamp) */}
+              {mating && (
+                <circle
+                  cx={state!.hit!.target.x}
+                  cy={sy(state!.hit!.target.y)}
+                  r={7}
+                  fill="none"
+                  stroke={state!.hit!.compatible ? "#34d399" : "#f43f5e"}
+                  strokeWidth={1.6}
+                  pointerEvents="none"
+                />
+              )}
             </g>
           );
         })}
-
-        {/* Snap candidate highlight */}
-        {hit && (
-          <g pointerEvents="none">
-            {[
-              { x: hit.drag.x, y: hit.drag.y },
-              { x: hit.target.x, y: hit.target.y },
-            ].map((p, i) => (
-              <circle
-                key={i}
-                cx={p.x}
-                cy={p.y}
-                r={SNAP_RADIUS * 0.5}
-                fill="none"
-                stroke={hit.compatible ? "#34d399" : "#f43f5e"}
-                strokeWidth={1.4}
-              />
-            ))}
-            <line
-              x1={hit.drag.x}
-              y1={hit.drag.y}
-              x2={hit.target.x}
-              y2={hit.target.y}
-              stroke={hit.compatible ? "#34d399" : "#f43f5e"}
-              strokeWidth={1}
-              strokeDasharray="2 2"
-            />
-          </g>
-        )}
       </svg>
       <p className="mt-1 text-[10px] text-slate-600">
-        Phase 1: drag a module so one of its endplates meets another module&rsquo;s — release to write a join. Positions are solved from the joins; use Reverse (⟲) in the list to turn a module around.
+        Modules are physical 24″-endplate pieces; drag one so its endplate face meets another&rsquo;s and it clamps into place. Positions solve from the joins; use Reverse (⟲) in the list to turn a module around.
       </p>
     </div>
   );

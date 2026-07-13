@@ -14,6 +14,7 @@ import {
   type FootprintModule,
 } from "@/lib/track/footprint";
 import type { LayoutJoin } from "@/lib/track/layoutJoins";
+import { bandOutline, endplateFaces } from "@/lib/track/outline";
 import { MODULE_DRAG_MIME } from "@/components/layout/LayoutSchematic";
 
 type JoinWithStatus = LayoutJoin & { status?: string };
@@ -113,41 +114,70 @@ export function FootprintMap({
         preserveAspectRatio="xMidYMid meet"
         className={`rounded-md border border-slate-700 bg-slate-950/40 ${ring}`}
       >
-        {/* Module centre-lines, coloured by district */}
+        {/* Modules as physical benchwork footprints (12″ Free-moN band), the
+            track centre-line drawn on top, coloured by district. */}
         {fp.placed.map((m) => {
           const stroke = colorFor?.(m.id) ?? "#64748b";
           const pts = m.centerline.map((p) => `${p.x},${fy(p.y)}`).join(" ");
+          const band = bandOutline(m.centerline);
+          const bandPts = band.map((p) => `${p.x},${fy(p.y)}`).join(" ");
           const mid = m.centerline[Math.floor(m.centerline.length / 2)];
           return (
             <g key={m.id}>
+              {band.length > 0 && (
+                <polygon
+                  points={bandPts}
+                  fill={stroke}
+                  fillOpacity={0.16}
+                  stroke={stroke}
+                  strokeOpacity={0.5}
+                  strokeWidth={0.7}
+                  strokeLinejoin="round"
+                />
+              )}
+              {endplateFaces(m.centerline).map((f, i) => (
+                <line
+                  key={`face${i}`}
+                  x1={f.p1.x}
+                  y1={fy(f.p1.y)}
+                  x2={f.p2.x}
+                  y2={fy(f.p2.y)}
+                  stroke={stroke}
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                />
+              ))}
               <polyline
                 points={pts}
                 fill="none"
                 stroke={stroke}
-                strokeWidth={2}
+                strokeWidth={1.4}
                 strokeLinejoin="round"
                 strokeLinecap="round"
               >
                 <title>{m.moduleName ?? m.id}</title>
               </polyline>
-              {m.endplates.map((e) => {
-                const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
-                const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
-                const half = 3;
-                return (
-                  <line
-                    key={e.id}
-                    x1={e.x - nx * half}
-                    y1={fy(e.y - ny * half)}
-                    x2={e.x + nx * half}
-                    y2={fy(e.y + ny * half)}
-                    stroke={stroke}
-                    strokeWidth={1.2}
-                  >
-                    <title>{`${m.moduleName ?? m.id} · endplate ${e.id}`}</title>
-                  </line>
-                );
-              })}
+              {/* Branch endplates (C/D…) — the A/B faces are the band ends. */}
+              {m.endplates
+                .filter((e) => e.id !== "A" && e.id !== "B")
+                .map((e) => {
+                  const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
+                  const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
+                  const half = 6;
+                  return (
+                    <line
+                      key={e.id}
+                      x1={e.x - nx * half}
+                      y1={fy(e.y - ny * half)}
+                      x2={e.x + nx * half}
+                      y2={fy(e.y + ny * half)}
+                      stroke={stroke}
+                      strokeWidth={1.6}
+                    >
+                      <title>{`${m.moduleName ?? m.id} · endplate ${e.id}`}</title>
+                    </line>
+                  );
+                })}
               {mid && (
                 <text
                   x={mid.x}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findSnap, type CanvasEndplate } from "../snap";
+import { findSnap, findFaceSnap, type CanvasEndplate } from "../snap";
 
 const ep = (
   placementId: string,
@@ -7,7 +7,8 @@ const ep = (
   x: number,
   y: number,
   config: "single" | "double" | null = "single",
-): CanvasEndplate => ({ placementId, endplateId, x, y, config });
+  heading?: number,
+): CanvasEndplate => ({ placementId, endplateId, x, y, config, heading });
 
 describe("findSnap", () => {
   it("returns the nearest opposing endplate within the radius", () => {
@@ -44,5 +45,40 @@ describe("findSnap", () => {
       6,
     )!;
     expect(hit.target.placementId).toBe("p");
+  });
+});
+
+describe("findFaceSnap", () => {
+  it("mates faces whose normals point at each other (~opposite)", () => {
+    // m:B faces east (0°); n:A faces west (180°) → they meet.
+    const hit = findFaceSnap(
+      [ep("m", "B", 0, 0, "single", 0)],
+      [ep("n", "A", 3, 0, "single", 180)],
+      8,
+    )!;
+    expect(hit).not.toBeNull();
+    expect(hit.target.placementId).toBe("n");
+    expect(hit.compatible).toBe(true);
+  });
+
+  it("does NOT snap faces that point the same way (can't clamp)", () => {
+    // both face east — near, but not opposing.
+    expect(
+      findFaceSnap(
+        [ep("m", "B", 0, 0, "single", 0)],
+        [ep("n", "A", 3, 0, "single", 0)],
+        8,
+      ),
+    ).toBeNull();
+  });
+
+  it("respects the radius even when faces oppose", () => {
+    expect(
+      findFaceSnap(
+        [ep("m", "B", 0, 0, "single", 0)],
+        [ep("n", "A", 40, 0, "single", 180)],
+        8,
+      ),
+    ).toBeNull();
   });
 });
