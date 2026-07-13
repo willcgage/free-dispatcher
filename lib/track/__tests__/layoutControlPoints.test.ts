@@ -49,6 +49,11 @@ describe("layoutControlPoints", () => {
       mod("FMN-0001", 0, [{ id: "cpA", name: "A" }, { id: "cpB", name: "B" }]),
     ]);
     expect(cps.map((c) => c.key)).toEqual([
+      "pl-FMN-0001:cpA",
+      "pl-FMN-0001:cpB",
+      "pl-FMN-0002:cpC",
+    ]);
+    expect(cps.map((c) => c.legacyKey)).toEqual([
       "FMN-0001:cpA",
       "FMN-0001:cpB",
       "FMN-0002:cpC",
@@ -59,6 +64,30 @@ describe("layoutControlPoints", () => {
       name: "A",
       source: "module",
     });
+  });
+
+  it("gives each placement of the SAME module a distinct key (#d4492d53)", () => {
+    // Two placements of FMN-0007 must not collide — the bug was both keying to
+    // "FMN-0007:cp1" (React dup keys + one district assignment for both).
+    const cps = layoutControlPoints([
+      mod("FMN-0007", 0, [{ id: "cp1", name: "West" }], "pl-a"),
+      mod("FMN-0007", 1, [{ id: "cp1", name: "West" }], "pl-b"),
+    ]);
+    expect(cps.map((c) => c.key)).toEqual(["pl-a:cp1", "pl-b:cp1"]);
+    expect(new Set(cps.map((c) => c.key)).size).toBe(2); // distinct
+    // …but they share the legacy key (why they used to collide).
+    expect(cps.every((c) => c.legacyKey === "FMN-0007:cp1")).toBe(true);
+  });
+
+  it("resolves a district assignment saved under the legacy module key", () => {
+    const modules = [mod("FMN-0001", 0, [{ id: "a", name: "A", pos: 10 }, { id: "b", name: "B", pos: 90 }])];
+    const cps = layoutControlPoints(modules);
+    // Assignment persisted before keys were placement-based (module-keyed).
+    const legacy = { "FMN-0001:a": "d1", "FMN-0001:b": "d1" };
+    expect(deriveSections(cps, legacy).map((s) => s.name)).toEqual(["A – B"]);
+    // Placement-keyed assignment (post-fix) wins when both are present.
+    const placed = { "pl-FMN-0001:a": "d2", "pl-FMN-0001:b": "d2", "FMN-0001:a": "d1", "FMN-0001:b": "d1" };
+    expect(deriveSections(cps, placed).map((s) => s.districtId)).toEqual(["d2"]);
   });
 
   it("orders points within a module by schematic position", () => {
@@ -300,9 +329,9 @@ describe("branch spines (#170)", () => {
       ...layoutControlPoints(branch, [], "br-1"),
     ];
     expect(cps.map((c) => `${c.key}@${c.spineId ?? "main"}`)).toEqual([
-      "FMN-0001:a@main",
-      "FMN-0001:b@main",
-      "FMN-0002:c@br-1",
+      "pl-FMN-0001:a@main",
+      "pl-FMN-0001:b@main",
+      "pl-FMN-0002:c@br-1",
     ]);
   });
 

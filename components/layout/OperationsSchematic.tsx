@@ -486,10 +486,11 @@ export function OperationsSchematic({
                 const sy = s.side === "below" ? laneY(s.lane) + off : laneY(s.lane) - off;
                 const dir = s.facing === "BtoA" ? -1 : 1;
                 const L = Math.max(4, c.width * 0.02);
-                // Live aspect: join back to the control point (#151).
+                // Live aspect: join back to the control point (#151). Keyed by
+                // placement (c.input.id) to match the CP ref's placement key.
                 const aspect =
-                  signalAspects && s.cp && c.input.moduleId
-                    ? signalAspects[`${c.input.moduleId}:${s.cp}`]?.[s.facing]
+                  signalAspects && s.cp && c.input.id
+                    ? signalAspects[`${c.input.id}:${s.cp}`]?.[s.facing]
                     : undefined;
                 const color =
                   aspect === "clear"

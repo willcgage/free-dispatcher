@@ -36,9 +36,15 @@ export interface LayoutCp {
 }
 
 export interface ControlPointRef {
-  /** Stable key within the layout: "<moduleRecordNumber>:<cpId>" for imported
-   * points, "layout:<id>" for layout-level ones. */
+  /** Stable key within the layout, UNIQUE per placement: "<placementId>:<cpId>"
+   * for imported points, "layout:<id>" for layout-level ones. Placement-based so
+   * the same module design placed twice doesn't collide (React keys, per-CP
+   * district assignment). */
   key: string;
+  /** The pre-placement key format "<moduleRecordNumber>:<cpId>" — read as a
+   * fallback so district assignments saved before the key became placement-based
+   * still resolve without a migration. Equals `key` when there's no placement id. */
+  legacyKey: string;
   moduleId: string;
   moduleName: string | null;
   cpId: string;
@@ -83,13 +89,17 @@ export function layoutControlPoints(
   for (const m of ordered) {
     const moduleId = m.moduleId;
     if (!moduleId) continue;
+    // Unique per placement; falls back to the module record when a placement id
+    // isn't supplied (keeping the historical key format in that case).
+    const placementId = m.id ?? moduleId;
     const doc = asModuleSchematic(m.schematic);
     const refs: ControlPointRef[] = [];
     let docIndex = 0;
     for (const cp of doc?.controlPoints ?? []) {
       if (!cp.id) continue;
       refs.push({
-        key: `${moduleId}:${cp.id}`,
+        key: `${placementId}:${cp.id}`,
+        legacyKey: `${moduleId}:${cp.id}`,
         moduleId,
         moduleName: m.moduleName ?? null,
         cpId: cp.id,
@@ -104,6 +114,7 @@ export function layoutControlPoints(
       if (lc.anchor !== (m.id ?? "")) continue;
       refs.push({
         key: `layout:${lc.id}`,
+        legacyKey: `layout:${lc.id}`,
         moduleId,
         moduleName: m.moduleName ?? null,
         cpId: lc.id,
@@ -159,6 +170,11 @@ export function deriveSections(
       .map((m) => ({ moduleId: m.moduleId!, moduleName: m.moduleName ?? null }));
   };
 
+  // Resolve a point's district by its placement key, falling back to the legacy
+  // module-keyed assignment saved before keys became placement-based.
+  const districtOf = (cp: ControlPointRef): string | undefined =>
+    assignments[cp.key] ?? assignments[cp.legacyKey];
+
   const out: DerivedSection[] = [];
   for (let i = 0; i < controlPoints.length - 1; i++) {
     const a = controlPoints[i];
@@ -166,8 +182,8 @@ export function deriveSections(
     // Adjacency is per-spine (#170): a junction terminates the chain — no
     // section spans from a main-spine point onto a branch (or vice versa).
     if ((a.spineId ?? null) !== (b.spineId ?? null)) continue;
-    const da = assignments[a.key];
-    const db = assignments[b.key];
+    const da = districtOf(a);
+    const db = districtOf(b);
     if (da && da === db) {
       out.push({
         districtId: da,

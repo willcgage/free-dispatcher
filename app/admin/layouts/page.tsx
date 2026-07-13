@@ -1569,7 +1569,7 @@ export default function AdminLayouts() {
                                         </span>
                                         {tree.districts.length > 0 && (
                                           <select
-                                            value={assign[cp.key] ?? ""}
+                                            value={assign[cp.key] ?? assign[cp.legacyKey] ?? ""}
                                             disabled={busy}
                                             onChange={(e) =>
                                               assignControlPoint(
