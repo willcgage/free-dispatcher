@@ -12,6 +12,7 @@ import {
 import { MODULE_DRAG_MIME } from "@/components/layout/LayoutSchematic";
 import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
 import { FootprintMap } from "@/components/layout/FootprintMap";
+import { LayoutCanvas } from "@/components/layout/LayoutCanvas";
 import {
   districtColor,
   districtLegend,
@@ -195,6 +196,8 @@ export default function AdminLayouts() {
     sectionId: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Layout ids whose map is in interactive "Arrange" mode (drag-to-connect). */
+  const [arrange, setArrange] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -1271,8 +1274,25 @@ export default function AdminLayouts() {
                           {/* Layout map — one view: solved geometry + district
                               colours + labels + endplate mismatches (#175). */}
                           <div>
-                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
-                              Layout map
+                            <div className="mb-1 flex items-center justify-between">
+                              <div className="text-xs font-semibold uppercase text-slate-500">
+                                Layout map
+                              </div>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  setArrange((s) => ({ ...s, [l.id]: !s[l.id] }))
+                                }
+                                title="Drag modules to connect their endplates (beta)"
+                                className={`rounded border px-2 py-0.5 text-[11px] ${
+                                  arrange[l.id]
+                                    ? "border-sky-600 bg-sky-900/40 text-sky-300"
+                                    : "border-slate-700 text-slate-400 hover:bg-slate-800"
+                                }`}
+                              >
+                                {arrange[l.id] ? "Done arranging" : "Arrange ⤢"}
+                              </button>
                             </div>
                             {(() => {
                               const dmap = moduleDistrictMap(tree.districts);
@@ -1287,20 +1307,33 @@ export default function AdminLayouts() {
                                 const d = mid ? dmap.get(mid) : undefined;
                                 return d ? districtColor(d.index) : undefined;
                               };
-                              return (
+                              const fpModules = [...modById.values()].map((m) => ({
+                                id: m.id,
+                                moduleName: m.moduleName,
+                                moduleId: m.moduleId,
+                                lengthTotalInches: m.lengthTotalInches,
+                                mainlineLengthInches: m.mainlineLengthInches,
+                                geometryType: m.geometryType,
+                                geometryDegrees: m.geometryDegrees,
+                                geometryOffsetInches: m.geometryOffsetInches,
+                                mirrored: m.mirrored,
+                                schematic: m.schematic,
+                              }));
+                              return arrange[l.id] ? (
+                                <LayoutCanvas
+                                  modules={fpModules}
+                                  joins={tree.joins}
+                                  colorFor={colorFor}
+                                  onAddJoin={(j) => {
+                                    const explicit = tree.joins
+                                      .filter((x) => !x.implicit)
+                                      .map((x) => ({ id: x.id, a: x.a, b: x.b }));
+                                    saveJoins(l.id, [...explicit, { id: j.id, a: j.a, b: j.b }]);
+                                  }}
+                                />
+                              ) : (
                                 <FootprintMap
-                                  modules={[...modById.values()].map((m) => ({
-                                    id: m.id,
-                                    moduleName: m.moduleName,
-                                    moduleId: m.moduleId,
-                                    lengthTotalInches: m.lengthTotalInches,
-                                    mainlineLengthInches: m.mainlineLengthInches,
-                                    geometryType: m.geometryType,
-                                    geometryDegrees: m.geometryDegrees,
-                                    geometryOffsetInches: m.geometryOffsetInches,
-                                    mirrored: m.mirrored,
-                                    schematic: m.schematic,
-                                  }))}
+                                  modules={fpModules}
                                   joins={tree.joins}
                                   colorFor={colorFor}
                                   legend={districtLegend(tree.districts)}
