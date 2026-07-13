@@ -27,6 +27,7 @@ import {
   type SectionAwareDistrict,
 } from "@/lib/track/sections";
 import { asModuleSchematic, moduleFeatures } from "@/lib/track/moduleSchematic";
+import { reverseModuleFeatures } from "@/lib/track/reverseFeatures";
 
 // All coordinates are in inches (the spine's natural unit); the SVG scales.
 const LANE_GAP = 12; // vertical gap between Main 1 and Main 2
@@ -153,7 +154,18 @@ export function OperationsSchematic({
           // terminal bulb on the outward side — first cell opens west, any
           // other placement opens east.
           const cellDoc = asModuleSchematic(c.input.schematic);
-          const cellFeat = cellDoc ? moduleFeatures(cellDoc) : null;
+          // A reversed (turned-around) placement draws its content mirrored
+          // west↔east, and its end track-counts swap (#reverse).
+          const flip = !!c.input.flipped;
+          // main2Extent / transition come from the module-local moduleFeatures,
+          // which don't know orientation — mirror them when reversed. (The end
+          // track-counts leftTracks/rightTracks are ALREADY flipped-aware, from
+          // inConfig/outConfig, so they must NOT be swapped again.)
+          const cellFeat = cellDoc
+            ? flip
+              ? reverseModuleFeatures(moduleFeatures(cellDoc))
+              : moduleFeatures(cellDoc)
+            : null;
           const isLoop = !!cellFeat?.loop;
           // Main 2 directional return (#165): the balloon is a U joining the
           // two main lanes at the outward side — no bulb.
@@ -311,11 +323,15 @@ export function OperationsSchematic({
                   strokeWidth={0.6}
                 />
               )}
-              {/* Staging yard glyph at the module's staging end */}
+              {/* Staging yard glyph at the module's staging end (mirrors when
+                  the placement is reversed). */}
               {c.input.stagingEnd &&
                 [0, 1, 2].map((k) => {
-                  const ex =
-                    c.input.stagingEnd === "A" ? c.x + 2 + k * 3 : c.x + c.width - 2 - k * 3;
+                  const stagingWest =
+                    (c.input.stagingEnd === "A") !== flip;
+                  const ex = stagingWest
+                    ? c.x + 2 + k * 3
+                    : c.x + c.width - 2 - k * 3;
                   return (
                     <line
                       key={k}
@@ -348,7 +364,7 @@ export function OperationsSchematic({
                     c.leftTracks === c.rightTracks
                       ? `${c.leftTracks === 2 ? "double" : "single"} main`
                       : `${c.leftTracks}→${c.rightTracks} track`
-                  }${c.input.moduleId && dmap.get(c.input.moduleId) ? ` · ${dmap.get(c.input.moduleId)!.name}` : ""}${
+                  }${flip ? " · reversed" : ""}${c.input.moduleId && dmap.get(c.input.moduleId) ? ` · ${dmap.get(c.input.moduleId)!.name}` : ""}${
                     c.input.stagingEnd ? " · staging" : ""
                   }`}
                 </title>
@@ -373,7 +389,10 @@ export function OperationsSchematic({
         {schem.cells.map((c) => {
           const doc = asModuleSchematic(c.input.schematic);
           if (!doc) return null;
-          const feat = moduleFeatures(doc);
+          // Reversed placement: mirror the overlay west↔east (#reverse).
+          const feat = c.input.flipped
+            ? reverseModuleFeatures(moduleFeatures(doc))
+            : moduleFeatures(doc);
           const stroke = colorFor(c.input.moduleId);
           const px = (frac: number) => c.x + frac * c.width;
           return (
