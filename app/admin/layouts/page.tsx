@@ -9,12 +9,14 @@ import {
   standardLabel,
   standardOptions,
 } from "@/lib/client/standards";
-import {
-  LayoutSchematic,
-  MODULE_DRAG_MIME,
-} from "@/components/layout/LayoutSchematic";
+import { MODULE_DRAG_MIME } from "@/components/layout/LayoutSchematic";
 import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
 import { FootprintMap } from "@/components/layout/FootprintMap";
+import {
+  districtColor,
+  districtLegend,
+  moduleDistrictMap,
+} from "@/lib/track/districts";
 import {
   layoutControlPoints,
   deriveSections,
@@ -904,27 +906,24 @@ export default function AdminLayouts() {
                                       <option value="A">Stg A</option>
                                       <option value="B">Stg B</option>
                                     </select>
-                                    {(m.geometryType === "curve" ||
-                                      m.geometryType === "corner_90") && (
-                                      <button
-                                        disabled={busy}
-                                        onClick={() =>
-                                          flipModule(l.id, m.id, m.flipped)
-                                        }
-                                        title={
-                                          m.flipped
-                                            ? "Flipped — click to un-flip"
-                                            : "Flip curve direction"
-                                        }
-                                        className={`shrink-0 rounded border px-1 py-0.5 text-xs ${
-                                          m.flipped
-                                            ? "border-amber-600/60 bg-amber-600/20 text-amber-300"
-                                            : "border-slate-700 text-slate-400 hover:bg-slate-800"
-                                        }`}
-                                      >
-                                        ⇄
-                                      </button>
-                                    )}
+                                    <button
+                                      disabled={busy}
+                                      onClick={() =>
+                                        flipModule(l.id, m.id, m.flipped)
+                                      }
+                                      title={
+                                        m.flipped
+                                          ? "Reversed (turned end-for-end) — click to restore"
+                                          : "Reverse — turn the module end-for-end (swap which endplate faces each neighbour)"
+                                      }
+                                      className={`shrink-0 rounded border px-1 py-0.5 text-xs ${
+                                        m.flipped
+                                          ? "border-amber-600/60 bg-amber-600/20 text-amber-300"
+                                          : "border-slate-700 text-slate-400 hover:bg-slate-800"
+                                      }`}
+                                    >
+                                      ⟲
+                                    </button>
                                     <button
                                       disabled={busy}
                                       onClick={() => removeModule(l.id, m.id)}
@@ -1269,41 +1268,46 @@ export default function AdminLayouts() {
                               ))}
                           </div>
 
-                          {/* Footprint (to-scale, physical shape) */}
+                          {/* Layout map — one view: solved geometry + district
+                              colours + labels + endplate mismatches (#175). */}
                           <div>
                             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
-                              Footprint (physical layout)
+                              Layout map
                             </div>
-                            <LayoutSchematic
-                              modules={tree.modules}
-                              districts={tree.districts}
-                              onDropModule={(rec) => dropAddModule(l.id, rec)}
-                            />
-                          </div>
-
-                          {/* Solved layout map (#175 phase 3) */}
-                          <div>
-                            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
-                              Layout map (solved)
-                            </div>
-                            <FootprintMap
-                              modules={[
-                                ...tree.modules,
-                                ...tree.branchSpines.flatMap((b) => b.modules),
-                              ].map((m) => ({
-                                id: m.id,
-                                moduleName: m.moduleName,
-                                moduleId: m.moduleId,
-                                lengthTotalInches: m.lengthTotalInches,
-                                mainlineLengthInches: m.mainlineLengthInches,
-                                geometryType: m.geometryType,
-                                geometryDegrees: m.geometryDegrees,
-                                geometryOffsetInches: m.geometryOffsetInches,
-                                mirrored: m.mirrored,
-                                schematic: m.schematic,
-                              }))}
-                              joins={tree.joins}
-                            />
+                            {(() => {
+                              const dmap = moduleDistrictMap(tree.districts);
+                              const modById = new Map(
+                                [
+                                  ...tree.modules,
+                                  ...tree.branchSpines.flatMap((b) => b.modules),
+                                ].map((m) => [m.id, m]),
+                              );
+                              const colorFor = (pid: string) => {
+                                const mid = modById.get(pid)?.moduleId;
+                                const d = mid ? dmap.get(mid) : undefined;
+                                return d ? districtColor(d.index) : undefined;
+                              };
+                              return (
+                                <FootprintMap
+                                  modules={[...modById.values()].map((m) => ({
+                                    id: m.id,
+                                    moduleName: m.moduleName,
+                                    moduleId: m.moduleId,
+                                    lengthTotalInches: m.lengthTotalInches,
+                                    mainlineLengthInches: m.mainlineLengthInches,
+                                    geometryType: m.geometryType,
+                                    geometryDegrees: m.geometryDegrees,
+                                    geometryOffsetInches: m.geometryOffsetInches,
+                                    mirrored: m.mirrored,
+                                    schematic: m.schematic,
+                                  }))}
+                                  joins={tree.joins}
+                                  colorFor={colorFor}
+                                  legend={districtLegend(tree.districts)}
+                                  onDropModule={(rec) => dropAddModule(l.id, rec)}
+                                />
+                              );
+                            })()}
                           </div>
 
                           {/* Endplate joins (#175) */}
