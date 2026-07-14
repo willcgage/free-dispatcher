@@ -95,3 +95,22 @@ export async function PATCH(
   await trackModel.syncDerivedSections(id);
   return NextResponse.json({ ok: true });
 }
+
+/**
+ * DELETE /api/layouts/:id — permanently delete a layout and everything scoped
+ * to it (Admin). Sessions pointing at it lose the reference (layoutId → null).
+ */
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const guard = requireRole(req, ["admin"]);
+  if (!guard.ok) return guard.response;
+  const { id } = await params;
+
+  const deleted = await trackModel.deleteLayout(id);
+  if (!deleted) {
+    return NextResponse.json({ error: "layout not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
+}

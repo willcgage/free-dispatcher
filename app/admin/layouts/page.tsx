@@ -552,6 +552,33 @@ export default function AdminLayouts() {
     }
   }
 
+  /** Permanently delete a layout and everything scoped to it (admin). */
+  async function deleteLayout(id: string, name: string, inSession: boolean) {
+    const warning = inSession
+      ? `Delete "${name}"? It's in the active session — the session will lose its layout.\n\nThis also removes its districts, sections, blocks, and module placements. This cannot be undone.`
+      : `Delete "${name}"? This removes its districts, sections, blocks, and module placements. This cannot be undone.`;
+    if (!window.confirm(warning)) return;
+    setBusy(true);
+    try {
+      await apiSend("DELETE", `/api/layouts/${id}`);
+      setTrees((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ---- draft mutations ---------------------------------------------------
   const mutate = (fn: (d: LayoutDraft) => void) =>
     setDraft((prev) => {
@@ -742,6 +769,14 @@ export default function AdminLayouts() {
                         {sessionLayoutId ? "Switch to this" : "Use in session"}
                       </button>
                     )}
+                    <button
+                      disabled={busy}
+                      onClick={() => deleteLayout(l.id, l.name, isCurrent)}
+                      title="Delete this layout permanently"
+                      className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs font-medium text-slate-400 hover:border-red-700/60 hover:bg-red-900/20 hover:text-red-300 disabled:opacity-40"
+                    >
+                      Delete
+                    </button>
                   </div>
                   {expanded.has(l.id) && (
                     <div className="mt-2 space-y-3 pl-5 text-sm">
