@@ -122,7 +122,8 @@ export function FootprintMap({
           // Per-endplate authored face widths (A end / B end); band tapers between.
           const wA = m.endplates.find((e) => e.id === "A")?.width ?? 24;
           const wB = m.endplates.find((e) => e.id === "B")?.width ?? 24;
-          const band = bandOutline(m.centerline, wA, wB);
+          // The authored benchwork outline if drawn, else the derived band.
+          const band = m.outline ?? bandOutline(m.centerline, wA, wB);
           const bandPts = band.map((p) => `${p.x},${fy(p.y)}`).join(" ");
           const mid = m.centerline[Math.floor(m.centerline.length / 2)];
           return (

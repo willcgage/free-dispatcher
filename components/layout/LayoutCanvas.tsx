@@ -253,7 +253,8 @@ export function LayoutCanvas({
           // Per-endplate authored face widths (A end / B end); band tapers between.
           const wA = m.endplates.find((e) => e.id === "A")?.width ?? 24;
           const wB = m.endplates.find((e) => e.id === "B")?.width ?? 24;
-          const bandPts = bandOutline(m.centerline, wA, wB)
+          // The authored benchwork outline if drawn, else the derived band.
+          const bandPts = (m.outline ?? bandOutline(m.centerline, wA, wB))
             .map(tp)
             .map((p) => `${p.x},${sy(p.y)}`)
             .join(" ");
