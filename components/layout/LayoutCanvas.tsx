@@ -21,6 +21,7 @@ import { flushMatePose } from "@/lib/track/mate";
 import { findSnap, type CanvasEndplate, type SnapHit } from "@/lib/track/snap";
 
 const SNAP_RADIUS = 14; // world inches — endplate faces within this mate
+const CLICK_TOL_INCHES = 6; // drag less than this (world) = a tap, not a move
 
 type Pose =
   | { kind: "free"; dx: number; dy: number }
@@ -40,11 +41,17 @@ export function LayoutCanvas({
   modules,
   joins,
   onAddJoin,
+  onReverse,
+  onMirror,
   colorFor,
 }: {
   modules: FootprintModule[];
   joins: (LayoutJoin & { status?: string })[];
   onAddJoin: (join: LayoutJoin) => void;
+  /** Turn a placement end-for-end (Reverse). */
+  onReverse?: (placementId: string) => void;
+  /** Mirror a placement (two-sided module reflection). */
+  onMirror?: (placementId: string) => void;
   colorFor?: (placementId: string) => string | undefined;
 }) {
   const fp = useMemo(() => composeFootprint(modules, joins), [modules, joins]);
@@ -52,6 +59,8 @@ export function LayoutCanvas({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [state, setState] = useState<{ id: string; pose: Pose; hit: SnapHit | null } | null>(null);
+  // The module tapped (not dragged) for its Reverse / Mirror actions.
+  const [sel, setSel] = useState<string | null>(null);
 
   // Every placed module's endplates in WORLD coords, with heading + config.
   const worldEndplates: CanvasEndplate[] = useMemo(
@@ -164,21 +173,66 @@ export function LayoutCanvas({
         a: { placementId: drag.placementId, endplateId: drag.endplateId },
         b: { placementId: target.placementId, endplateId: target.endplateId },
       });
+    } else if (state) {
+      // No mate: a barely-moved pointer is a tap, not a drag — (de)select the
+      // module for its Reverse / Mirror actions. A real drag to empty space just
+      // snaps back (the solver owns positions).
+      const moved =
+        state.pose.kind === "free" &&
+        Math.hypot(state.pose.dx, state.pose.dy) > CLICK_TOL_INCHES;
+      if (!moved) setSel((cur) => (cur === state.id ? null : state.id));
     }
     setState(null);
     startRef.current = null;
   };
 
+  // The selected module (a tap target for Reverse / Mirror); cleared if it's no
+  // longer placed (e.g. removed).
+  const selMod = sel ? fp.placed.find((m) => m.id === sel) : null;
+  const selName = selMod ? (selMod.moduleName ?? selMod.id) : null;
+
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
-        <span>Arrange · drag a module; endplate faces clamp together</span>
+        <span>Arrange · drag to connect; tap a module to reverse or mirror it</span>
         {state?.hit && (
           <span className={state.hit.compatible ? "text-emerald-400" : "text-rose-400"}>
             {state.hit.compatible ? "Release to connect" : "Faces mate, but track counts differ — Reverse to fix"}
           </span>
         )}
       </div>
+
+      {/* Reverse / Mirror toolbar for the tapped module */}
+      {selName && (
+        <div className="mb-1 flex flex-wrap items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs">
+          <span className="text-slate-400">
+            Selected: <span className="text-slate-200">{selName}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onReverse?.(sel!)}
+            title="Reverse — turn the module end-for-end (swap which endplate faces each neighbour)"
+            className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800"
+          >
+            ⟲ Reverse
+          </button>
+          <button
+            type="button"
+            onClick={() => onMirror?.(sel!)}
+            title="Mirror — reflect the module (Free-mo modules are two-sided)"
+            className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800"
+          >
+            ⇋ Mirror
+          </button>
+          <button
+            type="button"
+            onClick={() => setSel(null)}
+            className="ml-auto rounded border border-slate-700 px-2 py-0.5 text-slate-400 hover:bg-slate-800"
+          >
+            Done
+          </button>
+        </div>
+      )}
       <svg
         ref={svgRef}
         viewBox={vb}
@@ -193,6 +247,7 @@ export function LayoutCanvas({
         {fp.placed.map((m) => {
           const stroke = colorFor?.(m.id) ?? "#64748b";
           const dragging = state?.id === m.id;
+          const selected = sel === m.id;
           const pose: Pose | null = dragging ? state!.pose : null;
           const tp = (p: Pt) => (pose ? applyPose(p, pose) : p);
           // Per-endplate authored face widths (A end / B end); band tapers between.
@@ -218,14 +273,14 @@ export function LayoutCanvas({
                 <polygon
                   points={bandPts}
                   fill={stroke}
-                  fillOpacity={dragging ? 0.3 : 0.16}
-                  stroke={stroke}
-                  strokeOpacity={dragging ? 0.95 : 0.5}
-                  strokeWidth={0.8}
+                  fillOpacity={dragging ? 0.3 : selected ? 0.24 : 0.16}
+                  stroke={selected ? "#38bdf8" : stroke}
+                  strokeOpacity={dragging || selected ? 0.95 : 0.5}
+                  strokeWidth={selected ? 1.6 : 0.8}
                   strokeLinejoin="round"
                   opacity={state && !dragging ? 0.6 : 1}
                 >
-                  <title>{m.moduleName ?? m.id} — drag to connect</title>
+                  <title>{m.moduleName ?? m.id} — drag to connect, tap to reverse/mirror</title>
                 </polygon>
               )}
               {/* Endplate faces (24″ Free-moN interface) */}
