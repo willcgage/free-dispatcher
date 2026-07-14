@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { bandOutline, endplateFaces, FREEMON_ENDPLATE_WIDTH_INCHES } from "../outline";
 
 describe("bandOutline", () => {
-  it("turns a straight centre-line into a rectangle of the given depth", () => {
-    // horizontal A→B, depth 12 → rectangle ±6 around y=0
-    const poly = bandOutline([{ x: 0, y: 0 }, { x: 40, y: 0 }], 12);
+  it("turns a straight centre-line into a rectangle of the given width", () => {
+    // horizontal A→B, both ends 12″ → rectangle ±6 around y=0
+    const poly = bandOutline([{ x: 0, y: 0 }, { x: 40, y: 0 }], 12, 12);
     expect(poly).toHaveLength(4);
     const ys = poly.map((p) => p.y).sort((a, b) => a - b);
     expect(ys[0]).toBeCloseTo(-6);
@@ -12,6 +12,16 @@ describe("bandOutline", () => {
     const xs = poly.map((p) => p.x);
     expect(Math.min(...xs)).toBeCloseTo(0);
     expect(Math.max(...xs)).toBeCloseTo(40);
+  });
+
+  it("tapers when the two endplates differ in width", () => {
+    // A end 12″ (half 6), B end 24″ (half 12): the band widens A→B.
+    const poly = bandOutline([{ x: 0, y: 0 }, { x: 40, y: 0 }], 12, 24);
+    // left offsets at each vertex: A vertex ±6, B vertex ±12
+    const atA = poly.filter((p) => Math.abs(p.x - 0) < 1e-6).map((p) => Math.abs(p.y));
+    const atB = poly.filter((p) => Math.abs(p.x - 40) < 1e-6).map((p) => Math.abs(p.y));
+    expect(Math.max(...atA)).toBeCloseTo(6);
+    expect(Math.max(...atB)).toBeCloseTo(12);
   });
 
   it("defaults to the 24 inch recommended Free-moN endplate width", () => {
@@ -26,12 +36,13 @@ describe("bandOutline", () => {
 });
 
 describe("endplateFaces", () => {
-  it("gives a face across each end, midpoint at the endplate point", () => {
-    const [a, b] = endplateFaces([{ x: 0, y: 0 }, { x: 40, y: 0 }], 12);
+  it("draws each end face at its own authored width", () => {
+    // A end 12″ (±6), B end 24″ (±12).
+    const [a, b] = endplateFaces([{ x: 0, y: 0 }, { x: 40, y: 0 }], 12, 24);
     expect(a.mid).toEqual({ x: 0, y: 0 });
     expect(b.mid).toEqual({ x: 40, y: 0 });
-    // the A face spans the full depth across the end (y from -6 to +6)
-    expect(Math.abs(a.p1.y - a.p2.y)).toBeCloseTo(12);
+    expect(Math.abs(a.p1.y - a.p2.y)).toBeCloseTo(12); // A face spans 12″
+    expect(Math.abs(b.p1.y - b.p2.y)).toBeCloseTo(24); // B face spans 24″
     expect(a.p1.x).toBeCloseTo(0);
   });
 });

@@ -119,7 +119,10 @@ export function FootprintMap({
         {fp.placed.map((m) => {
           const stroke = colorFor?.(m.id) ?? "#64748b";
           const pts = m.centerline.map((p) => `${p.x},${fy(p.y)}`).join(" ");
-          const band = bandOutline(m.centerline);
+          // Per-endplate authored face widths (A end / B end); band tapers between.
+          const wA = m.endplates.find((e) => e.id === "A")?.width ?? 24;
+          const wB = m.endplates.find((e) => e.id === "B")?.width ?? 24;
+          const band = bandOutline(m.centerline, wA, wB);
           const bandPts = band.map((p) => `${p.x},${fy(p.y)}`).join(" ");
           const mid = m.centerline[Math.floor(m.centerline.length / 2)];
           return (
@@ -135,7 +138,7 @@ export function FootprintMap({
                   strokeLinejoin="round"
                 />
               )}
-              {endplateFaces(m.centerline).map((f, i) => (
+              {endplateFaces(m.centerline, wA, wB).map((f, i) => (
                 <line
                   key={`face${i}`}
                   x1={f.p1.x}
@@ -163,7 +166,7 @@ export function FootprintMap({
                 .map((e) => {
                   const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
                   const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
-                  const half = 6;
+                  const half = e.width / 2;
                   return (
                     <line
                       key={e.id}

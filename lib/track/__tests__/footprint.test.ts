@@ -22,6 +22,30 @@ const join = (aP: string, aE: string, bP: string, bE: string): LayoutJoin => ({
 const ep = (m: { endplates: { id: string; x: number; y: number }[] }, id: string) =>
   m.endplates.find((e) => e.id === id)!;
 
+describe("composeFootprint endplate widths", () => {
+  it("carries each endplate's authored face width, defaulting to 24″", () => {
+    const authored: FootprintModule = {
+      id: "m",
+      moduleName: "m",
+      lengthTotalInches: 100,
+      geometryType: "straight",
+      schematic: {
+        version: 1,
+        lengthInches: 100,
+        endplates: [
+          { id: "A", tracks: [{ trackId: "main", lane: 0, config: "single" }], widthInches: 12 },
+          { id: "B", tracks: [{ trackId: "main", lane: 0, config: "single" }] }, // unauthored
+        ],
+        tracks: [{ id: "main", role: "main", lane: 0, from: "A", to: "B" }],
+      },
+    };
+    const fp = composeFootprint([authored], []);
+    const m = fp.placed.find((p) => p.id === "m")!;
+    expect(m.endplates.find((e) => e.id === "A")!.width).toBe(12);
+    expect(m.endplates.find((e) => e.id === "B")!.width).toBe(24); // recommended default
+  });
+});
+
 describe("composeFootprint", () => {
   it("chains two straights collinearly (B→A)", () => {
     const fp = composeFootprint(
