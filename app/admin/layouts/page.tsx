@@ -1365,6 +1365,12 @@ export default function AdminLayouts() {
                                       .map((x) => ({ id: x.id, a: x.a, b: x.b }));
                                     saveJoins(l.id, [...explicit, { id: j.id, a: j.a, b: j.b }]);
                                   }}
+                                  onReverse={(pid) =>
+                                    flipModule(l.id, pid, !!modById.get(pid)?.flipped)
+                                  }
+                                  onMirror={(pid) =>
+                                    toggleMirror(l.id, pid, !!modById.get(pid)?.mirrored)
+                                  }
                                 />
                               ) : (
                                 <FootprintMap
