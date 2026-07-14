@@ -270,6 +270,20 @@ class TrackModel {
   }
 
   /**
+   * Delete a layout and everything scoped to it. The DB cascades do the work:
+   * districts → sections → blocks, module_layouts → staging_tracks. Any session
+   * pointing at it has its layoutId set null (sessions outlive layouts). Returns
+   * false when no such layout exists (so the route can 404).
+   */
+  async deleteLayout(layoutId: string): Promise<boolean> {
+    const deleted = await db
+      .delete(layouts)
+      .where(eq(layouts.id, layoutId))
+      .returning({ id: layouts.id });
+    return deleted.length > 0;
+  }
+
+  /**
    * All layouts, each with a count of at-risk placements — modules that were
    * removed from the repo or marked inactive/archived by their owner (#160).
    * Surfaced on the layout list so risk is visible without expanding.
