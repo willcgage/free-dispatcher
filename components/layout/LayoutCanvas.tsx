@@ -195,7 +195,10 @@ export function LayoutCanvas({
           const dragging = state?.id === m.id;
           const pose: Pose | null = dragging ? state!.pose : null;
           const tp = (p: Pt) => (pose ? applyPose(p, pose) : p);
-          const bandPts = bandOutline(m.centerline)
+          // Per-endplate authored face widths (A end / B end); band tapers between.
+          const wA = m.endplates.find((e) => e.id === "A")?.width ?? 24;
+          const wB = m.endplates.find((e) => e.id === "B")?.width ?? 24;
+          const bandPts = bandOutline(m.centerline, wA, wB)
             .map(tp)
             .map((p) => `${p.x},${sy(p.y)}`)
             .join(" ");
@@ -226,7 +229,7 @@ export function LayoutCanvas({
                 </polygon>
               )}
               {/* Endplate faces (24″ Free-moN interface) */}
-              {endplateFaces(m.centerline).map((f, i) => {
+              {endplateFaces(m.centerline, wA, wB).map((f, i) => {
                 const p1 = tp(f.p1);
                 const p2 = tp(f.p2);
                 return (
@@ -256,8 +259,9 @@ export function LayoutCanvas({
                 .map((e) => {
                   const nx = Math.cos((e.heading + 90) * (Math.PI / 180));
                   const ny = Math.sin((e.heading + 90) * (Math.PI / 180));
-                  const a = tp({ x: e.x - nx * 12, y: e.y - ny * 12 });
-                  const b = tp({ x: e.x + nx * 12, y: e.y + ny * 12 });
+                  const hw = e.width / 2;
+                  const a = tp({ x: e.x - nx * hw, y: e.y - ny * hw });
+                  const b = tp({ x: e.x + nx * hw, y: e.y + ny * hw });
                   return (
                     <line key={e.id} x1={a.x} y1={sy(a.y)} x2={b.x} y2={sy(b.y)} stroke="#94a3b8" strokeWidth={1.6} />
                   );

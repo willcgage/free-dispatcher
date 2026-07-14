@@ -29,6 +29,10 @@ export interface Pt {
   y: number;
 }
 
+/** Recommended Free-moN endplate face width, inches (12″ min, 24″ recommended)
+ * — the default when a module hasn't authored a per-endplate width. */
+const RECOMMENDED_ENDPLATE_WIDTH_INCHES = 24;
+
 /** A module placement's inputs for the solver. */
 export interface FootprintModule {
   /** layout_modules row id. */
@@ -58,8 +62,9 @@ interface Transform {
 export interface PlacedModule {
   id: string;
   moduleName: string | null;
-  /** Endplate world poses (x, y in layout inches, heading = outward normal°). */
-  endplates: { id: string; x: number; y: number; heading: number }[];
+  /** Endplate world poses (x, y in layout inches, heading = outward normal°),
+   * with the authored FACE width across the track (Free-moN 12–24″). */
+  endplates: { id: string; x: number; y: number; heading: number; width: number }[];
   /** Module centre-line in world coords (main track A→B). */
   centerline: Pt[];
 }
@@ -186,6 +191,18 @@ export function composeFootprint(
   const poseOf = (mid: string, ep: string): EndplatePose | undefined =>
     localPoses.get(mid)?.find((p) => p.id === ep);
   for (const m of modules) localPoses.set(m.id, deriveEndplatePoses(poseInput(m)));
+  // Authored endplate face widths by module+endplate id (Free-moN 12–24″),
+  // defaulting to the recommended width where a module hasn't authored one. Read
+  // defensively so the layout can consume an authored width the moment the doc
+  // carries it, independent of the shared package's published typings.
+  const widthOf = (mid: string, ep: string): number => {
+    const doc = asModuleSchematic(byId.get(mid)?.schematic);
+    const e = (doc?.endplates ?? []).find((x) => x.id === ep) as
+      | { widthInches?: number | null }
+      | undefined;
+    const w = e?.widthInches;
+    return typeof w === "number" && w > 0 ? w : RECOMMENDED_ENDPLATE_WIDTH_INCHES;
+  };
 
   // Adjacency: placement -> joins touching it.
   const adj = new Map<string, LayoutJoin[]>();
@@ -289,7 +306,7 @@ export function composeFootprint(
     const endplates = (localPoses.get(m.id) ?? []).map((p) => {
       const w = worldEndplate(m.id, p.id);
       track(w);
-      return { id: p.id, x: w.x, y: w.y, heading: w.heading };
+      return { id: p.id, x: w.x, y: w.y, heading: w.heading, width: widthOf(m.id, p.id) };
     });
     placed.push({
       id: m.id,
