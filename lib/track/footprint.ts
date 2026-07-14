@@ -67,6 +67,9 @@ export interface PlacedModule {
   endplates: { id: string; x: number; y: number; heading: number; width: number }[];
   /** Module centre-line in world coords (main track A→B). */
   centerline: Pt[];
+  /** Authored benchwork footprint outline in world coords (closed ring), or
+   * null when the module hasn't drawn one (render the derived band instead). */
+  outline: Pt[] | null;
 }
 
 export interface ClosureError {
@@ -203,6 +206,17 @@ export function composeFootprint(
     const w = e?.widthInches;
     return typeof w === "number" && w > 0 ? w : RECOMMENDED_ENDPLATE_WIDTH_INCHES;
   };
+  // Authored benchwork outline (module-local inches), read defensively so it
+  // renders the moment a doc carries it. A ring needs ≥3 finite points.
+  const outlineOf = (mid: string): Pt[] | null => {
+    const doc = asModuleSchematic(byId.get(mid)?.schematic) as
+      | { outline?: { x: number; y: number }[] | null }
+      | null;
+    const pts = (doc?.outline ?? []).filter(
+      (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y),
+    );
+    return pts.length >= 3 ? pts.map((p) => ({ x: p.x, y: p.y })) : null;
+  };
 
   // Adjacency: placement -> joins touching it.
   const adj = new Map<string, LayoutJoin[]>();
@@ -308,11 +322,17 @@ export function composeFootprint(
       track(w);
       return { id: p.id, x: w.x, y: w.y, heading: w.heading, width: widthOf(m.id, p.id) };
     });
+    const localOutline = outlineOf(m.id);
+    const outline = localOutline
+      ? localOutline.map((p) => applyPoint(t, p))
+      : null;
+    outline?.forEach(track);
     placed.push({
       id: m.id,
       moduleName: m.moduleName ?? null,
       endplates,
       centerline,
+      outline,
     });
   }
   if (!isFinite(minX)) {

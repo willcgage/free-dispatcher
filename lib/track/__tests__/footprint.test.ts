@@ -44,6 +44,40 @@ describe("composeFootprint endplate widths", () => {
     expect(m.endplates.find((e) => e.id === "A")!.width).toBe(12);
     expect(m.endplates.find((e) => e.id === "B")!.width).toBe(24); // recommended default
   });
+
+  it("transforms an authored benchwork outline into world coords, else null", () => {
+    const ring = [
+      { x: 0, y: -10 },
+      { x: 100, y: -10 },
+      { x: 100, y: 10 },
+      { x: 0, y: 10 },
+    ];
+    const withOutline: FootprintModule = {
+      id: "m",
+      moduleName: "m",
+      lengthTotalInches: 100,
+      geometryType: "straight",
+      schematic: {
+        version: 1,
+        lengthInches: 100,
+        endplates: [{ id: "A" }, { id: "B" }],
+        tracks: [{ id: "main", role: "main", lane: 0, from: "A", to: "B" }],
+        outline: ring,
+      },
+    };
+    // Root module places at the origin (identity) → outline passes through unchanged.
+    const fp = composeFootprint([withOutline], []);
+    expect(fp.placed[0].outline).toEqual(ring);
+    // No outline → null (renderers fall back to the band).
+    expect(composeFootprint([straight("s")], []).placed[0].outline).toBeNull();
+    // A <3-point ring isn't a benchwork outline.
+    expect(
+      composeFootprint(
+        [{ ...withOutline, schematic: { ...withOutline.schematic, outline: ring.slice(0, 2) } } as FootprintModule],
+        [],
+      ).placed[0].outline,
+    ).toBeNull();
+  });
 });
 
 describe("composeFootprint", () => {
