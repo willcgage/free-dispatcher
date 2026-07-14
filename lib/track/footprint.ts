@@ -23,6 +23,7 @@ import {
   type LayoutJoin,
 } from "./layoutJoins";
 import { asModuleSchematic } from "./moduleSchematic";
+import { sampleOutline, type OutlineVertex } from "./outlineSample";
 
 export interface Pt {
   x: number;
@@ -207,15 +208,22 @@ export function composeFootprint(
     return typeof w === "number" && w > 0 ? w : RECOMMENDED_ENDPLATE_WIDTH_INCHES;
   };
   // Authored benchwork outline (module-local inches), read defensively so it
-  // renders the moment a doc carries it. A ring needs ≥3 finite points.
-  const outlineOf = (mid: string): Pt[] | null => {
+  // renders the moment a doc carries it. A ring needs ≥3 finite points; each
+  // vertex may carry a `bulge` (curved edge), preserved for arc sampling.
+  const outlineOf = (mid: string): OutlineVertex[] | null => {
     const doc = asModuleSchematic(byId.get(mid)?.schematic) as
-      | { outline?: { x: number; y: number }[] | null }
+      | { outline?: OutlineVertex[] | null }
       | null;
     const pts = (doc?.outline ?? []).filter(
       (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y),
     );
-    return pts.length >= 3 ? pts.map((p) => ({ x: p.x, y: p.y })) : null;
+    return pts.length >= 3
+      ? pts.map((p) => ({
+          x: p.x,
+          y: p.y,
+          ...(Number.isFinite(p.bulge) && p.bulge ? { bulge: p.bulge } : {}),
+        }))
+      : null;
   };
 
   // Adjacency: placement -> joins touching it.
@@ -323,8 +331,10 @@ export function composeFootprint(
       return { id: p.id, x: w.x, y: w.y, heading: w.heading, width: widthOf(m.id, p.id) };
     });
     const localOutline = outlineOf(m.id);
+    // Sample arcs into a polyline in module-local coords, then transform rigidly
+    // (a reflected/rotated circular arc is still that arc).
     const outline = localOutline
-      ? localOutline.map((p) => applyPoint(t, p))
+      ? sampleOutline(localOutline).map((p) => applyPoint(t, p))
       : null;
     outline?.forEach(track);
     placed.push({
