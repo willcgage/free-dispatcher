@@ -1,10 +1,13 @@
 /**
- * LayoutCanvas (drag-and-drop, face-to-face snap) — the merged Layout Map made
- * interactive. Modules are physical benchwork pieces; drag one and, when its
- * endplate FACE comes alongside another module's face pointing back at it, the
- * module magnetically MATES — rotating and sliding so the two 24″ faces clamp
- * together (the way real modules connect). Release writes the endplate join and
- * the footprint solver locks it in.
+ * LayoutCanvas (drag-and-drop, flush endplate mating) — the merged Layout Map
+ * made interactive. Modules are physical benchwork pieces; drag one so its free
+ * endplate comes near another module's free endplate and it magnetically MATES:
+ * the module rotates and slides until the two 24″ faces are FLUSH — coincident
+ * and pointing into each other (the way real modules clamp). The rotation is
+ * whatever the mate takes, so a corner's free face swings fully around; it is
+ * never dialed in by hand, and a module can't rest with an endplate floating in
+ * open space — release with no mate in range and it returns to where the solver
+ * had it. Release on a mate writes the endplate join and the solver locks it in.
  *
  * All drag math is in world coordinates (y-up); the SVG flips y once at render.
  */
@@ -14,7 +17,8 @@ import { useMemo, useRef, useState } from "react";
 import { composeFootprint, type FootprintModule, type Pt } from "@/lib/track/footprint";
 import { endplateConfig, type LayoutJoin } from "@/lib/track/layoutJoins";
 import { bandOutline, endplateFaces } from "@/lib/track/outline";
-import { findFaceSnap, type CanvasEndplate, type SnapHit } from "@/lib/track/snap";
+import { flushMatePose } from "@/lib/track/mate";
+import { findSnap, type CanvasEndplate, type SnapHit } from "@/lib/track/snap";
 
 const SNAP_RADIUS = 14; // world inches — endplate faces within this mate
 
@@ -69,6 +73,18 @@ export function LayoutCanvas({
     for (const e of worldEndplates) m.set(`${e.placementId}:${e.endplateId}`, e);
     return m;
   }, [worldEndplates]);
+  // Endplates already clamped to a neighbour. A face mates exactly one other, so
+  // an occupied endplate is neither a mate target nor a fresh mate from the
+  // dragged module — otherwise a module's existing joins would re-snap the
+  // instant you grabbed it and drop a duplicate join.
+  const occupied = useMemo(() => {
+    const s = new Set<string>();
+    for (const j of joins) {
+      s.add(`${j.a.placementId}:${j.a.endplateId}`);
+      s.add(`${j.b.placementId}:${j.b.endplateId}`);
+    }
+    return s;
+  }, [joins]);
 
   if (modules.length === 0) {
     return (
@@ -111,22 +127,31 @@ export function LayoutCanvas({
     const cur = toWorld(e);
     const dx = cur.x - startRef.current.x;
     const dy = cur.y - startRef.current.y;
-    // Dragged module's faces, shifted by the raw drag; targets are the rest.
+    // The dragged module's FREE endplates, shifted by the raw drag; candidates
+    // are every other module's free endplates. Nearest within radius wins.
     const dragged = worldEndplates
-      .filter((p) => p.placementId === state.id)
+      .filter(
+        (p) =>
+          p.placementId === state.id &&
+          !occupied.has(`${p.placementId}:${p.endplateId}`),
+      )
       .map((p) => ({ ...p, x: p.x + dx, y: p.y + dy }));
-    const targets = worldEndplates.filter((p) => p.placementId !== state.id);
-    const hit = findFaceSnap(dragged, targets, SNAP_RADIUS);
+    const targets = worldEndplates.filter(
+      (p) =>
+        p.placementId !== state.id &&
+        !occupied.has(`${p.placementId}:${p.endplateId}`),
+    );
+    const hit = findSnap(dragged, targets, SNAP_RADIUS);
     if (hit) {
-      // Magnetic mate: rotate the solved module so its face opposes the target,
-      // and slide that face onto the target face.
+      // Magnetic FLUSH mate: land the dragged endplate exactly on the target,
+      // outward normals opposite — rotating the module however much that takes
+      // (a corner's free face swings all the way around).
       const solvedD = solvedByKey.get(`${hit.drag.placementId}:${hit.drag.endplateId}`)!;
-      const rot = (hit.target.heading ?? 0) + 180 - (solvedD.heading ?? 0);
-      setState({
-        id: state.id,
-        hit,
-        pose: { kind: "mate", rot, px: solvedD.x, py: solvedD.y, tx: hit.target.x, ty: hit.target.y },
-      });
+      const mp = flushMatePose(
+        { x: solvedD.x, y: solvedD.y, heading: solvedD.heading ?? 0 },
+        { x: hit.target.x, y: hit.target.y, heading: hit.target.heading ?? 0 },
+      );
+      setState({ id: state.id, hit, pose: { kind: "mate", ...mp } });
     } else {
       setState({ id: state.id, hit: null, pose: { kind: "free", dx, dy } });
     }
