@@ -73,10 +73,38 @@ describe("composeFootprint endplate widths", () => {
     // A <3-point ring isn't a benchwork outline.
     expect(
       composeFootprint(
-        [{ ...withOutline, schematic: { ...withOutline.schematic, outline: ring.slice(0, 2) } } as FootprintModule],
+        [{ ...withOutline, schematic: { ...(withOutline.schematic as object), outline: ring.slice(0, 2) } } as FootprintModule],
         [],
       ).placed[0].outline,
     ).toBeNull();
+  });
+
+  it("tessellates a curved (bulged) edge into an arc", () => {
+    const curvedRing = [
+      { x: 0, y: -10, bulge: -8 }, // bottom edge (→ +x) bows outward (down) by 8
+      { x: 100, y: -10 },
+      { x: 100, y: 10 },
+      { x: 0, y: 10 },
+    ];
+    const mod: FootprintModule = {
+      id: "m",
+      moduleName: "m",
+      lengthTotalInches: 100,
+      geometryType: "straight",
+      schematic: {
+        version: 1,
+        lengthInches: 100,
+        endplates: [{ id: "A" }, { id: "B" }],
+        tracks: [{ id: "main", role: "main", lane: 0, from: "A", to: "B" }],
+        outline: curvedRing,
+      },
+    };
+    const out = composeFootprint([mod], []).placed[0].outline!;
+    // Arc tessellation adds points beyond the 4 raw vertices…
+    expect(out.length).toBeGreaterThan(4);
+    // …and the bottom edge dips to ~ -18 (chord at -10, sagitta 8 outward/down).
+    const minY = Math.min(...out.map((p) => p.y));
+    expect(minY).toBeCloseTo(-18, 0);
   });
 });
 
