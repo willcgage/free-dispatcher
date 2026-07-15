@@ -14,7 +14,6 @@ import {
   type FootprintModule,
 } from "@/lib/track/footprint";
 import type { LayoutJoin } from "@/lib/track/layoutJoins";
-import { bandOutline, endplateFaces } from "@/lib/track/outline";
 import { MODULE_DRAG_MIME } from "@/components/layout/LayoutSchematic";
 
 type JoinWithStatus = LayoutJoin & { status?: string };
@@ -119,11 +118,9 @@ export function FootprintMap({
         {fp.placed.map((m) => {
           const stroke = colorFor?.(m.id) ?? "#64748b";
           const pts = m.centerline.map((p) => `${p.x},${fy(p.y)}`).join(" ");
-          // Per-endplate authored face widths (A end / B end); band tapers between.
-          const wA = m.endplates.find((e) => e.id === "A")?.width ?? 24;
-          const wB = m.endplates.find((e) => e.id === "B")?.width ?? 24;
-          // The authored benchwork outline if drawn, else the derived band.
-          const band = m.outline ?? bandOutline(m.centerline, wA, wB);
+          // The authored benchwork outline if drawn, else the derived band —
+          // both solved by the shared footprint primitive.
+          const band = m.outline ?? m.band;
           const bandPts = band.map((p) => `${p.x},${fy(p.y)}`).join(" ");
           const mid = m.centerline[Math.floor(m.centerline.length / 2)];
           return (
@@ -139,7 +136,7 @@ export function FootprintMap({
                   strokeLinejoin="round"
                 />
               )}
-              {endplateFaces(m.centerline, wA, wB).map((f, i) => (
+              {m.endplateFaces.map((f, i) => (
                 <line
                   key={`face${i}`}
                   x1={f.p1.x}
