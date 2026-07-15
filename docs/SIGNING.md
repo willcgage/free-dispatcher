@@ -128,9 +128,13 @@ publisher" click-through. ~$9.99/month, no USB token, clears SmartScreen.
 Then run the Package workflow (`v*` tag or **Actions → Package installers → Run
 workflow**) — the Windows job produces a signed `.exe`.
 
-> Cheaper alternatives if you reconsider: **SignPath Foundation** (free for
-> open-source projects) or a **Certum** open-source cert (~$50). Plain `.pfx`
-> files are no longer issued — the private key must live on an HSM/token.
+> Alternatives if you reconsider: a **Certum** open-source cert (~$50). Plain
+> `.pfx` files are no longer issued — the private key must live on an HSM/token.
+>
+> **SignPath Foundation** (free for open source) was applied for and **rejected**
+> (2026-07), so it's not an option here. Azure Trusted Signing was attempted
+> first and abandoned when identity validation repeatedly failed — the setup
+> above is kept only in case that's revisited.
 
 ---
 
