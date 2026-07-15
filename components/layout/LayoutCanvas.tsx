@@ -16,7 +16,6 @@
 import { useMemo, useRef, useState } from "react";
 import { composeFootprint, type FootprintModule, type Pt } from "@/lib/track/footprint";
 import { endplateConfig, type LayoutJoin } from "@/lib/track/layoutJoins";
-import { bandOutline, endplateFaces } from "@/lib/track/outline";
 import { flushMatePose } from "@/lib/track/mate";
 import { findSnap, type CanvasEndplate, type SnapHit } from "@/lib/track/snap";
 
@@ -250,11 +249,9 @@ export function LayoutCanvas({
           const selected = sel === m.id;
           const pose: Pose | null = dragging ? state!.pose : null;
           const tp = (p: Pt) => (pose ? applyPose(p, pose) : p);
-          // Per-endplate authored face widths (A end / B end); band tapers between.
-          const wA = m.endplates.find((e) => e.id === "A")?.width ?? 24;
-          const wB = m.endplates.find((e) => e.id === "B")?.width ?? 24;
-          // The authored benchwork outline if drawn, else the derived band.
-          const bandPts = (m.outline ?? bandOutline(m.centerline, wA, wB))
+          // The authored benchwork outline if drawn, else the derived band —
+          // both solved by the shared footprint primitive.
+          const bandPts = (m.outline ?? m.band)
             .map(tp)
             .map((p) => `${p.x},${sy(p.y)}`)
             .join(" ");
@@ -285,7 +282,7 @@ export function LayoutCanvas({
                 </polygon>
               )}
               {/* Endplate faces (24″ Free-moN interface) */}
-              {endplateFaces(m.centerline, wA, wB).map((f, i) => {
+              {m.endplateFaces.map((f, i) => {
                 const p1 = tp(f.p1);
                 const p2 = tp(f.p2);
                 return (

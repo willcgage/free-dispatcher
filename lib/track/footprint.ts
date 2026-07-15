@@ -15,6 +15,8 @@
 import {
   deriveEndplatePoses,
   poseOverridesFromDoc,
+  moduleFootprint,
+  type ModuleFootprintInput,
   type EndplatePose,
 } from "@willcgage/module-schematic";
 import {
@@ -23,7 +25,6 @@ import {
   type LayoutJoin,
 } from "./layoutJoins";
 import { asModuleSchematic } from "./moduleSchematic";
-import { sampleOutline, type OutlineVertex } from "./outlineSample";
 
 export interface Pt {
   x: number;
@@ -71,6 +72,10 @@ export interface PlacedModule {
   /** Authored benchwork footprint outline in world coords (closed ring), or
    * null when the module hasn't drawn one (render the derived band instead). */
   outline: Pt[] | null;
+  /** Derived endplate-width band in world coords — the outline's fallback. */
+  band: Pt[];
+  /** Endplate faces [A end, B end] in world coords. */
+  endplateFaces: { p1: Pt; p2: Pt; mid: Pt }[];
 }
 
 export interface ClosureError {
@@ -109,44 +114,35 @@ function applyHeading(t: Transform, h: number): number {
   return t.rot + (t.mirror ? -h : h);
 }
 
-/** Module-local centre-line (main A→B), sampling arcs, mirror-agnostic. */
-function localCenterline(m: FootprintModule): Pt[] {
-  const L =
-    (m.mainlineLengthInches && m.mainlineLengthInches > 0
-      ? m.mainlineLengthInches
-      : m.lengthTotalInches && m.lengthTotalInches > 0
-        ? m.lengthTotalInches
-        : 24) || 24;
-  const gt = m.geometryType;
-  if (gt === "dead_end") return [{ x: 0, y: 0 }];
-  if (gt === "offset") {
-    return [
-      { x: 0, y: 0 },
-      { x: L, y: m.geometryOffsetInches ?? 0 },
-    ];
+/**
+ * A module's input to the shared footprint primitive. The per-module geometry —
+ * centre-line, benchwork band, endplate faces, arc-sampled outline — is derived
+ * by `moduleFootprint` in @willcgage/module-schematic, so the Module Repository
+ * and the layout map draw identical boards. This solver's own job is only the
+ * join-graph transform stacking below.
+ */
+function footprintInput(m: FootprintModule): ModuleFootprintInput {
+  const doc = asModuleSchematic(m.schematic) as
+    | { endplates?: { id: string; widthInches?: number | null }[]; outline?: ModuleFootprintInput["outline"] }
+    | null;
+  const endplateWidths: Record<string, number> = {};
+  for (const e of doc?.endplates ?? []) {
+    const w = e.widthInches;
+    if (typeof w === "number" && w > 0) endplateWidths[e.id] = w;
   }
-  const turn =
-    gt === "corner_45"
-      ? 45
-      : gt === "corner_90"
-        ? 90
-        : gt === "curve"
-          ? (m.geometryDegrees ?? 0)
-          : 0;
-  if (turn === 0)
-    return [
-      { x: 0, y: 0 },
-      { x: L, y: 0 },
-    ];
-  const t = turn * DEG;
-  const r = L / t;
-  const steps = 12;
-  const pts: Pt[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const a = (t * i) / steps;
-    pts.push({ x: r * Math.sin(a), y: r * (1 - Math.cos(a)) });
-  }
-  return pts;
+  return {
+    lengthInches:
+      (m.mainlineLengthInches && m.mainlineLengthInches > 0
+        ? m.mainlineLengthInches
+        : m.lengthTotalInches && m.lengthTotalInches > 0
+          ? m.lengthTotalInches
+          : 24) || 24,
+    geometryType: m.geometryType,
+    geometryDegrees: m.geometryDegrees,
+    geometryOffsetInches: m.geometryOffsetInches,
+    endplateWidths,
+    outline: doc?.outline ?? null,
+  };
 }
 
 /** Assemble the deriveEndplatePoses input for a module. */
@@ -207,25 +203,6 @@ export function composeFootprint(
     const w = e?.widthInches;
     return typeof w === "number" && w > 0 ? w : RECOMMENDED_ENDPLATE_WIDTH_INCHES;
   };
-  // Authored benchwork outline (module-local inches), read defensively so it
-  // renders the moment a doc carries it. A ring needs ≥3 finite points; each
-  // vertex may carry a `bulge` (curved edge), preserved for arc sampling.
-  const outlineOf = (mid: string): OutlineVertex[] | null => {
-    const doc = asModuleSchematic(byId.get(mid)?.schematic) as
-      | { outline?: OutlineVertex[] | null }
-      | null;
-    const pts = (doc?.outline ?? []).filter(
-      (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y),
-    );
-    return pts.length >= 3
-      ? pts.map((p) => ({
-          x: p.x,
-          y: p.y,
-          ...(Number.isFinite(p.bulge) && p.bulge ? { bulge: p.bulge } : {}),
-        }))
-      : null;
-  };
-
   // Adjacency: placement -> joins touching it.
   const adj = new Map<string, LayoutJoin[]>();
   for (const j of joins) {
@@ -323,19 +300,25 @@ export function composeFootprint(
       unplaced.push(m.id);
       continue;
     }
-    const centerline = localCenterline(m).map((p) => applyPoint(t, p));
+    // The shared primitive derives this module's geometry in module-local
+    // inches (arcs already sampled); we only stack the placement transform on
+    // top — a rotated/reflected arc is still that arc.
+    const fp = moduleFootprint(footprintInput(m));
+    const centerline = fp.centerline.map((p) => applyPoint(t, p));
     centerline.forEach(track);
     const endplates = (localPoses.get(m.id) ?? []).map((p) => {
       const w = worldEndplate(m.id, p.id);
       track(w);
       return { id: p.id, x: w.x, y: w.y, heading: w.heading, width: widthOf(m.id, p.id) };
     });
-    const localOutline = outlineOf(m.id);
-    // Sample arcs into a polyline in module-local coords, then transform rigidly
-    // (a reflected/rotated circular arc is still that arc).
-    const outline = localOutline
-      ? sampleOutline(localOutline).map((p) => applyPoint(t, p))
-      : null;
+    const band = fp.band.map((p) => applyPoint(t, p));
+    band.forEach(track);
+    const endplateFaces = fp.endplateFaces.map((f) => ({
+      p1: applyPoint(t, f.p1),
+      p2: applyPoint(t, f.p2),
+      mid: applyPoint(t, f.mid),
+    }));
+    const outline = fp.outline ? fp.outline.map((p) => applyPoint(t, p)) : null;
     outline?.forEach(track);
     placed.push({
       id: m.id,
@@ -343,6 +326,8 @@ export function composeFootprint(
       endplates,
       centerline,
       outline,
+      band,
+      endplateFaces,
     });
   }
   if (!isFinite(minX)) {
