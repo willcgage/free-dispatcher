@@ -525,6 +525,52 @@ export function OperationsSchematic({
                   </g>
                 );
               })}
+              {/* Industries — a car-spot span beside its track, with a name +
+                  car-count label. What crews set out and the dispatcher reads. */}
+              {feat.industries.map((ind) => {
+                const x1 = px(ind.fromFrac);
+                const x2 = px(ind.toFrac);
+                const sideSign = ind.side === "below" ? 1 : -1;
+                const y = laneY(ind.lane) + sideSign * 3.5;
+                const cars = ind.cars > 0 ? `${ind.cars} car${ind.cars === 1 ? "" : "s"}` : "";
+                const label =
+                  ind.labelMode === "cars" && cars
+                    ? `${ind.name} · ${cars}`
+                    : ind.name;
+                return (
+                  <g key={`ind-${ind.id}`}>
+                    <line
+                      x1={x1}
+                      y1={y}
+                      x2={x2}
+                      y2={y}
+                      stroke="#d97706"
+                      strokeWidth={STROKE * 0.7}
+                      strokeLinecap="round"
+                    />
+                    {/* end ticks — the spot's extent */}
+                    <line x1={x1} y1={y - 1.6} x2={x1} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
+                    <line x1={x2} y1={y - 1.6} x2={x2} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
+                    {c.width > 24 && ind.labelMode !== "none" && label && (
+                      <text
+                        x={(x1 + x2) / 2}
+                        y={y + sideSign * 5}
+                        textAnchor="middle"
+                        fontSize="5"
+                        className="fill-amber-700"
+                        dominantBaseline={ind.side === "below" ? "hanging" : "auto"}
+                      >
+                        {label}
+                      </text>
+                    )}
+                    <title>
+                      {`${ind.name || "Industry"}${cars ? ` · ${cars}` : ""}${
+                        ind.carTypes.length ? ` (${ind.carTypes.join(", ")})` : ""
+                      }`}
+                    </title>
+                  </g>
+                );
+              })}
             </g>
           );
         })}
