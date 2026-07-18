@@ -39,6 +39,26 @@ describe("reverseModuleFeatures", () => {
     expect(r.signals[0].side).toBe("above"); // side unchanged
   });
 
+  it("mirrors an industry's span west↔east (lane/side unchanged)", () => {
+    const doc: ModuleSchematicDoc = {
+      version: 1,
+      lengthInches: 100,
+      endplates: [{ id: "A" }, { id: "B" }],
+      tracks: [
+        { id: "main", role: "main", lane: 0, from: "A", to: "B" },
+        { id: "sp", role: "spur", lane: 1, fromPos: 10, toPos: 60 },
+      ],
+      industries: [
+        { id: "i1", name: "Ace Feed", track: "sp", fromPos: 20, toPos: 53, side: "below" },
+      ],
+    };
+    const r = reverseModuleFeatures(moduleFeatures(doc));
+    expect(r.industries[0].fromFrac).toBeCloseTo(0.47); // 1 - 0.53
+    expect(r.industries[0].toFrac).toBeCloseTo(0.8); // 1 - 0.2
+    expect(r.industries[0].lane).toBe(1);
+    expect(r.industries[0].side).toBe("below");
+  });
+
   it("mirrors the single↔double transition to the other end", () => {
     // west double, transition turnout at 0.6 → after reverse, double end is east.
     const doc: ModuleSchematicDoc = {

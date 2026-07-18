@@ -40,6 +40,12 @@ export function reverseModuleFeatures(f: ModuleFeatures): ModuleFeatures {
       ...b,
       posFrac: flip(b.posFrac),
     })),
+    industries: f.industries.map((ind) => ({
+      ...ind,
+      // Span stays sorted west→east after mirroring; lane/side left as-is.
+      fromFrac: flip(ind.toFrac),
+      toFrac: flip(ind.fromFrac),
+    })),
     main2Extent: f.main2Extent
       ? { fromFrac: flip(f.main2Extent.toFrac), toFrac: flip(f.main2Extent.fromFrac) }
       : null,
