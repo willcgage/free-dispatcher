@@ -87,9 +87,9 @@ export function OperationsSchematic({
     ...schem.cells.map((c) => {
       const doc = asModuleSchematic(c.input.schematic);
       if (!doc) return 0;
-      const f = moduleFeatures(doc);
-      // A down-side branch connector (#170) hangs a lane below the lowest track.
-      return f.laneMin - (f.branchConnectors.some((b) => b.side === "down") ? 1 : 0);
+      // A branch route carries its own lane in laneMin/laneMax (#181), so the
+      // extents already cover it — no spare lane to reserve here.
+      return moduleFeatures(doc).laneMin;
     }),
   );
   const LABEL_Y = Y0 - minLane * LANE_GAP + 10;
@@ -466,31 +466,56 @@ export function OperationsSchematic({
                   </g>
                 );
               })}
-              {/* Branch endplates — named connector arrows (#170) */}
+              {/* Routes leaving the module at a third endplate (#181) — a main
+                  in its own right when the owner says so. It diverges from its
+                  host main, runs its own length on a lane of its own, and ends
+                  at an endplate face. The destination label is OURS to derive:
+                  it depends on which module is physically attached here, which
+                  only the layout knows. */}
               {feat.branchConnectors.map((b) => {
-                const bx = px(b.posFrac);
-                const dir = b.side === "down" ? 1 : -1;
-                const y0g = laneY(0);
-                const yTip = y0g + dir * (LANE_GAP - 1);
+                const x0 = px(b.posFrac);
+                const xe = px(b.endFrac);
+                const y0g = laneY(b.fromLane); // a branch need not leave Main 1
+                const yl = laneY(b.lane);
+                const dir = xe >= x0 ? 1 : -1;
+                const thr = Math.min(Math.max(6, c.width * 0.04), Math.abs(xe - x0));
+                const isMain = b.kind === "main";
+                const tick = 3.5;
                 return (
                   <g key={b.id}>
-                    <line x1={bx} y1={y0g} x2={bx + 4} y2={yTip} stroke="#94a3b8" strokeWidth={1.4} strokeLinecap="round" />
-                    <polygon
-                      points={`${bx + 4 - 2.4},${yTip} ${bx + 4 + 2.4},${yTip} ${bx + 4},${yTip + dir * 3.2}`}
-                      fill="#94a3b8"
+                    <polyline
+                      points={`${x0},${y0g} ${x0 + dir * thr},${yl} ${xe},${yl}`}
+                      fill="none"
+                      stroke={stroke}
+                      strokeWidth={isMain ? STROKE : STROKE * 0.8}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1={xe}
+                      y1={yl - tick}
+                      x2={xe}
+                      y2={yl + tick}
+                      stroke="#94a3b8"
+                      strokeWidth={1.4}
+                      strokeLinecap="round"
                     />
                     {c.width > 30 && (
                       <text
-                        x={bx + 7}
-                        y={yTip + dir * 4}
+                        x={xe + dir * 3}
+                        y={yl + (b.side === "down" ? 5 : -4)}
                         fontSize="5.5"
+                        textAnchor={dir > 0 ? "start" : "end"}
                         className="fill-slate-500"
-                        dominantBaseline={b.side === "down" ? "hanging" : "auto"}
                       >
                         {`to ${b.label}`}
                       </text>
                     )}
-                    <title>{`Branch endplate — to ${b.label}`}</title>
+                    <title>
+                      {`${b.name || (isMain ? "Main" : "Branch")} — ${
+                        isMain ? "a main" : "a branch"
+                      } leaving at endplate ${b.id}, to ${b.label}`}
+                    </title>
                   </g>
                 );
               })}

@@ -38,7 +38,12 @@ export function reverseModuleFeatures(f: ModuleFeatures): ModuleFeatures {
     })),
     branchConnectors: f.branchConnectors.map((b) => ({
       ...b,
+      // BOTH ends of the run mirror. Flipping only where it leaves the main
+      // would leave the route running back the way it came (#181). Unlike a
+      // siding these do NOT re-sort: the run has a direction — it starts at the
+      // main and ends at the endplate — so the ends keep their roles.
       posFrac: flip(b.posFrac),
+      endFrac: flip(b.endFrac),
     })),
     industries: f.industries.map((ind) => ({
       ...ind,

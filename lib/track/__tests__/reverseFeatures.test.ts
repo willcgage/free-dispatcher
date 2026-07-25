@@ -59,6 +59,50 @@ describe("reverseModuleFeatures", () => {
     expect(r.industries[0].side).toBe("below");
   });
 
+  it("mirrors BOTH ends of a branch route's run (#181)", () => {
+    // A branch leaves the main and runs its own length to an endplate. Mirroring
+    // only where it leaves would leave the route running back the way it came.
+    const doc: ModuleSchematicDoc = {
+      version: 1,
+      lengthInches: 100,
+      endplates: [
+        { id: "A" },
+        { id: "B" },
+        {
+          id: "C",
+          label: "Coast Sub",
+          kind: "main",
+          trackId: "br",
+          at: { pos: 30, side: "up" },
+        },
+      ],
+      tracks: [
+        { id: "main", role: "main", lane: 0, from: "A", to: "B" },
+        {
+          id: "br",
+          role: "branch",
+          lane: 2,
+          fromPos: 30,
+          toPos: 30,
+          path: [
+            { x: 30, y: 0 },
+            { x: 30, y: 15 },
+          ],
+        },
+      ],
+      turnouts: [{ id: "sw", pos: 30, onTrack: "main", divergeTrack: "br", kind: "right" }],
+    };
+    const f = moduleFeatures(doc);
+    expect(f.branchConnectors[0].posFrac).toBeCloseTo(0.3);
+    expect(f.branchConnectors[0].endFrac).toBeCloseTo(0.45); // runs its own 15″
+
+    const b = reverseModuleFeatures(f).branchConnectors[0];
+    expect(b.posFrac).toBeCloseTo(0.7);
+    expect(b.endFrac).toBeCloseTo(0.55); // now runs the other way, still 15″
+    expect(Math.abs(b.endFrac - b.posFrac)).toBeCloseTo(0.15);
+    expect(b.lane).toBe(f.branchConnectors[0].lane); // lanes are left alone
+  });
+
   it("mirrors the single↔double transition to the other end", () => {
     // west double, transition turnout at 0.6 → after reverse, double end is east.
     const doc: ModuleSchematicDoc = {
