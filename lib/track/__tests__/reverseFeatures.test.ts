@@ -59,9 +59,11 @@ describe("reverseModuleFeatures", () => {
     expect(r.industries[0].side).toBe("below");
   });
 
-  it("mirrors BOTH ends of a branch route's run (#181)", () => {
-    // A branch leaves the main and runs its own length to an endplate. Mirroring
-    // only where it leaves would leave the route running back the way it came.
+  it("mirrors BOTH ends of a route to a third endplate (#181, #183)", () => {
+    // The route runs to the module's EDGE and ends at a plate, because an
+    // endplate is an endplate whatever letter it carries. Turn the module round
+    // in the layout and it has to leave by the OTHER edge — mirroring only where
+    // it departs the main would leave it running back the way it came.
     const doc: ModuleSchematicDoc = {
       version: 1,
       lengthInches: 100,
@@ -93,13 +95,15 @@ describe("reverseModuleFeatures", () => {
       turnouts: [{ id: "sw", pos: 30, onTrack: "main", divergeTrack: "br", kind: "right" }],
     };
     const f = moduleFeatures(doc);
-    expect(f.branchConnectors[0].posFrac).toBeCloseTo(0.3);
-    expect(f.branchConnectors[0].endFrac).toBeCloseTo(0.45); // runs its own 15″
+    expect(f.branchConnectors[0].posFrac).toBeCloseTo(0.3); // leaves the main
+    expect(f.branchConnectors[0].endFrac).toBe(1); // …and exits at the edge
+    // Its real 15″ on the module is still reported, even though the drawn run is
+    // the width of the strip.
+    expect(f.branchConnectors[0].lengthInches).toBeCloseTo(15);
 
     const b = reverseModuleFeatures(f).branchConnectors[0];
     expect(b.posFrac).toBeCloseTo(0.7);
-    expect(b.endFrac).toBeCloseTo(0.55); // now runs the other way, still 15″
-    expect(Math.abs(b.endFrac - b.posFrac)).toBeCloseTo(0.15);
+    expect(b.endFrac).toBe(0); // the other edge now
     expect(b.lane).toBe(f.branchConnectors[0].lane); // lanes are left alone
   });
 

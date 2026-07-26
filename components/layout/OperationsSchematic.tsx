@@ -466,12 +466,16 @@ export function OperationsSchematic({
                   </g>
                 );
               })}
-              {/* Routes leaving the module at a third endplate (#181) — a main
-                  in its own right when the owner says so. It diverges from its
-                  host main, runs its own length on a lane of its own, and ends
-                  at an endplate face. The destination label is OURS to derive:
-                  it depends on which module is physically attached here, which
-                  only the layout knows. */}
+              {/* Routes leaving the module at a third endplate. An endplate is
+                  an endplate whatever letter it carries (#183), so this draws
+                  the way the module's other ends do: diverge from the host main,
+                  run to the EDGE of the module, terminate at a plate. It sits a
+                  clear lane's gap beyond everything else so a full-width route
+                  can't be read as one more parallel main.
+                  The destination label is OURS to derive — it depends on which
+                  module is physically attached here, which only the layout
+                  knows — so we show the plate's letter and what it connects to,
+                  where the Repository can only show the letter. */}
               {feat.branchConnectors.map((b) => {
                 const x0 = px(b.posFrac);
                 const xe = px(b.endFrac);
