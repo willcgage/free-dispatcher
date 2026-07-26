@@ -16,6 +16,7 @@ import {
   deriveEndplatePoses,
   poseOverridesFromDoc,
   moduleFootprint,
+  endplateCentreOffsetInches,
   type ModuleFootprintInput,
   type EndplatePose,
 } from "@willcgage/module-schematic";
@@ -122,7 +123,8 @@ function applyHeading(t: Transform, h: number): number {
  * join-graph transform stacking below.
  */
 function footprintInput(m: FootprintModule): ModuleFootprintInput {
-  const doc = asModuleSchematic(m.schematic) as
+  const raw = asModuleSchematic(m.schematic);
+  const doc = raw as
     | { endplates?: { id: string; widthInches?: number | null }[]; outline?: ModuleFootprintInput["outline"] }
     | null;
   const endplateWidths: Record<string, number> = {};
@@ -130,7 +132,35 @@ function footprintInput(m: FootprintModule): ModuleFootprintInput {
     const w = e.widthInches;
     if (typeof w === "number" && w > 0) endplateWidths[e.id] = w;
   }
+  // What each axial end actually is. Without these the layout map drew a face
+  // at an end a pocket module hasn't got, and — because an unstated end used to
+  // mean "centre the plate on Main 1" — a double-track board sat wholly to one
+  // side of its own track pair instead of straddling it (#190).
+  const epById = new Map((raw?.endplates ?? []).map((e) => [e.id, e]));
+  const configs = (["A", "B"] as const).map((id) =>
+    !epById.has(id) && id === "B"
+      ? ("none" as const)
+      : epById.get(id)?.tracks?.[0]?.config === "double"
+        ? ("double" as const)
+        : ("single" as const),
+  );
+  const main2Below = (raw as { mainsSwapped?: boolean } | null)?.mainsSwapped === true;
+  const endplateTrackOffsets: Record<string, number> = {};
+  for (const [i, id] of (["A", "B"] as const).entries()) {
+    if (configs[i] === "none") continue;
+    // The doc stores the standard's framing — Main 1's distance FROM the plate
+    // centre — so it comes back turned round, and an unauthored end takes §2.0's.
+    endplateTrackOffsets[id] = endplateCentreOffsetInches({
+      config: configs[i],
+      authoredTrackOffsetInches: (epById.get(id) as { trackOffsetInches?: number | null } | undefined)
+        ?.trackOffsetInches,
+      main2Below,
+    });
+  }
   return {
+    endplateConfigs: configs,
+    mainsSwapped: main2Below,
+    endplateTrackOffsets,
     lengthInches:
       (m.mainlineLengthInches && m.mainlineLengthInches > 0
         ? m.mainlineLengthInches
