@@ -5,10 +5,21 @@ name: Release Please
 # that bumps the version + updates CHANGELOG.md. Merging that PR creates the
 # vX.Y.Z tag and a GitHub Release.
 #
-# release-please creates the tag with GITHUB_TOKEN, and a GITHUB_TOKEN-pushed
-# tag does NOT trigger other workflows — so we explicitly dispatch package.yml
-# (workflow_dispatch IS allowed from GITHUB_TOKEN) to build the installers and
-# attach them to the release it just created.
+# ── Why a PAT and not GITHUB_TOKEN ────────────────────────────────────────────
+# GitHub does not trigger workflows from events caused by GITHUB_TOKEN, to stop
+# workflows recursing. That had two consequences here:
+#
+#   1. ci.yml never ran on the release PR, because the PR was opened by
+#      github-actions[bot]. The PR sat with ZERO checks — so `main` could not
+#      require them without making every release permanently unmergeable.
+#   2. The vX.Y.Z tag did not trigger package.yml, so we had to dispatch it
+#      explicitly with `gh workflow run`.
+#
+# RELEASE_PLEASE_TOKEN fixes both: its PR gets CI like any other, and its tag
+# push triggers package.yml directly (the same path betas already use). The
+# explicit dispatch has therefore been REMOVED — with a PAT it would fire a
+# SECOND installer build alongside the tag-triggered one, and two concurrent
+# builds would race to attach assets to the same release.
 #
 # Betas remain manual: push a v*-beta.N tag and package.yml handles it directly.
 on:
@@ -22,30 +33,23 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.rp.outputs.release_created }}
-      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
+      # Fail loudly and early rather than half-releasing. Without this, an
+      # expired or missing PAT surfaces as a confusing release-please error.
+      - name: Require RELEASE_PLEASE_TOKEN
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error title=Missing RELEASE_PLEASE_TOKEN::Set the RELEASE_PLEASE_TOKEN repository secret (fine-grained PAT, this repo, Contents: read+write and Pull requests: read+write). Releases cannot run without it."
+            exit 1
+          fi
+          echo "RELEASE_PLEASE_TOKEN is present."
+
       - uses: googleapis/release-please-action@v4
         id: rp
         with:
-          token: ${{ github.token }}
+          # NOT github.token — see the note at the top of this file.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  # When a release was just created, build installers for that tag and attach
-  # them by dispatching package.yml.
-  build:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch installer build for ${{ needs.release-please.outputs.tag_name }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh workflow run package.yml \
-            --repo "${{ github.repository }}" \
-            -f tag="${{ needs.release-please.outputs.tag_name }}"
