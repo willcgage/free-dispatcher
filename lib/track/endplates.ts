@@ -10,6 +10,11 @@
  */
 
 export interface EndplateInfo {
+  /** Which face this is: 1 = A, 2 = B. 3+ are BRANCH endplates (modulerepo
+   * #170) — a junction module's extra connections, which are not part of the
+   * linear chain and must never be mistaken for its axial ends. Absent on
+   * payloads older than modulerepo #245; see `axialEnds`. */
+  endplate_number?: number | null;
   label?: string | null;
   track_config?: string | null;
 }
@@ -41,22 +46,46 @@ function norm(v: string | null | undefined): string | null {
   return t.length > 0 ? t : null;
 }
 
-/** Endplates in facing order (flip reverses which end is in vs out). */
-function ordered(m: ModuleEndplates): EndplateInfo[] {
+/**
+ * The module's two AXIAL ends — A then B — in facing order.
+ *
+ * ⛔ THIS USED TO BE `eps[0]` AND `eps[eps.length - 1]`, which is only ever
+ * right for a module with exactly two endplates (modulerepo #245). A junction
+ * module has more: endplates C, D… are BRANCH connections placed along its
+ * side, not the ends it presents to the modules before and after it in the
+ * chain. Positionally, the last element of a four-plate module is D — so the
+ * builder was comparing a branch connection against the next module's front
+ * face and calling the result a mismatch.
+ *
+ * That is not hypothetical: FMN-0012, FMN-0017 and FMN-0024 each carry four
+ * endplate records today.
+ *
+ * `endplate_number` identifies the face (1 = A, 2 = B) and has always been in
+ * the payload — it simply wasn't read. When it is absent (an older payload, or
+ * a test fixture that omits it) we fall back to the first two entries, which is
+ * exactly the old behaviour for the two-plate case that fallback can arise in.
+ */
+function axialEnds(m: ModuleEndplates): EndplateInfo[] {
   const eps = m.endplates ?? [];
-  return m.flipped ? [...eps].reverse() : eps;
+  const numbered = eps.some((e) => e.endplate_number != null);
+  const ends = numbered
+    ? ([1, 2]
+        .map((n) => eps.find((e) => e.endplate_number === n))
+        .filter((e): e is EndplateInfo => e != null))
+    : eps.slice(0, 2);
+  return m.flipped ? [...ends].reverse() : ends;
 }
 
 /** The track_config of the endplate that faces the NEXT module. */
 export function outConfig(m: ModuleEndplates): string | null {
-  const eps = ordered(m);
-  return eps.length > 0 ? norm(eps[eps.length - 1].track_config) : null;
+  const ends = axialEnds(m);
+  return ends.length > 0 ? norm(ends[ends.length - 1].track_config) : null;
 }
 
 /** The track_config of the endplate that faces the PREVIOUS module. */
 export function inConfig(m: ModuleEndplates): string | null {
-  const eps = ordered(m);
-  return eps.length > 0 ? norm(eps[0].track_config) : null;
+  const ends = axialEnds(m);
+  return ends.length > 0 ? norm(ends[0].track_config) : null;
 }
 
 /**
