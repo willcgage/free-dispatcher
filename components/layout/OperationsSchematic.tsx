@@ -425,9 +425,16 @@ export function OperationsSchematic({
                     strokeLinecap="round"
                     strokeDasharray={isSpur ? "2 2" : undefined}
                   >
-                    <title>
-                      {`${t.role}${t.capacityFeet ? ` · ${t.capacityFeet} ft` : ""}`}
-                    </title>
+                    {/* ⛔ NO CAPACITY ON A PLAIN TRACK (#310). Will, 2026-08-22:
+                        capacity belongs to the rail assigned to an INDUSTRY.
+                        `capacityFeet` was derived from the span along the
+                        MODULE, which on a curve is not the rail — it overstated
+                        what fits on the inside of every bend and understated it
+                        on the outside. MR has stopped computing it, but owners'
+                        STORED figures are deliberately left alone, so the field
+                        keeps arriving on existing modules and would go on being
+                        shown here. Dropped rather than displayed. */}
+                    <title>{t.role}</title>
                   </polyline>
                 );
               })}
