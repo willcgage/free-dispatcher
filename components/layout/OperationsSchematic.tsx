@@ -568,7 +568,14 @@ export function OperationsSchematic({
                 const x2 = px(ind.toFrac);
                 const sideSign = ind.side === "below" ? 1 : -1;
                 const y = laneY(ind.lane) + sideSign * 3.5;
-                const cars = ind.cars > 0 ? `${ind.cars} car${ind.cars === 1 ? "" : "s"}` : "";
+                // ⚠️ NULL IS "NOT RECORDED", NOT ZERO (modulerepo#310). The car
+                // count is the owner's figure now, per track, and an industry
+                // nobody has counted reports null — so this must not print
+                // "0 cars" for it, and must not compare null with >.
+                const cars =
+                  ind.cars != null && ind.cars > 0
+                    ? `${ind.cars} car${ind.cars === 1 ? "" : "s"}`
+                    : "";
                 const label =
                   ind.labelMode === "cars" && cars
                     ? `${ind.name} · ${cars}`
