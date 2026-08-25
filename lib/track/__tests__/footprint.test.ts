@@ -204,3 +204,73 @@ describe("composeFootprint", () => {
     expect(fp.placed).toHaveLength(2);
   });
 });
+
+/**
+ * ⛔⛔ THE BOARDS A MODULE IS BUILT FROM (#212).
+ *
+ * `footprintInput`/`poseInput` used to leave `sections`, `mainPath` and `loop`
+ * out, so a module whose shape lives in its BOARDS — which is how one is born
+ * in the Repository now — was placed as a straight bar, or not drawn at all.
+ *
+ * ⚠️ EVERY TEST HERE USES A CURVED BOARD ON PURPOSE. On a straight or
+ * single-board module the chained and derived centre-lines agree exactly, so a
+ * check written against one of those passes on the bug and proves nothing.
+ */
+describe("a module is placed by its sections, not by the record's geometry (#212)", () => {
+  /** FMN-0085's shape: five boards, two of them 90° bends, so the spine folds back. */
+  const uSections = [
+    { id: "s1", lengthInches: 36, geometryType: "straight" },
+    { id: "s2", lengthInches: 36, geometryType: "curve", geometryDegrees: 90 },
+    { id: "s3", lengthInches: 36 },
+    { id: "s4", lengthInches: 36, geometryType: "curve", geometryDegrees: 90 },
+    { id: "s5", lengthInches: 36 },
+  ];
+  const uModule = (geometryType: string | null): FootprintModule => ({
+    id: "u",
+    moduleName: "U",
+    lengthTotalInches: 180,
+    geometryType,
+    schematic: {
+      version: 1,
+      lengthInches: 180,
+      endplates: [
+        { id: "A", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+        { id: "B", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+      ],
+      tracks: [{ id: "main", role: "main", lane: 0, from: "A", to: "B" }],
+      sections: uSections,
+    } as never,
+  });
+
+  it("⭐ endplate B lands where the BOARDS finish, not where a straight run would end", () => {
+    const fp = composeFootprint([uModule(null)], []);
+    const m = fp.placed.find((p) => p.id === "u")!;
+    const a = ep(m, "A");
+    const b = ep(m, "B");
+    // Two 90° bends of 36″ arc: radius 36/(π/2) = 22.918, so the far end comes
+    // back to A's x and sits 2·r + the 36″ base away across the module.
+    expect(Math.abs(b.x - a.x)).toBeLessThan(1); // folded back, not run out
+    expect(Math.abs(b.y - a.y)).toBeCloseTo(2 * (36 / (Math.PI / 2)) + 36, 0);
+    // The bug drew it straight: B would have been 180″ along from A.
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeLessThan(150);
+  });
+
+  it("works whether the record's geometry_type is null or a stale 'straight'", () => {
+    // Both are real: a sections-first module often has no record geometry at all,
+    // and older ones carry "straight" from before the boards described the shape.
+    for (const g of [null, "straight"]) {
+      const m = composeFootprint([uModule(g)], []).placed.find((p) => p.id === "u")!;
+      const a = ep(m, "A");
+      const b = ep(m, "B");
+      expect(Math.abs(b.x - a.x)).toBeLessThan(1);
+      expect(Math.abs(b.y - a.y)).toBeGreaterThan(80);
+    }
+  });
+
+  it("a module with no sections is unchanged — the record's geometry still speaks", () => {
+    const fp = composeFootprint([corner("c", 100)], []);
+    const m = fp.placed.find((p) => p.id === "c")!;
+    expect(ep(m, "A")).toBeDefined();
+    expect(ep(m, "B")).toBeDefined();
+  });
+});
