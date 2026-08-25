@@ -139,7 +139,9 @@ export function LayoutSchematic({
         {/* Endplate boundaries; joins tinted red on a track-config mismatch. */}
         {schem.segments.map((seg, i) => {
           const conn = i > 0 ? connections[i - 1] : undefined;
-          const bad = conn?.status === "mismatch";
+          // A join is bad if the faces disagree, or if one side has no face to
+          // offer here at all — a single-ended module placed mid-spine (#165).
+          const bad = conn?.status === "mismatch" || conn?.status === "unjoinable";
           return (
             <circle
               key={`${seg.input.id}-c`}

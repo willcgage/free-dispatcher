@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   endplateConnections,
   endplateMismatches,
+  unjoinablePlacements,
   inConfig,
   outConfig,
   type ModuleEndplates,
@@ -158,5 +159,60 @@ describe("endplateMismatches", () => {
     ]);
     expect(mismatches).toHaveLength(1);
     expect(mismatches[0].fromId).toBe("a");
+  });
+});
+
+/**
+ * ⭐⭐ A MODULE WITH ONE AXIAL END CAN ONLY BE TERMINAL (#165).
+ *
+ * A balloon turnback presents endplate A and nothing else — and so does a
+ * pocket, and so does an end of the line (#184: three different things, one
+ * face). Placed mid-spine, the modules either side are being joined to a face
+ * that does not exist.
+ */
+describe("single-ended modules can only sit at an end of the spine (#165)", () => {
+  const two = (id: string, cfg = "single"): ModuleEndplates => ({
+    id,
+    endplates: [
+      { endplate_number: 1, track_config: cfg },
+      { endplate_number: 2, track_config: cfg },
+    ],
+  });
+  /** One axial end: a turnback, a pocket, or an end of the line. */
+  const one = (id: string, cfg = "single"): ModuleEndplates => ({
+    id,
+    endplates: [{ endplate_number: 1, track_config: cfg }],
+  });
+
+  it("⛔ used to report a happy join on BOTH sides — now it says the arrangement can't be built", () => {
+    const conns = endplateConnections([two("west"), one("loop"), two("east")]);
+    // Both joins touch the single-ended module, and neither can exist.
+    expect(conns.map((c) => c.status)).toEqual(["unjoinable", "unjoinable"]);
+    expect(unjoinablePlacements([two("west"), one("loop"), two("east")])).toHaveLength(2);
+  });
+
+  it("at either END of the spine it is perfectly fine", () => {
+    expect(endplateConnections([one("loop"), two("a"), two("b")]).map((c) => c.status))
+      .toEqual(["ok", "ok"]);
+    expect(endplateConnections([two("a"), two("b"), one("loop")]).map((c) => c.status))
+      .toEqual(["ok", "ok"]);
+  });
+
+  it("⭐ an INTERCHANGE loop has A and B, so it may sit anywhere — the discriminator", () => {
+    // This is what makes the rule a derivation rather than "loops are special":
+    // it keys off how many faces the module presents, not what it is called.
+    const conns = endplateConnections([two("west"), two("interchangeLoop"), two("east")]);
+    expect(conns.map((c) => c.status)).toEqual(["ok", "ok"]);
+  });
+
+  it("keeps a real config mismatch distinct from an impossible placement", () => {
+    const conns = endplateConnections([two("a", "single"), two("b", "double")]);
+    expect(conns[0].status).toBe("mismatch");
+    expect(unjoinablePlacements([two("a", "single"), two("b", "double")])).toHaveLength(0);
+  });
+
+  it("two single-ended modules alone are a legal two-module layout", () => {
+    // Each presents its one face to the other; nothing is left unmatched.
+    expect(endplateConnections([one("pocket"), one("loop")]).map((c) => c.status)).toEqual(["ok"]);
   });
 });
