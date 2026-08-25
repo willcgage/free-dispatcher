@@ -172,6 +172,33 @@ function footprintInput(m: FootprintModule): ModuleFootprintInput {
     geometryOffsetInches: m.geometryOffsetInches,
     endplateWidths,
     outline: doc?.outline ?? null,
+    /**
+     * ⭐⭐ THE BOARDS THE MODULE IS ACTUALLY BUILT FROM (#212).
+     *
+     * A module is born from SECTIONS in the Repository, each with its own length
+     * and shape, and its centre-line is derived by CHAINING them — so a mostly
+     * straight module can still turn 90° twice in the middle. The record's
+     * `geometry_type` describes the old single-geometry model and is frequently
+     * `null` for these, because the shape lives in the boards.
+     *
+     * ⛔ Without them the map had two ways to be wrong, both measured on
+     * FMN-0085 (five 36″ boards, two of them 90° bends, so the spine folds back):
+     *   record geometry null      → centre-line EMPTY, nothing drawn at all
+     *   record geometry "straight" → 2 points, far end (180, 0) — a straight bar
+     *   with sections             → 28 points, far end (0, 81.8) — the truth
+     */
+    sections: raw?.sections ?? null,
+    /**
+     * The owner's DRAWN mainline. Without it a module whose main was curved (or
+     * shortened, as a pocket does) is placed as though it ran straight.
+     */
+    mainPath: raw?.mainPath ?? null,
+    /**
+     * A return loop's centre-line ends at the THROAT, so only endplate A presents
+     * a face — without the flag the map drew a second face across the far end of
+     * a loop, at an end the module hasn't got.
+     */
+    loop: (raw as { loop?: boolean } | null)?.loop === true,
   };
 }
 
@@ -201,6 +228,17 @@ function poseInput(m: FootprintModule) {
     geometryOffsetInches: m.geometryOffsetInches,
     endplateConfigs: [cfg("A"), cfg("B")],
     branches,
+    /**
+     * ⭐ The module's real end is where its BOARDS finish (#212). Without the
+     * sections, endplate B is derived where a straight module of this length
+     * would have ended — which on a module that turns is not where the track
+     * comes out. This is the same omission as `footprintInput`'s, one function
+     * along, and this issue's own closing note asked for it to be checked.
+     */
+    sections: doc?.sections ?? null,
+    /** A loop turns back on itself: one endplate, and no spurious far B at the
+     * throat where the loop closes. */
+    loop: (doc as { loop?: boolean } | null)?.loop === true,
     // Manual overrides (#175 phase 1b) win over derivation for wye/freeform.
     poseOverrides: doc ? poseOverridesFromDoc(doc) : undefined,
   };
