@@ -628,9 +628,15 @@ export function OperationsSchematic({
           </g>
         ))}
 
-        {/* Endplate mismatches — red marker at the offending join */}
+        {/* Endplate problems — a red marker at the offending join.
+            ⭐ TWO DIFFERENT FAULTS, ONE MARKER, DIFFERENT WORDS (#165). A
+            `mismatch` is two real faces that disagree — a crew can still couple
+            them. An `unjoinable` join cannot exist at all: one side is a
+            turnback, pocket or end of the line, which presents ONE face, and it
+            has been placed where it needs two. Saying which is what tells the
+            setup crew whether to swap a module or re-order the spine. */}
         {connections
-          .filter((cn) => cn.status === "mismatch")
+          .filter((cn) => cn.status === "mismatch" || cn.status === "unjoinable")
           .map((cn) => {
             const cell = schem.cells[cn.toIndex];
             return (
@@ -643,7 +649,11 @@ export function OperationsSchematic({
                 stroke="#ef4444"
                 strokeWidth={1}
               >
-                <title>{`Endplate mismatch: ${cn.fromConfig} ↔ ${cn.toConfig}`}</title>
+                <title>
+                  {cn.status === "unjoinable"
+                    ? "This module has only one endplate — a turnback, pocket or end of the line — so it can only go at an end of the layout."
+                    : `Endplate mismatch: ${cn.fromConfig} ↔ ${cn.toConfig}`}
+                </title>
               </circle>
             );
           })}
