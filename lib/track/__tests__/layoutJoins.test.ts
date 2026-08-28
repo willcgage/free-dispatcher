@@ -7,8 +7,7 @@ import {
   joinKey,
   asJoins,
   type JoinSpine,
-  type JoinPlacement,
-} from "../layoutJoins";
+  type JoinPlacement,  endplateNeighbours,} from "../layoutJoins";
 
 const mod = (
   id: string,
@@ -102,6 +101,79 @@ describe("layoutJoins", () => {
     expect(joins).toHaveLength(2); // 1 implicit + 1 new explicit
     const explicit = joins.find((j) => !j.implicit)!;
     expect(joinKey(explicit)).toBe(joinKey({ a: { placementId: "p2", endplateId: "B" }, b: { placementId: "p1", endplateId: "A" } }));
+  });
+});
+
+describe("endplateNeighbours (modulerepo#353 — name what is coupled)", () => {
+  // A junction module on the main spine, with a branch hanging off its plate C.
+  const spines: JoinSpine[] = [
+    { branchId: null, modules: [mod("p1", 0), mod("p2", 1)] },
+    {
+      branchId: "b1",
+      origin: { placementId: "p1", endplateId: "C" },
+      modules: [mod("p9", 0)],
+    },
+  ];
+  const placements = [
+    { id: "p1", moduleName: "FMN-0012" },
+    { id: "p2", moduleName: "FMN-0035" },
+    { id: "p9", moduleName: "FMN-0068" },
+  ];
+
+  it("names what is over there, from BOTH sides of the join", () => {
+    const n = endplateNeighbours(implicitJoins(spines), placements);
+    // The junction's branch plate now has an answer — this is the whole point:
+    // only the LAYOUT knows this, never the module.
+    expect(n.get("p1:C")).toEqual({
+      placementId: "p9",
+      endplateId: "A",
+      moduleName: "FMN-0068",
+    });
+    // …and the branch's first module knows what it hangs off.
+    expect(n.get("p9:A")).toEqual({
+      placementId: "p1",
+      endplateId: "C",
+      moduleName: "FMN-0012",
+    });
+    // The ordinary spine join is named too, both ways.
+    expect(n.get("p1:B")?.moduleName).toBe("FMN-0035");
+    expect(n.get("p2:A")?.moduleName).toBe("FMN-0012");
+  });
+
+  it("follows a FLIPPED placement to the end that actually faces the junction", () => {
+    // ⭐ The rule lives in implicitJoins: a branch meets its first module's
+    // WEST-facing end, which on a turned-around placement is B, not A. Naming
+    // the neighbour must inherit that rather than assume "A".
+    const flipped: JoinSpine[] = [
+      { branchId: null, modules: [mod("p1", 0)] },
+      {
+        branchId: "b1",
+        origin: { placementId: "p1", endplateId: "C" },
+        modules: [{ ...mod("p9", 0), flipped: true }],
+      },
+    ];
+    const n = endplateNeighbours(implicitJoins(flipped), placements);
+    expect(n.get("p1:C")?.endplateId).toBe("B");
+    expect(n.get("p9:B")?.endplateId).toBe("C");
+    expect(n.get("p9:A")).toBeUndefined(); // its A faces the other way
+  });
+
+  it("says nothing about a plate with nothing coupled to it", () => {
+    // The dispatcher falls back to the open-connector glyph here. An empty
+    // arrow would be worse than no arrow.
+    const n = endplateNeighbours(implicitJoins(spines), placements);
+    expect(n.get("p2:C")).toBeUndefined();
+    expect(n.get("p1:D")).toBeUndefined();
+  });
+
+  it("skips a join naming a placement the layout does not have", () => {
+    // Rather than printing "C → ? A". A stale stored join must not become a
+    // confident-looking label.
+    const n = endplateNeighbours(
+      [{ a: { placementId: "p1", endplateId: "C" }, b: { placementId: "gone", endplateId: "A" } }],
+      placements,
+    );
+    expect(n.get("p1:C")).toBeUndefined();
   });
 });
 

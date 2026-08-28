@@ -25,6 +25,7 @@ import {
   asLayoutCps,
 } from "@/lib/track/layoutControlPoints";
 import { OperationsSchematic } from "@/components/layout/OperationsSchematic";
+import { endplateNeighbours, implicitJoins } from "@/lib/track/layoutJoins";
 import type { TrainRow } from "@/lib/client/types";
 
 type Direction = "AtoB" | "BtoA";
@@ -123,6 +124,29 @@ export function TrackBoard({
   const allSections = layout.districts.flatMap((d) => d.sections);
   const layoutCps = asLayoutCps(layout.layoutControlPoints);
   const branchSpines = layout.branchSpines ?? [];
+  /**
+   * Who is coupled at each endplate, so a branch plate can say WHERE it goes
+   * rather than leaving the dispatcher to guess (modulerepo#353).
+   *
+   * ⭐ The joins come from `implicitJoins`, which already owns the rule about
+   * which endplates mate — a branch's origin meets its first module's
+   * WEST-facing end, and that is "B" when the placement is flipped. Working it
+   * out again here would be a second answer to a settled question.
+   *
+   * ⚠️ Names are looked up across BOTH spines: a branch plate on the main spine
+   * leads to a module on a branch band, which is not in this band's `modules`.
+   */
+  const endplateNeighbourMap = endplateNeighbours(
+    implicitJoins([
+      { branchId: null, modules: layout.modules ?? [] },
+      ...branchSpines.map((b) => ({
+        branchId: b.id,
+        origin: b.origin,
+        modules: b.modules,
+      })),
+    ]),
+    [...(layout.modules ?? []), ...branchSpines.flatMap((b) => b.modules)],
+  );
   // Main spine, then each branch (#170) — adjacency never crosses the junction.
   const cps = [
     ...(layout.modules?.length
@@ -155,7 +179,7 @@ export function TrackBoard({
           spines stack as their own bands (#170). */}
       {layout.modules && layout.modules.length > 0 && (
         <>
-          <OperationsSchematic modules={layout.modules} signalAspects={aspects} />
+          <OperationsSchematic modules={layout.modules} signalAspects={aspects} neighbours={endplateNeighbourMap} />
           {branchSpines
             .filter((b) => b.modules.length > 0)
             .map((b) => (
@@ -164,7 +188,7 @@ export function TrackBoard({
                   ⤷ <span className="text-slate-300">{b.name}</span>
                 </div>
                 <OperationsSchematic modules={b.modules} signalAspects={aspects} branchBand
-                                  />
+                                  neighbours={endplateNeighbourMap} />
               </div>
             ))}
         </>

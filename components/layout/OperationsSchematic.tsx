@@ -16,6 +16,7 @@ import {
   type OpsModuleInput,
 } from "@/lib/track/operations";
 import { endplateConnections } from "@/lib/track/endplates";
+import type { EndplateNeighbour } from "@/lib/track/layoutJoins";
 import {
   districtColor,
   districtLegend,
@@ -47,6 +48,7 @@ export function OperationsSchematic({
   signalAspects,
   highlightModuleIds,
   branchBand,
+  neighbours,
 }: {
   modules: OpsModuleInput[];
   districts?: SectionAwareDistrict[];
@@ -59,6 +61,10 @@ export function OperationsSchematic({
   /** This band is a branch spine (#170): its west end is the junction, so a
    * loop in the first cell still opens outward (east), never west. */
   branchBand?: boolean;
+  /** Who is coupled at each endplate, keyed "placementId:endplateId" — from
+   * `endplateNeighbours` over the layout's own joins. Lets a branch plate say
+   * WHERE it goes (modulerepo#353); absent, it just says the plate is open. */
+  neighbours?: ReadonlyMap<string, EndplateNeighbour>;
 }) {
   if (modules.length === 0) {
     return (
@@ -492,6 +498,19 @@ export function OperationsSchematic({
                 const thr = Math.min(Math.max(6, c.width * 0.04), Math.abs(xe - x0));
                 const isMain = b.kind === "main";
                 const tick = 3.5;
+                // ⭐⭐ WHO IS ACTUALLY OVER THERE (modulerepo#353). Only the
+                // LAYOUT knows: the module can say where its own face is, never
+                // what is coupled to it. This is the one thing the dispatcher
+                // can say that the Repository cannot.
+                const n = neighbours?.get(`${c.input.id}:${b.id}`);
+                // ⛔ IT USED TO PRINT `to ${b.label}` — the OWNER'S LOCAL NAME
+                // FOR THEIR OWN PLATE, dressed up as a destination. On FMN-0068
+                // that read "to Branch 1", which is Harrisonville's word for its
+                // own face and tells a dispatcher nothing about where a train
+                // goes. A label is not a destination; only a join is.
+                const dest = n
+                  ? `${b.id} → ${n.moduleName ?? "?"} ${n.endplateId}`
+                  : b.id;
                 return (
                   <g key={b.id}>
                     <polyline
@@ -502,6 +521,7 @@ export function OperationsSchematic({
                       strokeLinejoin="round"
                       strokeLinecap="round"
                     />
+                    {/* The plate face. */}
                     <line
                       x1={xe}
                       y1={yl - tick}
@@ -511,21 +531,47 @@ export function OperationsSchematic({
                       strokeWidth={1.4}
                       strokeLinecap="round"
                     />
+                    {/* ⭐ AN ENDPLATE IS A CONNECTOR, NOT A TERMINATOR
+                        (modulerepo#353). A bare tick across the rail is the
+                        drafting mark for "the rail stops here" — the opposite of
+                        what a plate means. The ghost past it says the railroad
+                        carries on. Drawn ONLY where nothing is coupled yet: once
+                        the neighbour is named there is no ambiguity left to
+                        resolve, and the words say it better than a glyph can. */}
+                    {!n && (
+                      <line
+                        x1={xe + dir * 1.5}
+                        y1={yl}
+                        x2={xe + dir * 6}
+                        y2={yl}
+                        stroke="#94a3b8"
+                        strokeOpacity={0.55}
+                        strokeWidth={1.4}
+                        strokeDasharray="2 2"
+                        strokeLinecap="round"
+                      />
+                    )}
                     {c.width > 30 && (
                       <text
                         x={xe + dir * 3}
                         y={yl + (b.side === "down" ? 5 : -4)}
                         fontSize="5.5"
                         textAnchor={dir > 0 ? "start" : "end"}
-                        className="fill-slate-500"
+                        className={n ? "fill-slate-400" : "fill-slate-500"}
                       >
-                        {`to ${b.label}`}
+                        {dest}
                       </text>
                     )}
                     <title>
                       {`${b.name || (isMain ? "Main" : "Branch")} — ${
                         isMain ? "a main" : "a branch"
-                      } leaving at endplate ${b.id}, to ${b.label}`}
+                      } leaving at endplate ${b.id}${
+                        b.label && b.label !== b.id ? ` (${b.label})` : ""
+                      }. ${
+                        n
+                          ? `Coupled to ${n.moduleName ?? "another module"} at its endplate ${n.endplateId}.`
+                          : "Nothing is coupled here yet — the railroad carries on into whatever is attached."
+                      }`}
                     </title>
                   </g>
                 );

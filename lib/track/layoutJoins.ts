@@ -122,6 +122,54 @@ export function layoutJoins(
   return out;
 }
 
+/** Who is coupled at an endplate, from the layout's own joins. */
+export interface EndplateNeighbour {
+  placementId: string;
+  endplateId: string;
+  moduleName: string | null;
+}
+
+/**
+ * Who is coupled at each endplate, keyed `"placementId:endplateId"` — the
+ * question the dispatcher panel asks so it can say *"C → FMN-0012 A"* instead
+ * of leaving a plate unexplained (modulerepo#353).
+ *
+ * ⭐ BOTH WAYS ROUND. A join is symmetric and either side may be the one
+ * asking: the junction module wants to know what its branch plate leads to, and
+ * the branch's first module wants to know what it hangs off.
+ *
+ * ⭐ IT TAKES JOINS RATHER THAN SPINES ON PURPOSE — {@link implicitJoins} and
+ * {@link layoutJoins} already own the rule about WHICH endplate mates which
+ * (a branch's origin meets its first module's WEST-facing end, which is "B" on
+ * a flipped placement). Restating that here would be a second answer to a
+ * question already answered, and the two would drift.
+ *
+ * ⛔ The NAME is the neighbour's; the destination beyond it is still nobody's
+ * business here. What lies past that module depends on what is coupled to IT.
+ */
+export function endplateNeighbours(
+  joins: readonly { a: EndplateRef; b: EndplateRef }[],
+  placements: readonly { id: string; moduleName?: string | null }[],
+): Map<string, EndplateNeighbour> {
+  const nameOf = new Map(placements.map((p) => [p.id, p.moduleName ?? null]));
+  const out = new Map<string, EndplateNeighbour>();
+  const put = (from: EndplateRef, to: EndplateRef) => {
+    // A join naming a placement the layout does not have is not a neighbour we
+    // can name — skip it rather than print an empty arrow.
+    if (!nameOf.has(to.placementId)) return;
+    out.set(`${from.placementId}:${from.endplateId}`, {
+      placementId: to.placementId,
+      endplateId: to.endplateId,
+      moduleName: nameOf.get(to.placementId) ?? null,
+    });
+  };
+  for (const j of joins) {
+    put(j.a, j.b);
+    put(j.b, j.a);
+  }
+  return out;
+}
+
 export type JoinStatus = "ok" | "mismatch" | "unknown" | "dangling";
 
 /**
