@@ -107,6 +107,39 @@ describe("reverseModuleFeatures", () => {
     expect(b.lane).toBe(f.branchConnectors[0].lane); // lanes are left alone
   });
 
+  it("mirrors a third endplate NO route reaches (#367)", () => {
+    // ⛔ THE ONE THE BUMP TO 0.154.0 NEARLY GOT WRONG. `unreachedEndplates`
+    // arrived as a NEW field and `reverseModuleFeatures` spreads `...f`, so it
+    // sailed through UNFLIPPED — a turned-around module would have drawn the
+    // plate at the wrong end, and silently, because nothing else about it looks
+    // out of place. Every along-module fraction mirrors; a new one is not an
+    // exception.
+    const doc: ModuleSchematicDoc = {
+      version: 1,
+      lengthInches: 100,
+      endplates: [
+        { id: "A" },
+        { id: "B" },
+        // Declared at 30 of 100, and NOTHING runs to it — no trackId.
+        { id: "C", label: "MoPac", kind: "main", at: { pos: 30, side: "up" } },
+      ],
+      tracks: [{ id: "main", role: "main", lane: 0, from: "A", to: "B" }],
+      turnouts: [],
+    };
+    const f = moduleFeatures(doc);
+    // No route, so it is NOT a connector — that half is #170's call and stands.
+    expect(f.branchConnectors).toEqual([]);
+    expect(f.unreachedEndplates).toHaveLength(1);
+    expect(f.unreachedEndplates[0].posFrac).toBeCloseTo(0.3);
+    expect(f.unreachedEndplates[0].reason).toBe("no-track");
+
+    const u = reverseModuleFeatures(f).unreachedEndplates[0];
+    expect(u.posFrac).toBeCloseTo(0.7); // ← fails without the fix: stays 0.3
+    expect(u.lane).toBe(f.unreachedEndplates[0].lane); // lanes are left alone
+    expect(u.side).toBe(f.unreachedEndplates[0].side); // …and so is the side
+    expect(u.reason).toBe("no-track");
+  });
+
   it("mirrors the single↔double transition to the other end", () => {
     // west double, transition turnout at 0.6 → after reverse, double end is east.
     const doc: ModuleSchematicDoc = {
