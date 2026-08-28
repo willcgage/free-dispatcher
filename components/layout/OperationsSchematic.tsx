@@ -530,6 +530,67 @@ export function OperationsSchematic({
                   </g>
                 );
               })}
+              {/* ⛔ A THIRD ENDPLATE NO ROUTE REACHES (#367). The module declares
+                  the face, so the dispatcher sees the face — and sees that
+                  nothing runs to it, which is what matters here: a plate no
+                  train can get to is not somewhere a train can be routed.
+
+                  NO ROUTE IS DRAWN, and that is the finding, not an omission.
+                  #170's call that the connector waits for track still stands;
+                  what changed is that the PLATE no longer waits with it.
+
+                  ⭐ Drawn the same way the Repository draws it, deliberately:
+                  the two apps must not answer a depiction question differently.
+                  The destination stays unnamed even here — with no route
+                  reaching the plate there is nothing to route THROUGH, so the
+                  neighbour lookup the connectors above use would only mislead. */}
+              {feat.unreachedEndplates.map((u) => {
+                const ux = px(u.posFrac);
+                const uy = laneY(u.lane);
+                const out = u.side === "up" ? -1 : 1; // out of the module
+                return (
+                  <g key={`unreached-${u.id}`}>
+                    <line
+                      x1={ux - 4}
+                      y1={uy}
+                      x2={ux + 4}
+                      y2={uy}
+                      stroke="#d97706"
+                      strokeWidth={1.6}
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1={ux}
+                      y1={uy + out * 2}
+                      x2={ux}
+                      y2={uy + out * 7}
+                      stroke="#d97706"
+                      strokeOpacity={0.55}
+                      strokeWidth={1.4}
+                      strokeDasharray="2 2"
+                      strokeLinecap="round"
+                    />
+                    {c.width > 30 && (
+                      <text
+                        x={ux + 6}
+                        y={uy + 2}
+                        fontSize="5.5"
+                        textAnchor="start"
+                        className="fill-amber-700"
+                      >
+                        {u.id}
+                      </text>
+                    )}
+                    <title>
+                      {`Endplate ${u.id}${u.label && u.label !== u.id ? ` (${u.label})` : ""} — declared here, but ${
+                        u.reason === "missing-track"
+                          ? "the track it names is not in that module"
+                          : "no track runs to it"
+                      }, so no train can reach it.`}
+                    </title>
+                  </g>
+                );
+              })}
               {feat.signals.map((s) => {
                 // Draw the signal parallel to the track, pointing in its facing
                 // direction, so two signals at the same spot (opposite ways)

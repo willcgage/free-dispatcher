@@ -45,6 +45,16 @@ export function reverseModuleFeatures(f: ModuleFeatures): ModuleFeatures {
       posFrac: flip(b.posFrac),
       endFrac: flip(b.endFrac),
     })),
+    // ⛔ AN UNREACHED PLATE'S POSITION MIRRORS TOO (#367). It arrived in 0.154.0
+    // and `...f` above would have carried it through UNFLIPPED — a turned-around
+    // module would draw the plate at the wrong end, and silently, because
+    // nothing else about it looks wrong. Every along-module fraction mirrors;
+    // there is no exception for a new one.
+    // No `endFrac` here on purpose: with no route there is no edge to mirror.
+    unreachedEndplates: f.unreachedEndplates.map((u) => ({
+      ...u,
+      posFrac: flip(u.posFrac),
+    })),
     industries: f.industries.map((ind) => ({
       ...ind,
       // Span stays sorted west→east after mirroring; lane/side left as-is.
