@@ -13,9 +13,76 @@
  */
 import { describe, it, expect } from "vitest";
 import { asModuleSchematic, moduleFeatures, type ModuleSchematicDoc } from "../moduleSchematic";
-import { deriveEndplatePoses } from "@willcgage/module-schematic";
+import { deriveEndplatePoses, moduleFootprint } from "@willcgage/module-schematic";
 
 describe("package contract — the numbers that reach the dispatcher", () => {
+  /**
+   * ⭐⭐ THE INVARIANT THAT WOULD HAVE CAUGHT BOTH SIDES OF IT.
+   *
+   * A drawn endplate face must be SQUARE to the heading the app derives for that
+   * very plate. `deriveEndplatePoses` is analytic; the face is built from the
+   * sampled spine. When those two disagree, one of them is wrong — and across
+   * three package versions they disagreed twice, in opposite directions:
+   *
+   *   0.147.0  a curved module's face was 3.75° off  (modulerepo#346)
+   *   0.152.0  a straight-then-curved module's face A was 1.875° off the OTHER
+   *            way — a regression introduced by the fix for the first
+   *   0.153.0  square, both
+   *
+   * FD draws these faces. This asserts the relationship rather than the numbers,
+   * so it holds for any module and cannot rot the way a coordinate can.
+   */
+  const squareToItsPose = (input: Parameters<typeof moduleFootprint>[0]) => {
+    const fp = moduleFootprint(input);
+    const poses = deriveEndplatePoses(input);
+    return fp.endplateFaces.map((f, i) => {
+      const faceDeg = (Math.atan2(f.p2.y - f.p1.y, f.p2.x - f.p1.x) * 180) / Math.PI;
+      const between = ((((faceDeg - poses[i].heading) % 180) + 180) % 180);
+      return Math.abs(between - 90);
+    });
+  };
+
+  it("every endplate face is square to its own plate's heading — a whole-module curve", () => {
+    // FMN-0081: 30″ of 90° curve. On 0.147.0 face A was 3.75° out.
+    const off = squareToItsPose({
+      lengthInches: 30,
+      geometryType: "curve",
+      geometryDegrees: 90,
+      endplateConfigs: ["single", "single"],
+    });
+    off.forEach((d) => expect(d).toBeLessThan(0.001));
+  });
+
+  it("…and when the module is BOARDS: straight, then a bend", () => {
+    // FMN-0082. On 0.152.0 face A came out 1.875° out — the regression that a
+    // corpus diff caught and this test now pins.
+    const off = squareToItsPose({
+      lengthInches: 48,
+      geometryType: "straight",
+      endplateConfigs: ["single", "single"],
+      sections: [
+        { id: "sec1", geometryType: "straight", lengthInches: 24 },
+        { id: "sec2", geometryType: "curve", lengthInches: 24, geometryDegrees: 90 },
+      ],
+    });
+    off.forEach((d) => expect(d).toBeLessThan(0.001));
+  });
+
+  it("a curved module's far face is where the bend leaves it (FMN-0081)", () => {
+    // The value, not just the relationship: on 0.147.0 this face ran
+    // (7.1243, 19.8834) → (31.0729, 18.3138) — visibly sloped on a face that
+    // should be flat, because the module turns exactly 90°.
+    const fp = moduleFootprint({
+      lengthInches: 30,
+      geometryType: "curve",
+      geometryDegrees: 90,
+      endplateConfigs: ["single", "single"],
+    });
+    const b = fp.endplateFaces[1];
+    expect(b.p1.y).toBeCloseTo(b.p2.y, 6); // flat
+    expect(b.p1.y).toBeCloseTo(19.0986, 3);
+  });
+
   /**
    * modulerepo#310. The app used to COMPUTE a car count from rail length and
    * overwrite the owner's. Will's call: capacity belongs to industries only, and
