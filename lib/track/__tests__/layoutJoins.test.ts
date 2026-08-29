@@ -114,10 +114,15 @@ describe("endplateNeighbours (modulerepo#353 — name what is coupled)", () => {
       modules: [mod("p9", 0)],
     },
   ];
+  // ⭐ The record number and the human name are DIFFERENT here on purpose. The
+  // first version of this test used a record number as the moduleName, so it
+  // passed while the panel drew the long human name — the bug only showed up on
+  // a real layout, where it rendered "C → ZZ Claude Test - drawn track across a
+  // sectioned spine A".
   const placements = [
-    { id: "p1", moduleName: "FMN-0012" },
-    { id: "p2", moduleName: "FMN-0035" },
-    { id: "p9", moduleName: "FMN-0068" },
+    { id: "p1", moduleId: "FMN-0012", moduleName: "Harrisonville" },
+    { id: "p2", moduleId: "FMN-0035", moduleName: "EOL 2" },
+    { id: "p9", moduleId: "FMN-0068", moduleName: "ZZ Claude Test - transition" },
   ];
 
   it("names what is over there, from BOTH sides of the join", () => {
@@ -127,17 +132,19 @@ describe("endplateNeighbours (modulerepo#353 — name what is coupled)", () => {
     expect(n.get("p1:C")).toEqual({
       placementId: "p9",
       endplateId: "A",
-      moduleName: "FMN-0068",
+      moduleId: "FMN-0068",
+      moduleName: "ZZ Claude Test - transition",
     });
     // …and the branch's first module knows what it hangs off.
     expect(n.get("p9:A")).toEqual({
       placementId: "p1",
       endplateId: "C",
-      moduleName: "FMN-0012",
+      moduleId: "FMN-0012",
+      moduleName: "Harrisonville",
     });
     // The ordinary spine join is named too, both ways.
-    expect(n.get("p1:B")?.moduleName).toBe("FMN-0035");
-    expect(n.get("p2:A")?.moduleName).toBe("FMN-0012");
+    expect(n.get("p1:B")?.moduleId).toBe("FMN-0035");
+    expect(n.get("p2:A")?.moduleId).toBe("FMN-0012");
   });
 
   it("follows a FLIPPED placement to the end that actually faces the junction", () => {

@@ -126,6 +126,10 @@ export function layoutJoins(
 export interface EndplateNeighbour {
   placementId: string;
   endplateId: string;
+  /** The neighbour's RECORD NUMBER ("FMN-0012") — what the panel draws, because
+   * that is how it labels every other module on the diagram. */
+  moduleId: string | null;
+  /** Its human name ("Harrisonville") — for the tooltip, not the drawn label. */
   moduleName: string | null;
 }
 
@@ -149,18 +153,20 @@ export interface EndplateNeighbour {
  */
 export function endplateNeighbours(
   joins: readonly { a: EndplateRef; b: EndplateRef }[],
-  placements: readonly { id: string; moduleName?: string | null }[],
+  placements: readonly { id: string; moduleId?: string | null; moduleName?: string | null }[],
 ): Map<string, EndplateNeighbour> {
-  const nameOf = new Map(placements.map((p) => [p.id, p.moduleName ?? null]));
+  const known = new Map(placements.map((p) => [p.id, p]));
   const out = new Map<string, EndplateNeighbour>();
   const put = (from: EndplateRef, to: EndplateRef) => {
     // A join naming a placement the layout does not have is not a neighbour we
     // can name — skip it rather than print an empty arrow.
-    if (!nameOf.has(to.placementId)) return;
+    const p = known.get(to.placementId);
+    if (!p) return;
     out.set(`${from.placementId}:${from.endplateId}`, {
       placementId: to.placementId,
       endplateId: to.endplateId,
-      moduleName: nameOf.get(to.placementId) ?? null,
+      moduleId: p.moduleId ?? null,
+      moduleName: p.moduleName ?? null,
     });
   };
   for (const j of joins) {
