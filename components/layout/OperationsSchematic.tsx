@@ -508,8 +508,14 @@ export function OperationsSchematic({
                 // that read "to Branch 1", which is Harrisonville's word for its
                 // own face and tells a dispatcher nothing about where a train
                 // goes. A label is not a destination; only a join is.
+                // ⛔ THE DRAWN LABEL IS THE RECORD NUMBER, not the module's
+                // name — every other label on this diagram is (see the cell
+                // label below), and a name runs to "ZZ Claude Test - drawn track
+                // across a sectioned spine", which swamps the panel and tells a
+                // dispatcher less than "FMN-0082" does. The name belongs in the
+                // tooltip, which is where the cell puts it too.
                 const dest = n
-                  ? `${b.id} → ${n.moduleName ?? "?"} ${n.endplateId}`
+                  ? `${b.id} → ${n.moduleId ?? n.moduleName ?? "?"} ${n.endplateId}`
                   : b.id;
                 return (
                   <g key={b.id}>
@@ -569,7 +575,7 @@ export function OperationsSchematic({
                         b.label && b.label !== b.id ? ` (${b.label})` : ""
                       }. ${
                         n
-                          ? `Coupled to ${n.moduleName ?? "another module"} at its endplate ${n.endplateId}.`
+                          ? `Coupled to ${n.moduleName ?? n.moduleId ?? "another module"} at its endplate ${n.endplateId}.`
                           : "Nothing is coupled here yet — the railroad carries on into whatever is attached."
                       }`}
                     </title>
