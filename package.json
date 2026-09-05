@@ -1,6 +1,6 @@
 {
   "name": "free-dispatcher",
-  "version": "0.29.1",
+  "version": "0.31.0",
   "private": true,
   "description": "Local-first train dispatch for modular Free-moN sessions",
   "author": "Will Gage <willcgage@gmail.com>",
@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.2",
-    "@willcgage/module-schematic": "^0.155.0",
+    "@willcgage/module-schematic": "^0.159.0",
     "bonjour-service": "^1.4.1",
     "drizzle-orm": "^0.45.2",
     "electron-updater": "^6.8.9",

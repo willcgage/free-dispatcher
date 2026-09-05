@@ -68,7 +68,24 @@ jobs:
       matrix:
         include:
           - { os: windows-2025, platform: windows }
-          - { os: macos-latest, platform: macos }
+          # ⛔⛔ PINNED, and the pin is the fix — not a precaution (#macos-signing).
+          #
+          # `macos-latest` floated from image 20260728.0273.1 (macOS 26.5.2,
+          # os=25.5.0) to 20260831.0337.3 (macOS 26.6.2, os=25.6.0) between
+          # v0.29.1 on 2026-08-29, which SIGNED, and 2026-09-05, which did not.
+          # Isolated by comparing the two runs: our code did not change, and
+          # electron-builder logged **26.15.3 in BOTH** — the only difference is
+          # the OS underneath it. On the newer image
+          # `security set-key-partition-list` rejects the password electron-
+          # builder has just set on the keychain it has just created
+          # ("SecKeychainUnlock: The user name or passphrase you entered is not
+          # correct"), which is why rotating the certificate was the wrong first
+          # move: the .p12 was already proven to open with CSC_KEY_PASSWORD via
+          # openssl, and the same builder signs fine one image earlier.
+          #
+          # ⭐ Windows was already pinned; macOS floating was the outlier. A
+          # release path should not take an unreviewed toolchain bump.
+          - { os: macos-15, platform: macos }
           - { os: ubuntu-latest, platform: linux }
     steps:
       - uses: actions/checkout@v5
@@ -113,7 +130,33 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          FD_SIGN_MAC_OPT_IN: ${{ vars.FD_SIGN_MAC }}
         run: |
+          # ⛔⛔ macOS SIGNING IS OFF BY DEFAULT, AND THAT IS DELIBERATE.
+          #
+          # v0.30.0 was tagged and RELEASED WITH ZERO INSTALLERS because this
+          # job failed on "SecKeychainUnlock: the user name or passphrase you
+          # entered is not correct" — and `release` needs the whole matrix, so
+          # Windows and Linux never published either, despite both building.
+          #
+          # ⚠️ IT IS NOT THE CERTIFICATE. A check here proved the .p12 opens
+          # with CSC_KEY_PASSWORD via openssl and signing still failed inside
+          # electron-builder's own temporary keychain. v0.29.1 signed fine on
+          # 2026-08-29 with none of this code changed, so the fault is in the
+          # toolchain or the runner image, not in the secrets.
+          #
+          # Signing is optional in this project — Windows ships unsigned today
+          # ([[trusted-signing-status]] is PARKED) — and a shipped unsigned
+          # build beats a release with nothing in it. So macOS signing now
+          # requires an EXPLICIT opt-in: set the repository variable
+          # FD_SIGN_MAC=true once signing works again. Will: "It should just
+          # skip the signing and still build."
+          if [ "${FD_SIGN_MAC_OPT_IN}" != "true" ]; then
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "::notice title=macOS build is UNSIGNED::Signing is opt-in while the keychain failure is unresolved. Set the repository variable FD_SIGN_MAC=true to re-enable it."
+            echo "macOS signing not enabled (FD_SIGN_MAC is not 'true') — building unsigned."
+            exit 0
+          fi
           if [ -n "$CSC_LINK" ] && [ -n "$APPLE_API_KEY_B64" ]; then
             echo "$APPLE_API_KEY_B64" | base64 --decode > "$RUNNER_TEMP/apple_api_key.p8"
             {
@@ -126,6 +169,7 @@ jobs:
             } >> "$GITHUB_ENV"
             echo "macOS signing + notarization enabled."
           else
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
             echo "No macOS signing secrets — building unsigned."
           fi
 
@@ -186,19 +230,68 @@ jobs:
   # the release already exists (release-please creates it for stable cuts), just
   # attach the assets; otherwise create it (manual beta tags) with generated
   # notes, marking hyphenated tags as pre-releases.
+  #
+  # ⛔⛔ ONE PLATFORM MUST NOT COST THE WHOLE RELEASE. This job used to need
+  # `build` to succeed OUTRIGHT, and `build` is the three-platform matrix — so a
+  # single leg failing took the release down with it. Measured on the v0.30.0
+  # cut: runs 33935088134 and 33935746733 both had `macos: failure` with
+  # `windows: success` and `linux: success`, and BOTH had `release: skipped`.
+  # The tag and its changelog were public with zero installers attached until a
+  # third, hand-dispatched run (33936149629) finally published them. Two
+  # platforms that built perfectly served nobody, twice, because a third did
+  # not — and auto-update reads `latest*.yml` off the newest release, so an
+  # assetless release is also an update path that quietly goes nowhere.
+  #
+  # ⭐ `!cancelled()` — NOT `always()` — lets this run on a partial matrix while
+  # still refusing to publish from a run somebody stopped on purpose. It ships
+  # whatever was built and says loudly what was not; the guard below still
+  # refuses to publish an EMPTY release. The workflow run stays red because
+  # `build` failed, which is the right signal: something IS broken, and the
+  # users who could be served have been.
   release:
     name: release
     needs: [meta, build]
-    if: ${{ needs.meta.outputs.tag != '' }}
+    if: ${{ !cancelled() && needs.meta.outputs.tag != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download all installers
         uses: actions/download-artifact@v5
+        # ⚠️ A wholly failed matrix leaves NO artifacts; this must not abort the
+        # job before the guard below can say so in words.
+        continue-on-error: true
         with:
           path: dist
           merge-multiple: true
+
+      # ⛔ NEVER PUBLISH AN EMPTY RELEASE. If every platform failed there is
+      # nothing to serve, and creating the release anyway would replace a
+      # working `latest.yml` on the previous tag with a newer, emptier one —
+      # turning a build failure into a broken updater for everybody.
+      - name: Check what actually built
+        id: haul
+        run: |
+          shopt -s nullglob
+          # ⛔ `dist/` may not exist at all when every leg failed and the download
+          # step found nothing. Steps run under `bash -e -o pipefail`, so `find`
+          # on a missing directory would kill this step BEFORE it could say why —
+          # an inscrutable red X in precisely the case this guard exists to
+          # explain. Measured: exit 1, zero output. Create it first.
+          mkdir -p dist
+          exe=(dist/*.exe); dmg=(dist/*.dmg); lin=(dist/*.AppImage dist/*.deb)
+          total=$(find dist -type f | wc -l | tr -d ' ')
+          echo "Downloaded $total file(s)."
+          if [ "$total" -eq 0 ]; then
+            echo "::error title=Nothing to release::No installers were produced by any platform, so there is nothing to attach to the tag. The release is left untouched."
+            exit 1
+          fi
+          # Name every gap, because a platform with no installer ALSO has no
+          # latest*.yml and therefore no update path until the next release.
+          [ ${#exe[@]} -eq 0 ] && echo "::warning title=No Windows installer::Windows produced no .exe — Windows users get no update from this release."
+          [ ${#dmg[@]} -eq 0 ] && echo "::warning title=No macOS installer::macOS produced no .dmg — macOS users get no update from this release."
+          [ ${#lin[@]} -eq 0 ] && echo "::warning title=No Linux installer::Linux produced no .AppImage/.deb — Linux users get no update from this release."
+          echo "windows=${#exe[@]} macos=${#dmg[@]} linux=${#lin[@]}"
 
       - name: Publish / update GitHub Release
         env:

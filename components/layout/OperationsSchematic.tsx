@@ -27,7 +27,9 @@ import {
   sectionSpans,
   type SectionAwareDistrict,
 } from "@/lib/track/sections";
-import { asModuleSchematic, moduleFeatures } from "@/lib/track/moduleSchematic";
+import { asModuleSchematic, moduleFeatures,
+  drawsFromOneEnd,
+} from "@/lib/track/moduleSchematic";
 import { reverseModuleFeatures } from "@/lib/track/reverseFeatures";
 
 // All coordinates are in inches (the spine's natural unit); the SVG scales.
@@ -410,7 +412,12 @@ export function OperationsSchematic({
                 // Diverge from the main this track's turnout sits on — a team
                 // track off Main 2 starts at lane 1, not a crossover from Main 1.
                 const ym = laneY(t.divergesFromLane);
-                const isSpur = t.role === "spur";
+                // ⭐ ONE DEFINITION, THREE RENDERERS (#417). This was
+                // `t.role === "spur"` here, and separately in MR's
+                // `physical-track` and `schematic-preview` — three copies of one
+                // fact. `house` joining the roles would have made all three
+                // disagree, so the rule lives in the package now.
+                const isSpur = drawsFromOneEnd(t.role);
                 // A spur's throat is at its turnout (either end, #bug3); its stub
                 // runs to the far end. A siding dips to the main at both ends.
                 const tx = px(isSpur ? t.throatFrac : t.fromFrac);
@@ -674,13 +681,51 @@ export function OperationsSchematic({
                   </g>
                 );
               })}
-              {/* Industries — a car-spot span beside its track, with a name +
-                  car-count label. What crews set out and the dispatcher reads. */}
+              {/* Industries — the car-spot span HIGHLIGHTED ON its own track,
+                  with a name + car-count label. What crews set out and the
+                  dispatcher reads.
+
+                  ⭐⭐ ON THE TRACK, NOT BESIDE IT (Will, 2026-09-05: *"it may be
+                  better to specifically highlight the track and not above or
+                  below the track"*). This used to sit `sideSign * 3.5` off the
+                  lane, which put a mark describing ONE track into the space
+                  between it and its neighbours — in MR that produced modulerepo
+                  #421, a marker lying across a spur it does not serve, and a
+                  clearance search to dodge it. A mark drawn ON the thing it
+                  describes cannot collide with anything else.
+
+                  ⭐ `side` is NOT dropped — it is the owner's statement of which
+                  side the building stands on, and it still places the LABEL. */}
+              {/* ⭐⭐ THE TINT IS ON THE GROUP, NOT ON EACH LINE. Per-line alpha
+                  COMPOUNDS where marks overlap: modulerepo#443 has four
+                  industries on ONE span, which composited to 1 − 0.8⁴ ≈ 0.59
+                  against a lone marker's 0.20, so one lane read three times
+                  heavier for a reason that had nothing to do with either
+                  industry. Flattening the lines first and applying alpha once
+                  makes four stacked marks look exactly like one. */}
+              <g opacity={0.2}>
+                {feat.industries.map((ind) => (
+                  <line
+                    key={`indmark-${ind.id}`}
+                    x1={px(ind.fromFrac)}
+                    y1={laneY(ind.lane)}
+                    x2={px(ind.toFrac)}
+                    y2={laneY(ind.lane)}
+                    /* Opaque here on purpose — the group owns the tint. */
+                    stroke="#d97706"
+                    strokeWidth={STROKE * 2.4}
+                    strokeLinecap="round"
+                  />
+                ))}
+              </g>
               {feat.industries.map((ind) => {
                 const x1 = px(ind.fromFrac);
                 const x2 = px(ind.toFrac);
-                const sideSign = ind.side === "below" ? 1 : -1;
-                const y = laneY(ind.lane) + sideSign * 3.5;
+                /* ⚠️ `ind.side` no longer moves anything here either — the
+                   mark and its name both sit ON the lane. The FIELD stays: it
+                   is authored, it is part of the contract, and a renderer that
+                   stops consulting a value is not a licence to drop it. */
+                const y = laneY(ind.lane);
                 // ⚠️ NULL IS "NOT RECORDED", NOT ZERO (modulerepo#310). The car
                 // count is the owner's figure now, per track, and an industry
                 // nobody has counted reports null — so this must not print
@@ -695,26 +740,36 @@ export function OperationsSchematic({
                     : ind.name;
                 return (
                   <g key={`ind-${ind.id}`}>
-                    <line
-                      x1={x1}
-                      y1={y}
-                      x2={x2}
-                      y2={y}
-                      stroke="#d97706"
-                      strokeWidth={STROKE * 0.7}
-                      strokeLinecap="round"
-                    />
-                    {/* end ticks — the spot's extent */}
+                    {/* end ticks — the spot's extent, kept opaque so the span
+                        stays crisp where the highlight is deliberately soft */}
                     <line x1={x1} y1={y - 1.6} x2={x1} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
                     <line x1={x2} y1={y - 1.6} x2={x2} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
-                    {c.width > 24 && ind.labelMode !== "none" && label && (
+                    {/* ⭐ DROPPED WHEN IT DOES NOT FIT ITS OWN SPAN. Lanes are
+                        close together and the label is a fixed size, so two
+                        names on neighbouring lanes collide on a narrow strip.
+                        The highlight still shows the span and the tooltip still
+                        names it, so nothing is lost but the clutter. Width is
+                        estimated from the character count at ~0.55em. */}
+                    {c.width > 24 &&
+                      ind.labelMode !== "none" &&
+                      label &&
+                      label.length * 4.2 * 0.55 <= Math.abs(x2 - x1) && (
+                      /* ⭐ THE NAME SITS ON THE HIGHLIGHT, readable via a halo
+                         of its own outline (paintOrder puts the stroke UNDER
+                         the fill, so the letters keep their shape rather than
+                         thickening). A solid backing would hide the lane the
+                         highlight exists to point at. */
                       <text
                         x={(x1 + x2) / 2}
-                        y={y + sideSign * 5}
+                        y={y}
                         textAnchor="middle"
-                        fontSize="5"
-                        className="fill-amber-700"
-                        dominantBaseline={ind.side === "below" ? "hanging" : "auto"}
+                        dominantBaseline="middle"
+                        fontSize="4.2"
+                        className="fill-amber-800"
+                        stroke="#ffffff"
+                        strokeWidth={1.4}
+                        strokeLinejoin="round"
+                        paintOrder="stroke"
                       >
                         {label}
                       </text>
