@@ -727,7 +727,9 @@ export function OperationsSchematic({
                       y2={y}
                       stroke="#d97706"
                       strokeWidth={STROKE * 2.4}
-                      strokeOpacity={0.4}
+                      /* A tint, not a coat of paint — the lane must read
+                         through it. */
+                      strokeOpacity={0.2}
                       strokeLinecap="round"
                     />
                     {/* end ticks — the spot's extent, kept opaque so the span
