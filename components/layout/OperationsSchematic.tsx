@@ -699,7 +699,10 @@ export function OperationsSchematic({
               {feat.industries.map((ind) => {
                 const x1 = px(ind.fromFrac);
                 const x2 = px(ind.toFrac);
-                const sideSign = ind.side === "below" ? 1 : -1;
+                /* ⚠️ `ind.side` no longer moves anything here either — the
+                   mark and its name both sit ON the lane. The FIELD stays: it
+                   is authored, it is part of the contract, and a renderer that
+                   stops consulting a value is not a licence to drop it. */
                 const y = laneY(ind.lane);
                 // ⚠️ NULL IS "NOT RECORDED", NOT ZERO (modulerepo#310). The car
                 // count is the owner's figure now, per track, and an industry
@@ -732,13 +735,22 @@ export function OperationsSchematic({
                     <line x1={x1} y1={y - 1.6} x2={x1} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
                     <line x1={x2} y1={y - 1.6} x2={x2} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
                     {c.width > 24 && ind.labelMode !== "none" && label && (
+                      /* ⭐ THE NAME SITS ON THE HIGHLIGHT, readable via a halo
+                         of its own outline (paintOrder puts the stroke UNDER
+                         the fill, so the letters keep their shape rather than
+                         thickening). A solid backing would hide the lane the
+                         highlight exists to point at. */
                       <text
                         x={(x1 + x2) / 2}
-                        y={y + sideSign * 5.5}
+                        y={y}
                         textAnchor="middle"
+                        dominantBaseline="middle"
                         fontSize="5"
-                        className="fill-amber-700"
-                        dominantBaseline={ind.side === "below" ? "hanging" : "auto"}
+                        className="fill-amber-800"
+                        stroke="#ffffff"
+                        strokeWidth={1.6}
+                        strokeLinejoin="round"
+                        paintOrder="stroke"
                       >
                         {label}
                       </text>
