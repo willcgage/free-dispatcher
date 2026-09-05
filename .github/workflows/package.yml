@@ -256,8 +256,14 @@ jobs:
         id: haul
         run: |
           shopt -s nullglob
+          # ⛔ `dist/` may not exist at all when every leg failed and the download
+          # step found nothing. Steps run under `bash -e -o pipefail`, so `find`
+          # on a missing directory would kill this step BEFORE it could say why —
+          # an inscrutable red X in precisely the case this guard exists to
+          # explain. Measured: exit 1, zero output. Create it first.
+          mkdir -p dist
           exe=(dist/*.exe); dmg=(dist/*.dmg); lin=(dist/*.AppImage dist/*.deb)
-          total=$(find dist -type f 2>/dev/null | wc -l | tr -d ' ')
+          total=$(find dist -type f | wc -l | tr -d ' ')
           echo "Downloaded $total file(s)."
           if [ "$total" -eq 0 ]; then
             echo "::error title=Nothing to release::No installers were produced by any platform, so there is nothing to attach to the tag. The release is left untouched."
