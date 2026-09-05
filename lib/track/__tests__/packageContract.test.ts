@@ -12,7 +12,12 @@
  * a documented fix, so a regression shows up as a value, not as a crash.
  */
 import { describe, it, expect } from "vitest";
-import { asModuleSchematic, moduleFeatures, type ModuleSchematicDoc } from "../moduleSchematic";
+import {
+  asModuleSchematic,
+  moduleFeatures,
+  drawsFromOneEnd,
+  type ModuleSchematicDoc,
+} from "../moduleSchematic";
 import { deriveEndplatePoses, moduleFootprint } from "@willcgage/module-schematic";
 
 describe("package contract — the numbers that reach the dispatcher", () => {
@@ -186,3 +191,39 @@ describe("package contract — the numbers that reach the dispatcher", () => {
     expect(c.heading).toBe(90);
   });
 });
+
+describe("house track — the third role FD must draw (#417)", () => {
+  it("draws from ONE end, like a spur and unlike a siding", () => {
+    // ⭐ FD's OperationsSchematic used to carry its own `role === "spur"`, as did
+    // MR's two renderers. Three copies of one fact; a new role would have made
+    // them disagree. This asserts FD reads the package's answer.
+    expect(drawsFromOneEnd("house")).toBe(true);
+    expect(drawsFromOneEnd("spur")).toBe(true);
+    expect(drawsFromOneEnd("siding")).toBe(false);
+  });
+
+  it("carries the role through `moduleFeatures` untouched, so the panel can label it", () => {
+    const doc = asModuleSchematic({
+      version: 1,
+      lengthInches: 48,
+      endplates: [
+        { id: "A", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+        { id: "B", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+      ],
+      tracks: [
+        { id: "main", role: "main", lane: 0, from: "A", to: "B" },
+        { id: "hse", role: "house", lane: 1, fromPos: 12, toPos: 30 },
+      ],
+      turnouts: [
+        { id: "sw1", pos: 12, onTrack: "main", divergeTrack: "hse", kind: "right" },
+      ],
+    }) as ModuleSchematicDoc;
+    const t = moduleFeatures(doc).extraTracks.find((x) => x.id === "hse");
+    // ⚠️ An unknown role must not be silently rewritten to "siding" on the way
+    // through — the panel needs the owner's word to label it.
+    expect(t?.role).toBe("house");
+    // And its throat/stub are populated, which is what `drawsFromOneEnd` gates.
+    expect(Number.isFinite(t!.throatFrac)).toBe(true);
+    expect(Number.isFinite(t!.stubFrac)).toBe(true);
+  });
+})
