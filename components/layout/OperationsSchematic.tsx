@@ -27,7 +27,9 @@ import {
   sectionSpans,
   type SectionAwareDistrict,
 } from "@/lib/track/sections";
-import { asModuleSchematic, moduleFeatures } from "@/lib/track/moduleSchematic";
+import { asModuleSchematic, moduleFeatures,
+  drawsFromOneEnd,
+} from "@/lib/track/moduleSchematic";
 import { reverseModuleFeatures } from "@/lib/track/reverseFeatures";
 
 // All coordinates are in inches (the spine's natural unit); the SVG scales.
@@ -410,7 +412,12 @@ export function OperationsSchematic({
                 // Diverge from the main this track's turnout sits on — a team
                 // track off Main 2 starts at lane 1, not a crossover from Main 1.
                 const ym = laneY(t.divergesFromLane);
-                const isSpur = t.role === "spur";
+                // ⭐ ONE DEFINITION, THREE RENDERERS (#417). This was
+                // `t.role === "spur"` here, and separately in MR's
+                // `physical-track` and `schematic-preview` — three copies of one
+                // fact. `house` joining the roles would have made all three
+                // disagree, so the rule lives in the package now.
+                const isSpur = drawsFromOneEnd(t.role);
                 // A spur's throat is at its turnout (either end, #bug3); its stub
                 // runs to the far end. A siding dips to the main at both ends.
                 const tx = px(isSpur ? t.throatFrac : t.fromFrac);
