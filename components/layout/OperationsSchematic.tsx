@@ -696,6 +696,28 @@ export function OperationsSchematic({
 
                   ⭐ `side` is NOT dropped — it is the owner's statement of which
                   side the building stands on, and it still places the LABEL. */}
+              {/* ⭐⭐ THE TINT IS ON THE GROUP, NOT ON EACH LINE. Per-line alpha
+                  COMPOUNDS where marks overlap: modulerepo#443 has four
+                  industries on ONE span, which composited to 1 − 0.8⁴ ≈ 0.59
+                  against a lone marker's 0.20, so one lane read three times
+                  heavier for a reason that had nothing to do with either
+                  industry. Flattening the lines first and applying alpha once
+                  makes four stacked marks look exactly like one. */}
+              <g opacity={0.2}>
+                {feat.industries.map((ind) => (
+                  <line
+                    key={`indmark-${ind.id}`}
+                    x1={px(ind.fromFrac)}
+                    y1={laneY(ind.lane)}
+                    x2={px(ind.toFrac)}
+                    y2={laneY(ind.lane)}
+                    /* Opaque here on purpose — the group owns the tint. */
+                    stroke="#d97706"
+                    strokeWidth={STROKE * 2.4}
+                    strokeLinecap="round"
+                  />
+                ))}
+              </g>
               {feat.industries.map((ind) => {
                 const x1 = px(ind.fromFrac);
                 const x2 = px(ind.toFrac);
@@ -718,20 +740,6 @@ export function OperationsSchematic({
                     : ind.name;
                 return (
                   <g key={`ind-${ind.id}`}>
-                    {/* A HIGHLIGHTER, NOT A COVER — wide and translucent, so
-                        the track under it still reads. */}
-                    <line
-                      x1={x1}
-                      y1={y}
-                      x2={x2}
-                      y2={y}
-                      stroke="#d97706"
-                      strokeWidth={STROKE * 2.4}
-                      /* A tint, not a coat of paint — the lane must read
-                         through it. */
-                      strokeOpacity={0.2}
-                      strokeLinecap="round"
-                    />
                     {/* end ticks — the spot's extent, kept opaque so the span
                         stays crisp where the highlight is deliberately soft */}
                     <line x1={x1} y1={y - 1.6} x2={x1} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
