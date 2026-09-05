@@ -736,7 +736,16 @@ export function OperationsSchematic({
                         stays crisp where the highlight is deliberately soft */}
                     <line x1={x1} y1={y - 1.6} x2={x1} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
                     <line x1={x2} y1={y - 1.6} x2={x2} y2={y + 1.6} stroke="#d97706" strokeWidth={0.9} />
-                    {c.width > 24 && ind.labelMode !== "none" && label && (
+                    {/* ⭐ DROPPED WHEN IT DOES NOT FIT ITS OWN SPAN. Lanes are
+                        close together and the label is a fixed size, so two
+                        names on neighbouring lanes collide on a narrow strip.
+                        The highlight still shows the span and the tooltip still
+                        names it, so nothing is lost but the clutter. Width is
+                        estimated from the character count at ~0.55em. */}
+                    {c.width > 24 &&
+                      ind.labelMode !== "none" &&
+                      label &&
+                      label.length * 5 * 0.55 <= Math.abs(x2 - x1) && (
                       /* ⭐ THE NAME SITS ON THE HIGHLIGHT, readable via a halo
                          of its own outline (paintOrder puts the stroke UNDER
                          the fill, so the letters keep their shape rather than
