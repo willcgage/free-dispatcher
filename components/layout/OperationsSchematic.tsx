@@ -753,7 +753,7 @@ export function OperationsSchematic({
                     {c.width > 24 &&
                       ind.labelMode !== "none" &&
                       label &&
-                      label.length * 5 * 0.55 <= Math.abs(x2 - x1) && (
+                      label.length * 4.2 * 0.55 <= Math.abs(x2 - x1) && (
                       /* ⭐ THE NAME SITS ON THE HIGHLIGHT, readable via a halo
                          of its own outline (paintOrder puts the stroke UNDER
                          the fill, so the letters keep their shape rather than
@@ -764,10 +764,10 @@ export function OperationsSchematic({
                         y={y}
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        fontSize="5"
+                        fontSize="4.2"
                         className="fill-amber-800"
                         stroke="#ffffff"
-                        strokeWidth={1.6}
+                        strokeWidth={1.4}
                         strokeLinejoin="round"
                         paintOrder="stroke"
                       >
