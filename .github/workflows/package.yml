@@ -68,7 +68,24 @@ jobs:
       matrix:
         include:
           - { os: windows-2025, platform: windows }
-          - { os: macos-latest, platform: macos }
+          # ⛔⛔ PINNED, and the pin is the fix — not a precaution (#macos-signing).
+          #
+          # `macos-latest` floated from image 20260728.0273.1 (macOS 26.5.2,
+          # os=25.5.0) to 20260831.0337.3 (macOS 26.6.2, os=25.6.0) between
+          # v0.29.1 on 2026-08-29, which SIGNED, and 2026-09-05, which did not.
+          # Isolated by comparing the two runs: our code did not change, and
+          # electron-builder logged **26.15.3 in BOTH** — the only difference is
+          # the OS underneath it. On the newer image
+          # `security set-key-partition-list` rejects the password electron-
+          # builder has just set on the keychain it has just created
+          # ("SecKeychainUnlock: The user name or passphrase you entered is not
+          # correct"), which is why rotating the certificate was the wrong first
+          # move: the .p12 was already proven to open with CSC_KEY_PASSWORD via
+          # openssl, and the same builder signs fine one image earlier.
+          #
+          # ⭐ Windows was already pinned; macOS floating was the outlier. A
+          # release path should not take an unreviewed toolchain bump.
+          - { os: macos-15, platform: macos }
           - { os: ubuntu-latest, platform: linux }
     steps:
       - uses: actions/checkout@v5
