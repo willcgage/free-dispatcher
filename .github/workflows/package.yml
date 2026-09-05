@@ -114,7 +114,26 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
-          if [ -n "$CSC_LINK" ] && [ -n "$APPLE_API_KEY_B64" ]; then
+          # ⛔ A BROKEN SECRET USED TO BE FATAL WHILE AN ABSENT ONE WAS FINE.
+          # This step already chose signed-vs-unsigned, but it assumed that a
+          # secret which EXISTS also WORKS. On v0.30.0 the certificate password
+          # was rejected — "SecKeychainUnlock: the user name or passphrase you
+          # entered is not correct" — electron-builder failed the job, and
+          # because `release` needs the whole matrix, a tagged release shipped
+          # with ZERO installers even though Windows and Linux had both built.
+          # Signing is optional here by design (Windows ships unsigned too), so
+          # a certificate that will not open is the same situation as no
+          # certificate at all: build, and say so loudly.
+          if [ -z "$CSC_LINK" ] || [ -z "$APPLE_API_KEY_B64" ]; then
+            echo "No macOS signing secrets — building unsigned."
+            exit 0
+          fi
+          # Prove the certificate opens with the password BEFORE handing it to
+          # electron-builder, which is the only way to keep the failure
+          # recoverable. `-legacy` is tried too: OpenSSL 3 refuses the older
+          # RC2 ciphers many exported .p12 files still use.
+          echo "$CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12" 2>/dev/null || true
+          if openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -passin pass:"$CSC_KEY_PASSWORD" -nokeys -out /dev/null 2>/dev/null             || openssl pkcs12 -legacy -in "$RUNNER_TEMP/cert.p12" -passin pass:"$CSC_KEY_PASSWORD" -nokeys -out /dev/null 2>/dev/null; then
             echo "$APPLE_API_KEY_B64" | base64 --decode > "$RUNNER_TEMP/apple_api_key.p8"
             {
               echo "APPLE_API_KEY=$RUNNER_TEMP/apple_api_key.p8"
@@ -126,8 +145,10 @@ jobs:
             } >> "$GITHUB_ENV"
             echo "macOS signing + notarization enabled."
           else
-            echo "No macOS signing secrets — building unsigned."
+            echo "::warning title=macOS build is UNSIGNED::The signing certificate did not open with CSC_KEY_PASSWORD. Building unsigned so the release still ships — fix CSC_LINK / CSC_KEY_PASSWORD and re-run to get a signed, notarised build."
+            echo "macOS signing certificate rejected the password — building UNSIGNED."
           fi
+          rm -f "$RUNNER_TEMP/cert.p12"
 
       # Windows only: export the Azure Trusted Signing env when the secrets are
       # set. electron-builder.config.cjs reads these and adds win.azureSignOptions
