@@ -130,6 +130,58 @@ describe("package contract — the numbers that reach the dispatcher", () => {
   });
 
   /**
+   * A spot with no side of its own must come back on the INDUSTRY'S side
+   * (modulerepo#421, pkg 0.159.0).
+   *
+   * ⛔ Until 0.159.0 the package answered `"above"` here while MR — which
+   * AUTHORS the document — drew the same spot on `sp.side ?? ind.side`. From
+   * one document, an industry marked BELOW its rail was drawn below in the
+   * builder and its own spot ABOVE in this app. FD has no copy of the rule to
+   * get wrong; it renders what `moduleFeatures` hands it, which is exactly why
+   * the disagreement was invisible from this end.
+   */
+  it("a spot with no side inherits its industry's, not \"above\" (#421)", () => {
+    const doc = asModuleSchematic({
+      // ⚠️ `version` IS LOAD-BEARING: `asModuleSchematic` returns null without a
+      // numeric one, and a null doc fails this test for a reason that has
+      // nothing to do with sides. Two of my drafts died here.
+      version: 1,
+      module: "FMN-0083",
+      lengthInches: 48,
+      endplates: [
+        { id: "A", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+        { id: "B", tracks: [{ trackId: "main", lane: 0, config: "single" }] },
+      ],
+      // ⚠️ The SAME doc shape the tests above validate. My first version left
+      // the turnouts out and `asModuleSchematic` returned NULL, so the test was
+      // asserting against a null document — it failed for the fixture, not the
+      // code (see freemon memory: a convenient fixture is worse than none).
+      tracks: [
+        { id: "main", role: "main", lane: 0, from: "A", to: "B" },
+        { id: "sid", role: "siding", lane: 1, fromPos: 8, toPos: 40 },
+        { id: "spur", role: "spur", lane: -1, fromPos: 10, toPos: 30 },
+      ],
+      turnouts: [
+        { id: "sw1", pos: 8, onTrack: "main", divergeTrack: "sid", kind: "left" },
+        { id: "sw2", pos: 10, onTrack: "main", divergeTrack: "spur", kind: "right" },
+      ],
+      industries: [
+        {
+          id: "ind1", name: "Ace Feed", track: "spur",
+          fromPos: 12, toPos: 26, side: "below",
+          spots: [
+            { track: "sid", fromPos: 20, toPos: 32, side: "above" }, // states its own
+            { track: "sid", fromPos: 34, toPos: 38 },               // does not
+          ],
+        },
+      ],
+    }) as ModuleSchematicDoc;
+    const sides = moduleFeatures(doc).industries.map((i) => i.side);
+    //            industry   spot that states   spot that does not
+    expect(sides).toEqual(["below", "above", "below"]);
+  });
+
+  /**
    * An industry with NO authored count must report nothing — not a number the
    * package made up, and not 0. This is the pairing for #218/#219: those made FD
    * DISPLAY an absent count correctly, and this makes sure the count really is
