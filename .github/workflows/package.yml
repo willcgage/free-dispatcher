@@ -213,19 +213,62 @@ jobs:
   # the release already exists (release-please creates it for stable cuts), just
   # attach the assets; otherwise create it (manual beta tags) with generated
   # notes, marking hyphenated tags as pre-releases.
+  #
+  # ⛔⛔ ONE PLATFORM MUST NOT COST THE WHOLE RELEASE. This job used to need
+  # `build` to succeed OUTRIGHT, and `build` is the three-platform matrix — so a
+  # single leg failing took the release down with it. Measured on the v0.30.0
+  # cut: runs 33935088134 and 33935746733 both had `macos: failure` with
+  # `windows: success` and `linux: success`, and BOTH had `release: skipped`.
+  # The tag and its changelog were public with zero installers attached until a
+  # third, hand-dispatched run (33936149629) finally published them. Two
+  # platforms that built perfectly served nobody, twice, because a third did
+  # not — and auto-update reads `latest*.yml` off the newest release, so an
+  # assetless release is also an update path that quietly goes nowhere.
+  #
+  # ⭐ `!cancelled()` — NOT `always()` — lets this run on a partial matrix while
+  # still refusing to publish from a run somebody stopped on purpose. It ships
+  # whatever was built and says loudly what was not; the guard below still
+  # refuses to publish an EMPTY release. The workflow run stays red because
+  # `build` failed, which is the right signal: something IS broken, and the
+  # users who could be served have been.
   release:
     name: release
     needs: [meta, build]
-    if: ${{ needs.meta.outputs.tag != '' }}
+    if: ${{ !cancelled() && needs.meta.outputs.tag != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download all installers
         uses: actions/download-artifact@v5
+        # ⚠️ A wholly failed matrix leaves NO artifacts; this must not abort the
+        # job before the guard below can say so in words.
+        continue-on-error: true
         with:
           path: dist
           merge-multiple: true
+
+      # ⛔ NEVER PUBLISH AN EMPTY RELEASE. If every platform failed there is
+      # nothing to serve, and creating the release anyway would replace a
+      # working `latest.yml` on the previous tag with a newer, emptier one —
+      # turning a build failure into a broken updater for everybody.
+      - name: Check what actually built
+        id: haul
+        run: |
+          shopt -s nullglob
+          exe=(dist/*.exe); dmg=(dist/*.dmg); lin=(dist/*.AppImage dist/*.deb)
+          total=$(find dist -type f 2>/dev/null | wc -l | tr -d ' ')
+          echo "Downloaded $total file(s)."
+          if [ "$total" -eq 0 ]; then
+            echo "::error title=Nothing to release::No installers were produced by any platform, so there is nothing to attach to the tag. The release is left untouched."
+            exit 1
+          fi
+          # Name every gap, because a platform with no installer ALSO has no
+          # latest*.yml and therefore no update path until the next release.
+          [ ${#exe[@]} -eq 0 ] && echo "::warning title=No Windows installer::Windows produced no .exe — Windows users get no update from this release."
+          [ ${#dmg[@]} -eq 0 ] && echo "::warning title=No macOS installer::macOS produced no .dmg — macOS users get no update from this release."
+          [ ${#lin[@]} -eq 0 ] && echo "::warning title=No Linux installer::Linux produced no .AppImage/.deb — Linux users get no update from this release."
+          echo "windows=${#exe[@]} macos=${#dmg[@]} linux=${#lin[@]}"
 
       - name: Publish / update GitHub Release
         env:
